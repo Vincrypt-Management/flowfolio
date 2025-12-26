@@ -1,0 +1,519 @@
+## Product identity
+
+**Working name:** **FlowFolio**
+**Tagline:** *Vibe-investing, but like vibe coding—compose your investing “program” locally.*
+**Concept:** Users “vibe code” an investing plan (rules + preferences + cadence), then the app compiles it into (a) a investable shortlist, (b) an allocation, and (c) a monthly-to-yearly execution + review loop—**fully local-first**, with **only market-data fetches** going outbound.
+
+---
+
+## 1) Product definition
+
+### 1.1 Target customer
+
+**Medium to long-term investors** who:
+
+* Contribute on a **monthly / quarterly / yearly** cadence (not “3 years++ only”; they want **1–12 month planning cycles** with longer-term guardrails).
+* Care about **repeatable decision-making**, transparency of rules, and privacy (local-only).
+
+### 1.2 Core jobs-to-be-done
+
+1. “Turn my intent into a ruleset I can repeat (like a small program).”
+2. “Tell me what to buy *this month* (or quarter), and what to review *this year*.”
+3. “Keep my data and rationale local; I don’t want a cloud portfolio tracker.”
+
+### 1.3 Product principles (non-negotiables)
+
+* **Local-first**: all computation, scoring, plan generation, journaling, and storage are local.
+* **Explicit outbound network**: only to configured market-data providers (e.g., Alpha Vantage). No hidden telemetry.
+* **Explainable**: every suggestion must show the “compiled” rule path (why included/excluded).
+* **Cadence-native**: monthly-to-yearly loops are first-class, not an afterthought.
+
+---
+
+## 2) “Vibe coding” model for investing (the differentiator)
+
+### 2.1 VibePlan = a compiled artifact
+
+Users create a **VibePlan** via:
+
+* **Natural language prompt** → compiler generates a structured plan (“VibeScript”).
+* Manual editing in an “advanced” mode (diffs, versions, tests).
+
+**VibeScript (conceptual)**
+
+* Universe definition (exchanges, regions, sectors, exclude lists)
+* Filters (fundamental + price/volatility + quality)
+* Ranking (weighted factor model)
+* Portfolio construction (allocation rules + max position + rebalance policy)
+* Cadence policy (monthly buys, quarterly rebalance, yearly thesis review)
+* Risk policy (drawdown guardrails, concentration limits)
+
+### 2.2 Cadence focus: monthly → yearly
+
+**Built-in loop**
+
+* **Monthly:** contributions + “top-up” buys based on allocation drift and conviction score
+* **Quarterly:** rebalance if thresholds breached
+* **Yearly:** thesis review, factor drift review, and “rules refactor” (like code refactoring)
+
+---
+
+## 3) Requirements (complete and implementation-oriented)
+
+### 3.1 Functional requirements (FR)
+
+#### FR-01 Onboarding & plan creation
+
+* Create local profile (base currency, region, tax assumptions *as notes only*).
+* Create a **VibePlan** via prompt or template.
+* Provide a “compiled output” view: rules → filters → ranking → portfolio policy.
+
+#### FR-02 Data connections (read-only, user-provided keys)
+
+* Support **Alpha Vantage** as Provider #1.
+* App requests API key and stores it **securely** (see Security requirements).
+* Respect provider usage limits; Alpha Vantage states free tier covers “**up to 25 requests per day**.” ([Alpha Vantage][1])
+* Support “data staleness” indicators (e.g., last refresh time per dataset).
+
+#### FR-03 Local market data cache + refresh orchestration
+
+* Cache time series + fundamentals locally (SQLite).
+* Refresh policies:
+
+  * Manual refresh
+  * Scheduled refresh (e.g., “every Monday 7am local”)
+  * “On-demand” refresh for one symbol
+* Robust handling for provider throttling and “Note/error” payloads.
+
+#### FR-04 Vibe universe & watchlists
+
+* Multiple universes per plan (e.g., “US large cap quality”, “TSX dividend”, “AI infra”).
+* Symbol tagging, exclude lists, “avoid exposure” toggles.
+
+#### FR-05 Screening & ranking (explainable)
+
+* Filter pipeline (each step shows pass/fail and which rule tripped).
+* Ranking by weighted factors (user-editable weights):
+
+  * Quality: ROE/ROIC proxies, margin stability, leverage constraints
+  * Growth: revenue/earnings trend (where available)
+  * Value: normalized multiples (where available)
+  * Momentum (long-horizon, not intraday)
+* “Why this stock?” explanation: factors + weights + raw inputs.
+
+#### FR-06 Portfolio construction & execution plan
+
+* Construct a target portfolio:
+
+  * Target allocations (equal weight / factor weight / risk-parity-lite)
+  * Max position %, sector caps, optional cash buffer
+* Generate **Buy List** per cadence:
+
+  * Monthly contributions: allocate new cash to most underweight + highest conviction
+  * Quarterly rebalance thresholds (e.g., drift > X%)
+  * Yearly review checklist + suggested plan refactor points
+
+#### FR-07 Backtest (lightweight, long-horizon)
+
+* Backtest monthly/quarterly strategies on daily/weekly data.
+* Outputs:
+
+  * CAGR, max drawdown, volatility
+  * Turnover estimate
+  * Contribution-based simulation (DCA-like)
+* Must work offline once data is cached.
+
+#### FR-08 Journal & “decision diffs”
+
+* Each monthly/quarterly/yearly action creates a journal entry:
+
+  * Snapshot of plan version hash
+  * Buy list, rationale, and market context notes
+* Plan versioning:
+
+  * Show diffs between VibeScript versions (like code diffs)
+  * Allow rollback to prior version
+
+#### FR-09 Export / import (local file)
+
+* Export plan + cached data (optional) to encrypted bundle.
+* Import bundle on another machine (no cloud sync by default).
+
+---
+
+### 3.2 Non-functional requirements (NFR)
+
+#### NFR-01 Local-first and offline mode
+
+* App must be fully usable without internet (view, backtest, journal) except data refresh.
+
+#### NFR-02 Performance targets
+
+* Load cached portfolio dashboard in < 1s for typical datasets (<= 200 symbols).
+* Backtest for 10 years daily data on 50 symbols completes within a reasonable desktop time budget (optimize later; correctness first).
+
+#### NFR-03 Privacy
+
+* No telemetry by default.
+* If crash reporting is ever added, it must be opt-in and clearly disclosed.
+
+#### NFR-04 Security hardening (Tauri)
+
+* Use Tauri **Capabilities** to minimize frontend access to system APIs; capability permissions merge across windows, so keep window model simple. ([Tauri][2])
+* By default, **all registered commands are callable** unless restricted; explicitly constrain commands via **AppManifest::commands**. ([Tauri][2])
+* Enforce strict CSP; Tauri CSP supports hashes/nonces and recommends avoiding remote scripts/CDNs. ([Tauri][3])
+
+---
+
+## 4) Technical constraints & stack (Tauri + Rust)
+
+### 4.1 High-level architecture (local-only core)
+
+**Frontend (Tauri WebView):**
+
+* UI: React/Svelte/Leptos (your preference); charts (local rendering)
+* Talks to Rust via `invoke` commands only
+
+**Rust core (the “engine”):**
+
+* `data_provider` module (Alpha Vantage client)
+* `rate_limiter` module (provider quotas + backoff)
+* `store` module (SQLite)
+* `plan_compiler` module (Prompt → VibeScript → validated Plan)
+* `scoring` module (factor compute)
+* `portfolio` module (construction + drift + buy list)
+* `backtest` module (cadence simulation)
+* `journal` module (immutable event log)
+* `export` module (encrypted bundle)
+
+**Local database: SQLite**
+
+* If you prefer the official plugin path, Tauri SQL plugin supports SQLite (plus MySQL/Postgres) via sqlx. ([Tauri][4])
+* Recommendation: keep DB access in Rust (single authority) even if you use the plugin.
+
+**Secrets storage**
+
+* Store provider API keys using Tauri Stronghold (encrypted local secret store). ([Tauri][5])
+
+### 4.2 Network egress control
+
+Two acceptable designs:
+
+**Option A (recommended): All HTTP in Rust**
+
+* Hardcode/validate allowed base URLs (Alpha Vantage + optional alternates).
+* Ensures API key never enters frontend JS memory.
+* Still keep CSP strict.
+
+**Option B: Use `@tauri-apps/plugin-http`**
+
+* Plugin provides URL scoping via allow/deny glob patterns; requests outside scope are denied. ([Tauri][6])
+* Downside: higher risk of key exposure in frontend if not carefully designed.
+
+Given your local-first + privacy posture, **Option A is cleaner**.
+
+---
+
+## 5) Data sourcing plan (Alpha Vantage first)
+
+### 5.1 What we fetch (minimum viable datasets)
+
+* Daily or weekly OHLCV time series for backtests and long-horizon indicators (Alpha Vantage docs describe long historical depth and multiple resolutions). ([Alpha Vantage][7])
+* Fundamental endpoints (company overview + statements) as available; fundamentals normalization is non-trivial and varies by accounting standards. ([Alpha Vantage Documentation][8])
+
+### 5.2 Provider limits & caching strategy
+
+* Alpha Vantage free tier: “up to **25 requests per day**” (design for low-frequency refresh + heavy caching). ([Alpha Vantage][1])
+* Implications:
+
+  * Batch refresh is **queued** and spread across the day.
+  * Default refresh is “weekly” for fundamentals, “daily” for prices (but user-configurable).
+  * UI must clearly show “refresh budget remaining (estimated)” and staleness.
+
+---
+
+## 6) UX / product design blueprint (dev-ready)
+
+### 6.1 Navigation (Information Architecture)
+
+1. **Dashboard**
+
+   * Portfolio value (manual input or imported holdings)
+   * Drift vs target
+   * Next actions: “Monthly Buy List”, “Quarterly Rebalance”, “Yearly Review”
+2. **Vibe Studio**
+
+   * Prompt → compiled VibeScript
+   * Rule editor (advanced)
+   * Validation + test run (“show me how many symbols pass”)
+3. **Universe**
+
+   * Symbol browser + tags + exclude lists
+   * Data freshness indicators
+4. **Rankings**
+
+   * Filter pipeline view
+   * Factor table + weights
+5. **Plan Output**
+
+   * Target portfolio
+   * Buy list generator (monthly/quarterly/yearly)
+6. **Backtest Lab**
+
+   * Strategy simulator (cadence-based)
+7. **Journal**
+
+   * Monthly entries + diffs
+8. **Settings**
+
+   * Data providers + API keys
+   * Refresh schedule
+   * Export/import
+
+### 6.2 Key screens with acceptance criteria
+
+**Vibe Studio (MVP acceptance)**
+
+* Enter prompt → generated plan appears
+* “Compile” runs validation:
+
+  * No invalid weights
+  * Limits enforced (max position, sector cap)
+  * Provider availability check (data fields needed vs available)
+* Show “explain plan” summary
+
+**Monthly Buy List (MVP acceptance)**
+
+* Given: target allocation + current holdings + contribution amount
+* Output: buy quantities (or dollar allocations) with rationale
+* Always show: “data age” + last refresh time
+
+---
+
+## 7) Development plan (epics → deliverables)
+
+### Epic A — App shell + security baseline (must be first)
+
+**Deliverables**
+
+* Tauri app scaffold
+* Capabilities configured; commands restricted with AppManifest::commands ([Tauri][2])
+* CSP configured and tested (no remote scripts/CDNs) ([Tauri][3])
+* Stronghold integrated for secret storage ([Tauri][5])
+
+**DoD**
+
+* No command callable unless explicitly registered in manifest
+* Static analysis + manual review confirms no outbound calls except provider module
+
+---
+
+### Epic B — Local storage layer (SQLite schema + migrations)
+
+**Core tables**
+
+* `symbols` (id, ticker, exchange, name, currency, status)
+* `prices_daily` (symbol_id, date, open, high, low, close, adj_close, volume)
+* `fundamentals_*` (overview, income, balance, cashflow; normalized + raw JSON blob)
+* `vibe_plans` (id, name, version, script_json, compiled_json, created_at)
+* `journal_events` (id, plan_id, timestamp, event_type, payload_json, plan_version_hash)
+* `refresh_jobs` (id, provider, endpoint, symbol, status, scheduled_at, last_error)
+
+**DoD**
+
+* Migration system works
+* DB file location documented
+* Import/export stubs defined
+
+---
+
+### Epic C — Provider client + refresh engine (Alpha Vantage)
+
+**Deliverables**
+
+* Alpha Vantage client (Rust)
+* Rate limiter configured for low quotas (defaults aligned to 25/day) ([Alpha Vantage][1])
+* Incremental refresh:
+
+  * Prices: compact updates
+  * Fundamentals: weekly refresh
+* Error handling and backoff
+* “staleness” computed per symbol/dataset
+
+**DoD**
+
+* Refresh queue never exceeds configured budget
+* Offline mode: app remains functional with cached data
+
+---
+
+### Epic D — VibePlan compiler (prompt → VibeScript → validated plan)
+
+**Deliverables**
+
+* VibeScript JSON schema + validator
+* Template library:
+
+  * “Dividend Calm”
+  * “Quality Compounders”
+  * “AI Picks & Shovels”
+* Prompt interpreter:
+
+  * MVP: rule-based parser (no LLM required)
+  * Optional: local LLM adapter behind feature flag (explicitly offline)
+
+**DoD**
+
+* Every plan produces deterministic compiled output
+* Validation messages are user-readable and actionable
+
+---
+
+### Epic E — Scoring + ranking engine (explainable factors)
+
+**Deliverables**
+
+* Factor computation pipeline
+* Weighting + normalization
+* Explainability payload per symbol:
+
+  * factor values, normalized values, contribution to final score
+* Ranking UI table with drill-down
+
+**DoD**
+
+* “Why included / excluded” trace is complete for every symbol
+
+---
+
+### Epic F — Portfolio construction + cadence executor
+
+**Deliverables**
+
+* Allocation engine
+* Drift calculator
+* Monthly buy list generator
+* Quarterly rebalance trigger logic
+* Yearly review checklist generator
+
+**DoD**
+
+* Given test fixtures, output is reproducible
+* Journal event emitted for every action
+
+---
+
+### Epic G — Backtest Lab (cadence-based simulation)
+
+**Deliverables**
+
+* Contribution schedule simulator (monthly/quarterly/yearly)
+* Rebalance rules simulation
+* Metrics output
+* Result persistence in DB
+
+**DoD**
+
+* Works fully offline on cached data
+* Produces consistent metrics across runs
+
+---
+
+### Epic H — Packaging, updates, and hardening
+
+**Deliverables**
+
+* Release signing and update strategy
+* Security checklist validation:
+
+  * CSP set and verified ([Tauri][3])
+  * Capabilities minimal and reviewed ([Tauri][2])
+* Dependency audit cadence
+
+**DoD**
+
+* Reproducible builds documented
+* No accidental “remote access” capability enabled
+
+---
+
+## 8) QA plan (dev-team ready)
+
+### 8.1 Test types
+
+* **Unit tests** (Rust): scoring, allocation, rate limiting, parsing
+* **Integration tests**: provider client with mocked responses
+* **Golden tests**: VibePlan compilation snapshots (input prompt → compiled JSON)
+* **DB migration tests**: migrate up/down
+* **UI smoke tests** (WebDriver optional): core flows
+* **Security tests**:
+
+  * Confirm commands blocked unless allowlisted ([Tauri][2])
+  * Confirm CSP blocks remote scripts ([Tauri][3])
+
+### 8.2 Test fixtures
+
+* Cached price series for a small symbol set
+* Fundamentals JSON samples
+* Edge cases:
+
+  * Missing fundamentals
+  * Stock splits / dividends (adjusted vs raw)
+  * Provider throttling responses
+
+---
+
+## 9) Risk register (with mitigations)
+
+1. **Provider quota too low for heavy usage** (Alpha Vantage 25/day free) ([Alpha Vantage][1])
+
+   * Mitigation: caching, staggered refresh, multiple providers pluggable, user-configurable refresh scope.
+
+2. **Data coverage gaps / inconsistent fundamentals** (accounting standard variance) ([Alpha Vantage Documentation][8])
+
+   * Mitigation: store raw JSON + normalized fields; degrade gracefully; show “field availability” in UI.
+
+3. **Frontend compromise risk**
+
+   * Mitigation: strict capabilities, command allowlisting ([Tauri][2]), strict CSP with nonces/hashes ([Tauri][3]), minimize plugins.
+
+4. **Scope bypass / misconfigured network egress**
+
+   * Mitigation: keep HTTP in Rust with explicit allowlist; if plugin-http is used, enforce URL scopes ([Tauri][6]).
+
+---
+
+## 10) Minimum lovable product (MLP) definition
+
+**MLP must include**
+
+* VibePlan creation (template + prompt-to-rules MVP)
+* Alpha Vantage fetch + local cache + staleness
+* Rankings + explainability
+* Monthly buy list + yearly review checklist
+* Journal + plan version diffs
+* Backtest (simple cadence simulation)
+
+**MLP explicitly excludes**
+
+* Live trading execution
+* Intraday trading features
+* Social/community and cloud sync
+* Any always-on remote AI services (optional local-only adapter later)
+
+---
+
+If you want, I can also produce:
+
+* A concrete **SQLite schema + migration set** (DDL),
+* A **Rust module breakdown** with trait interfaces (Provider, Store, Compiler, Scorer, Allocator),
+* A **ticket-ready backlog** (Jira style: story, acceptance criteria, test notes) for each epic.
+
+[1]: https://www.alphavantage.co/support/ "Customer Support | Alpha Vantage"
+[2]: https://v2.tauri.app/security/capabilities/ "Capabilities | Tauri"
+[3]: https://v2.tauri.app/security/csp/ "Content Security Policy (CSP) | Tauri"
+[4]: https://v2.tauri.app/plugin/sql/ "SQL | Tauri"
+[5]: https://v2.tauri.app/plugin/stronghold/ "Stronghold | Tauri"
+[6]: https://v2.tauri.app/reference/javascript/http/ "@tauri-apps/plugin-http | Tauri"
+[7]: https://www.alphavantage.co/documentation/ "API Documentation | Alpha Vantage"
+[8]: https://documentation.alphavantage.co/FundamentalDataDocs/index.html "documentation.alphavantage.co"
