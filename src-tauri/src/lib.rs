@@ -7,6 +7,7 @@ use modules::{
     portfolio::{
         PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
         BuyList, RebalanceReport, TargetAllocation,
+        review::{ReviewGenerator, YearlyReview},
     },
 };
 use serde::{Serialize, Deserialize};
@@ -278,6 +279,15 @@ fn create_demo_portfolio() -> Result<Portfolio, String> {
     Ok(portfolio)
 }
 
+/// Generate yearly review checklist
+#[tauri::command]
+fn generate_yearly_review(
+    portfolio_name: String,
+    year: i32,
+) -> Result<YearlyReview, String> {
+    Ok(ReviewGenerator::generate_yearly_review(&portfolio_name, year))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -299,6 +309,7 @@ pub fn run() {
             generate_monthly_buy_list,
             check_portfolio_rebalance,
             create_demo_portfolio,
+            generate_yearly_review,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
