@@ -8,3 +8,5 @@ pub mod backtest;
 pub mod journal;
 pub mod export;
 pub mod security;
+pub mod cache;
+pub mod worker_pool;

@@ -32,4 +32,13 @@ reqwest = { version = "0.12.28", features = ["json", "rustls-tls"] }
 governor = "0.10.4"
 nonzero_ext = "0.3.0"
 uuid = { version = "1.19.0", features = ["v4"] }
+# New dependencies for optimization
+moka = { version = "0.12", features = ["future"] }  # High-performance caching
+dashmap = "6.0"  # Concurrent HashMap
+rayon = "1.10"  # Data parallelism
+futures = "0.3"  # Async utilities
+async-trait = "0.1"  # Async traits
+parking_lot = "0.12"  # Fast synchronization primitives
+lazy_static = "1.4"  # Lazy static initialization
+
 
