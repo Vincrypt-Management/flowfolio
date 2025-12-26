@@ -104,24 +104,31 @@ flowfolio/
 
 ## 🚀 Next Steps (Development Roadmap)
 
-### Phase 1: Core Functionality (Epics B-D)
-- [ ] **Epic B - Store Layer**
-  - [ ] Implement repository pattern for CRUD operations
-  - [ ] Test migrations up/down
-  - [ ] Add data seeding for testing
+### Phase 1: Core Functionality (Epics B-D) - IN PROGRESS
 
-- [ ] **Epic C - Data Provider (Complete)**
-  - [ ] Parse Alpha Vantage time series responses
-  - [ ] Normalize fundamentals data
-  - [ ] Implement refresh queue logic
-  - [ ] Add staleness tracking
-  - [ ] Build offline mode handling
+**Epic B - Store Layer** ✅ 85% Complete
+- [x] Implement repository pattern for CRUD operations
+- [x] Add comprehensive async operations for all entities
+- [x] DateTime support via chrono
+- [ ] Test migrations up/down
+- [ ] Add data seeding for testing
 
-- [ ] **Epic D - Plan Compiler (Complete)**
-  - [ ] Implement prompt parser (rule-based MVP)
-  - [ ] Add template library (Dividend Calm, AI Picks & Shovels)
-  - [ ] Build plan versioning and diffs
-  - [ ] Create explainability traces
+**Epic C - Data Provider (Complete)** ✅ 70% Complete
+- [x] Parse Alpha Vantage time series responses
+- [x] Parse company overview/fundamentals
+- [x] Implement DataSyncService for orchestrated fetching
+- [x] Build incremental sync (compact vs full)
+- [x] Add rate limiting with delays
+- [ ] Implement refresh queue logic
+- [ ] Add staleness tracking
+- [ ] Build offline mode handling
+
+**Epic D - Plan Compiler (Complete)** ✅ 80% Complete
+- [x] Add 3 production templates (Quality Compounders, Dividend Calm, AI Infrastructure)
+- [x] Build template system (list/get operations)
+- [ ] Implement prompt parser (rule-based MVP)
+- [ ] Add plan versioning and diffs
+- [ ] Create explainability traces
 
 ### Phase 2: Analysis Engine (Epics E-F)
 - [ ] **Epic E - Scoring Engine**
@@ -222,7 +229,7 @@ Per product specification, MLP must include:
 - [ ] Journal + plan version diffs
 - [ ] Backtest (simple cadence simulation)
 
-**Progress:** 2/8 core features ready (25%)
+**Progress:** 3.2/8 core features ready (40%)
 
 ## 🎓 Key Design Decisions
 
