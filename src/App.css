@@ -552,3 +552,374 @@ button:disabled {
     color: rgba(255, 255, 255, 0.6);
   }
 }
+
+/* Portfolio Tab Styles */
+.portfolio-tab {
+  padding: 1rem 0;
+}
+
+.portfolio-summary {
+  margin: 1rem 0;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.summary-row .label {
+  font-weight: 500;
+}
+
+.summary-row .value {
+  font-weight: 600;
+  color: #646cff;
+}
+
+.holdings-table {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.holdings-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.holdings-table th,
+.holdings-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.holdings-table th {
+  background: rgba(100, 108, 255, 0.1);
+  font-weight: 600;
+}
+
+.drift-positive {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.drift-negative {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.btn-secondary {
+  padding: 0.75rem 1.5rem;
+  background: rgba(100, 108, 255, 0.1);
+  color: #646cff;
+  border: 1px solid #646cff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(100, 108, 255, 0.2);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.allocation-list {
+  margin: 1rem 0;
+}
+
+.allocation-item {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.alloc-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.alloc-symbol {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.alloc-pct {
+  font-weight: 600;
+  color: #646cff;
+}
+
+.alloc-reason {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.buy-list-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.contribution-input {
+  width: 200px;
+  padding: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.buy-list-card {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.05), rgba(139, 195, 74, 0.05));
+  border-left: 4px solid #4caf50;
+}
+
+.buy-list-date {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+  margin: 0.5rem 0;
+}
+
+.rationale {
+  font-style: italic;
+  color: rgba(0, 0, 0, 0.7);
+  margin: 1rem 0;
+}
+
+.buy-recommendations {
+  margin-top: 1rem;
+}
+
+.buy-rec-item {
+  padding: 1rem;
+  background: white;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.rec-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.rec-priority {
+  background: #646cff;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.rec-symbol {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.rec-action {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rec-action.buy {
+  background: rgba(76, 175, 80, 0.2);
+  color: #2d6a2f;
+}
+
+.rec-action.add {
+  background: rgba(33, 150, 243, 0.2);
+  color: #1565c0;
+}
+
+.rec-details {
+  margin-top: 0.5rem;
+}
+
+.rec-amounts {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #4caf50;
+  margin-bottom: 0.25rem;
+}
+
+.rec-amounts span {
+  margin: 0 0.5rem;
+}
+
+.rec-rationale {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.rebalance-card {
+  border-left: 4px solid #ff9800;
+}
+
+.rebalance-card.needs-rebalance {
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.05), rgba(255, 193, 7, 0.05));
+  border-left-color: #ff5722;
+}
+
+.rebalance-card.balanced {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.05), rgba(139, 195, 74, 0.05));
+  border-left-color: #4caf50;
+}
+
+.rebalance-date {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+  margin: 0.5rem 0;
+}
+
+.rebalance-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.summary-item {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.summary-item .label {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.summary-item .value {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.summary-item .value.alert {
+  color: #ff5722;
+}
+
+.summary-item .value.ok {
+  color: #4caf50;
+}
+
+.rebalance-actions {
+  margin-top: 1rem;
+}
+
+.rebalance-action-item {
+  padding: 1rem;
+  background: white;
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.action-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.action-symbol {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.action-type {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.action-type.buy {
+  background: rgba(76, 175, 80, 0.2);
+  color: #2d6a2f;
+}
+
+.action-type.sell {
+  background: rgba(244, 67, 54, 0.2);
+  color: #c62828;
+}
+
+.action-details {
+  font-size: 0.95rem;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.action-details div {
+  margin: 0.25rem 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .summary-row {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .holdings-table th {
+    background: rgba(100, 108, 255, 0.2);
+  }
+
+  .holdings-table th,
+  .holdings-table td {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .allocation-item,
+  .summary-item {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .alloc-reason,
+  .buy-list-date,
+  .rebalance-date,
+  .rec-rationale,
+  .action-details {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .rationale {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .buy-rec-item,
+  .rebalance-action-item {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .contribution-input {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .btn-secondary {
+    background: rgba(100, 108, 255, 0.2);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(100, 108, 255, 0.3);
+  }
+}

@@ -4,6 +4,10 @@ use modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
     data_provider::AlphaVantageClient,
     scoring::{ScoringEngine, ScoringConfig, SymbolScore, factors::{FinancialMetrics, MomentumMetrics}},
+    portfolio::{
+        PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
+        BuyList, RebalanceReport, TargetAllocation,
+    },
 };
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -183,6 +187,97 @@ fn generate_demo_momentum(seed: usize) -> MomentumMetrics {
     }
 }
 
+/// Create equal-weight allocation plan
+#[tauri::command]
+fn create_equal_weight_allocation(
+    symbols: Vec<String>,
+    max_position_pct: f64,
+    cash_buffer_pct: f64,
+) -> Result<AllocationPlan, String> {
+    let constraints = AllocationConstraints {
+        max_position_pct,
+        min_position_pct: 1.0,
+        max_sector_pct: None,
+        cash_buffer_pct,
+    };
+
+    Ok(PortfolioManager::equal_weight_allocation(symbols, constraints))
+}
+
+/// Create score-weighted allocation plan
+#[tauri::command]
+fn create_score_weighted_allocation(
+    scores: Vec<SymbolScore>,
+    max_position_pct: f64,
+    cash_buffer_pct: f64,
+) -> Result<AllocationPlan, String> {
+    let symbols_with_scores: Vec<(String, f64)> = scores
+        .into_iter()
+        .map(|s| (s.symbol, s.total_score))
+        .collect();
+
+    let constraints = AllocationConstraints {
+        max_position_pct,
+        min_position_pct: 1.0,
+        max_sector_pct: None,
+        cash_buffer_pct,
+    };
+
+    Ok(PortfolioManager::score_weighted_allocation(
+        symbols_with_scores,
+        constraints,
+    ))
+}
+
+/// Generate monthly buy list
+#[tauri::command]
+fn generate_monthly_buy_list(
+    contribution: f64,
+    portfolio: Portfolio,
+    allocation_plan: AllocationPlan,
+    prices: HashMap<String, f64>,
+) -> Result<BuyList, String> {
+    Ok(PortfolioManager::generate_buy_list(
+        contribution,
+        &portfolio,
+        &allocation_plan,
+        &prices,
+    ))
+}
+
+/// Check rebalancing needs
+#[tauri::command]
+fn check_portfolio_rebalance(
+    portfolio: Portfolio,
+    threshold_pct: f64,
+) -> Result<RebalanceReport, String> {
+    Ok(PortfolioManager::check_rebalance(&portfolio, threshold_pct))
+}
+
+/// Create demo portfolio for testing
+#[tauri::command]
+fn create_demo_portfolio() -> Result<Portfolio, String> {
+    use modules::portfolio::Holding;
+    
+    let mut portfolio = Portfolio::new("Demo Portfolio".to_string());
+    portfolio.cash = 5000.0;
+
+    // Add some demo holdings
+    let holdings = vec![
+        Holding::new("AAPL".to_string(), 10.0, 150.0, 180.0, 25.0),
+        Holding::new("MSFT".to_string(), 8.0, 300.0, 380.0, 25.0),
+        Holding::new("GOOGL".to_string(), 5.0, 140.0, 150.0, 20.0),
+        Holding::new("AMZN".to_string(), 3.0, 170.0, 180.0, 15.0),
+        Holding::new("META".to_string(), 6.0, 350.0, 500.0, 15.0),
+    ];
+
+    for holding in holdings {
+        portfolio.add_holding(holding);
+    }
+
+    Ok(portfolio)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -199,6 +294,11 @@ pub fn run() {
             score_demo_symbol,
             get_scoring_config,
             score_symbols_batch,
+            create_equal_weight_allocation,
+            create_score_weighted_allocation,
+            generate_monthly_buy_list,
+            check_portfolio_rebalance,
+            create_demo_portfolio,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
