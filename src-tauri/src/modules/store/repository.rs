@@ -1,7 +1,6 @@
 use super::models::*;
 use anyhow::Result;
 use sqlx::{SqlitePool, Row};
-use chrono::Utc;
 
 /// Repository for database operations
 pub struct Repository {

@@ -5,7 +5,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use crate::modules::rate_limiter::RateLimiter;
-use std::collections::HashMap;
 
 /// Alpha Vantage API client
 pub struct AlphaVantageClient {

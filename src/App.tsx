@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./services/tauri";
+import VibeStudio from "./components/VibeStudio";
 import "./App.css";
 
 interface VibePlan {
@@ -24,7 +25,6 @@ function App() {
   const [plan, setPlan] = useState<VibePlan | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [prompt, setPrompt] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [connectionStatus, setConnectionStatus] = useState<string>("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -72,20 +72,21 @@ function App() {
     }
   }
 
-  async function compilePlan() {
-    if (!prompt.trim()) {
-      alert("Please enter a prompt");
-      return;
-    }
+  // Unused legacy function - kept for reference
+  // async function compilePlan() {
+  //   if (!prompt.trim()) {
+  //     alert("Please enter a prompt");
+  //     return;
+  //   }
 
-    try {
-      const compiledPlan = await invoke<VibePlan>("compile_plan", { prompt });
-      setPlan(compiledPlan);
-      setPrompt("");
-    } catch (error) {
-      alert("Error compiling plan: " + error);
-    }
-  }
+  //   try {
+  //     const compiledPlan = await invoke<VibePlan>("compile_plan", { prompt });
+  //     setPlan(compiledPlan);
+  //     setPrompt("");
+  //   } catch (error) {
+  //     alert("Error compiling plan: " + error);
+  //   }
+  // }
 
   async function testConnection() {
     setIsTestingConnection(true);
@@ -201,31 +202,7 @@ function App() {
         )}
 
         {activeTab === "vibe-studio" && (
-          <div className="vibe-studio">
-            <h2>Vibe Studio</h2>
-            <div className="card">
-              <h3>Create Your Plan</h3>
-              <textarea
-                className="prompt-input"
-                placeholder="Describe your investing strategy in plain English...&#10;&#10;Example: 'I want to invest in quality US tech companies with strong fundamentals, rebalancing quarterly'"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={6}
-              />
-              <button className="btn-primary" onClick={compilePlan}>
-                Compile Plan
-              </button>
-              <p className="note">Note: Prompt parsing is currently basic. For full customization, use templates or edit JSON directly.</p>
-            </div>
-            {plan && (
-              <div className="card">
-                <h3>Compiled Plan</h3>
-                <pre className="plan-json">
-                  {JSON.stringify(plan, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
+          <VibeStudio />
         )}
 
         {activeTab === "templates" && (
@@ -314,16 +291,3 @@ function App() {
 }
 
 export default App;
-
-interface SymbolScore {
-  symbol: string;
-  total_score: number;
-  factors: Array<{
-    name: string;
-    raw_value: number | null;
-    normalized_value: number;
-    weight: number;
-    contribution: number;
-  }>;
-  explanation: string;
-}

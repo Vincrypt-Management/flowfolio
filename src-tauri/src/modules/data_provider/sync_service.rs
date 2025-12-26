@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crate::modules::{
-    store::{Store, repository::Repository},
+    store::repository::Repository,
     data_provider::AlphaVantageClient,
 };
 

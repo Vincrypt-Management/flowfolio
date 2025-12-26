@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./services/tauri";
 
 interface JournalEntry {
   id: string;
@@ -17,21 +17,6 @@ interface JournalStats {
   entries_by_type: Record<string, number>;
   entries_by_month: Record<string, number>;
   common_tags: [string, number][];
-}
-
-interface PlanVersionDiff {
-  from_version: string;
-  to_version: string;
-  timestamp: string;
-  changes: PlanChange[];
-  summary: string;
-}
-
-interface PlanChange {
-  field: string;
-  old_value: string;
-  new_value: string;
-  change_type: string;
 }
 
 export function JournalTab() {

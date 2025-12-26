@@ -35,12 +35,7 @@ interface SymbolScore {
 function App() {
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
-  const [templates, setTemplates] = useState<string[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [prompt, setPrompt] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [connectionStatus, setConnectionStatus] = useState<string>("");
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
   
   // Rankings state
   const [rankingsSymbols, setRankingsSymbols] = useState<string>("AAPL,MSFT,GOOGL,AMZN,META");
@@ -50,7 +45,6 @@ function App() {
 
   useEffect(() => {
     checkHealth();
-    loadTemplates();
     loadDefaultPlan();
   }, []);
 
@@ -63,60 +57,12 @@ function App() {
     }
   }
 
-  async function loadTemplates() {
-    try {
-      const templateList = await invoke<string[]>("list_templates");
-      setTemplates(templateList);
-    } catch (error) {
-      console.error("Failed to load templates:", error);
-    }
-  }
-
   async function loadDefaultPlan() {
     try {
       const defaultPlan = await invoke<VibePlan>("get_default_plan");
       setPlan(defaultPlan);
     } catch (error) {
       console.error("Failed to load default plan:", error);
-    }
-  }
-
-  async function loadTemplate(templateName: string) {
-    try {
-      const template = await invoke<VibePlan>("get_template", { name: templateName });
-      setPlan(template);
-      setSelectedTemplate(templateName);
-    } catch (error) {
-      alert("Error loading template: " + error);
-    }
-  }
-
-  async function compilePlan() {
-    if (!prompt.trim()) {
-      alert("Please enter a prompt");
-      return;
-    }
-
-    try {
-      const compiledPlan = await invoke<VibePlan>("compile_plan", { prompt });
-      setPlan(compiledPlan);
-      setPrompt("");
-    } catch (error) {
-      alert("Error compiling plan: " + error);
-    }
-  }
-
-  async function testConnection() {
-    setIsTestingConnection(true);
-    setConnectionStatus("Testing connection...");
-    
-    try {
-      const result = await invoke<string>("test_data_connection");
-      setConnectionStatus("✅ " + result);
-    } catch (error) {
-      setConnectionStatus("❌ " + error);
-    } finally {
-      setIsTestingConnection(false);
     }
   }
 
