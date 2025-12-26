@@ -1,6 +1,35 @@
 import { useState } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage } from "../services/openrouter";
+import { 
+  Sparkles, 
+  RotateCcw, 
+  Download, 
+  MessageSquare, 
+  Target, 
+  Lightbulb, 
+  AlertCircle, 
+  PieChart, 
+  TrendingUp, 
+  Briefcase, 
+  Send,
+  ArrowRight,
+  BarChart3,
+  Activity
+} from "lucide-react";
+import { 
+  PieChart as RechartsPie, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid
+} from 'recharts';
 import "./VibeStudio.css";
 
 export default function VibeStudio() {
@@ -12,6 +41,8 @@ export default function VibeStudio() {
   const [chatHistory, setChatHistory] = useState<OpenRouterMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatting, setIsChatting] = useState(false);
+
+  const CHART_COLORS = ['#00e599', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
   const examplePrompts = [
     "Create a growth-focused tech portfolio with quarterly rebalancing",
@@ -99,16 +130,77 @@ export default function VibeStudio() {
     }
   };
 
+  const renderAllocationChart = () => {
+    if (!generatedPortfolio) return null;
+
+    const data = generatedPortfolio.assets.map((asset, index) => ({
+      name: asset.symbol,
+      value: asset.allocation,
+      fill: CHART_COLORS[index % CHART_COLORS.length]
+    }));
+
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <RechartsPie>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            labelLine={false}
+            label={({ name, value }) => `${name}: ${value.toFixed(1)}%`}
+            outerRadius={100}
+            fill="#8884d8"
+            dataKey="value"
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.fill} />
+            ))}
+          </Pie>
+          <Tooltip />
+        </RechartsPie>
+      </ResponsiveContainer>
+    );
+  };
+
+  const renderAllocationBarChart = () => {
+    if (!generatedPortfolio) return null;
+
+    const data = generatedPortfolio.assets.map((asset) => ({
+      symbol: asset.symbol,
+      allocation: asset.allocation,
+      sector: asset.sector || 'Other'
+    }));
+
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis dataKey="symbol" stroke="var(--text-muted)" />
+          <YAxis stroke="var(--text-muted)" />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: 'var(--bg-card)', 
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)'
+            }}
+          />
+          <Legend />
+          <Bar dataKey="allocation" fill="var(--primary)" name="Allocation %" />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  };
+
   return (
     <div className="vibe-studio">
       <div className="studio-header">
         <div className="header-content">
-          <h2>✨ Vibe Studio - AI Portfolio Generator</h2>
-          <p className="subtitle">Describe your investment goals - AI creates a personalized portfolio with real market data</p>
+          <h2><Sparkles size={24} style={{ display: 'inline', marginRight: '0.5rem' }} /> Vibe Studio</h2>
+          <p className="subtitle">AI-powered portfolio generation with real market data</p>
         </div>
         {generatedPortfolio && (
           <button className="btn-reset" onClick={handleReset}>
-            ✏️ Create New Portfolio
+            <RotateCcw size={16} /> New Portfolio
           </button>
         )}
       </div>
@@ -116,7 +208,7 @@ export default function VibeStudio() {
       {!generatedPortfolio && !error ? (
         <div className="welcome-section">
           <div className="welcome-card">
-            <h3>🎯 How it works</h3>
+            <h3><Target size={20} /> How it works</h3>
             <ol className="steps-list">
               <li>Describe your investment goals and risk tolerance</li>
               <li>AI analyzes your requirements and generates a custom portfolio</li>
@@ -127,7 +219,7 @@ export default function VibeStudio() {
           </div>
 
           <div className="examples-section">
-            <h3>💡 Try these examples:</h3>
+            <h3><Lightbulb size={20} /> Try these examples:</h3>
             <div className="examples-grid">
               {examplePrompts.map((example, idx) => (
                 <button
@@ -135,7 +227,7 @@ export default function VibeStudio() {
                   className="example-card"
                   onClick={() => handleExampleClick(example)}
                 >
-                  <span className="example-icon">→</span>
+                  <span className="example-icon"><ArrowRight size={16} /></span>
                   <span>{example}</span>
                 </button>
               ))}
@@ -147,7 +239,7 @@ export default function VibeStudio() {
       {error && (
         <div className="error-section">
           <div className="error-card">
-            <h3>❌ Error</h3>
+            <h3><AlertCircle size={24} /> Error</h3>
             <p>{error}</p>
             <button className="btn-retry" onClick={handleReset}>
               Try Again
@@ -160,34 +252,40 @@ export default function VibeStudio() {
         <div className="plan-result">
           <div className="plan-header">
             <div>
-              <h2>📊 {generatedPortfolio.title}</h2>
+              <h2><PieChart size={28} /> {generatedPortfolio.title}</h2>
               <p className="plan-description">{generatedPortfolio.description}</p>
               <div className="meta-info">
                 <span className="meta-badge">Risk: {generatedPortfolio.riskLevel}</span>
                 <span className="meta-badge">Horizon: {generatedPortfolio.timeHorizon}</span>
                 <span className="meta-badge">Rebalance: {generatedPortfolio.rebalanceFrequency}</span>
+                {generatedPortfolio.diversificationScore && (
+                  <span className="meta-badge">Diversification: {generatedPortfolio.diversificationScore}%</span>
+                )}
+                {generatedPortfolio.sharpeRatioEstimate && (
+                  <span className="meta-badge">Sharpe: {generatedPortfolio.sharpeRatioEstimate}</span>
+                )}
               </div>
             </div>
             <div className="header-actions">
               <button className="btn-save" onClick={handleSavePlan}>
-                💾 Save as JSON
+                <Download size={16} /> Save JSON
               </button>
               <button className="btn-chat" onClick={() => setChatMode(!chatMode)}>
-                💬 {chatMode ? 'Hide' : 'Ask AI'}
+                <MessageSquare size={16} /> {chatMode ? 'Hide Chat' : 'Ask AI'}
               </button>
             </div>
           </div>
 
           <div className="plan-details">
             <div className="detail-card">
-              <h3>🎯 Strategy</h3>
+              <h3><Target size={20} /> Strategy</h3>
               <div className="detail-content">
                 <p>{generatedPortfolio.strategy}</p>
               </div>
             </div>
 
             <div className="detail-card">
-              <h3>📈 Expected Performance</h3>
+              <h3><TrendingUp size={20} /> Expected Performance</h3>
               <div className="detail-content">
                 <div className="detail-row">
                   <span className="label">Expected Return:</span>
@@ -200,8 +298,24 @@ export default function VibeStudio() {
               </div>
             </div>
 
+            {/* Allocation Pie Chart */}
             <div className="detail-card full-width">
-              <h3>💼 Portfolio Allocation ({generatedPortfolio.assets.length} Assets)</h3>
+              <h3><PieChart size={20} /> Allocation Distribution</h3>
+              <div className="detail-content">
+                {renderAllocationChart()}
+              </div>
+            </div>
+
+            {/* Allocation Bar Chart */}
+            <div className="detail-card full-width">
+              <h3><BarChart3 size={20} /> Asset Allocation Breakdown</h3>
+              <div className="detail-content">
+                {renderAllocationBarChart()}
+              </div>
+            </div>
+
+            <div className="detail-card full-width">
+              <h3><Briefcase size={20} /> Portfolio Assets ({generatedPortfolio.assets.length} Holdings)</h3>
               <div className="detail-content">
                 <div className="assets-table">
                   <div className="table-header">
@@ -210,6 +324,7 @@ export default function VibeStudio() {
                     <div className="th">Sector</div>
                     <div className="th">Allocation</div>
                     <div className="th">Current Price</div>
+                    <div className="th">Technical</div>
                     <div className="th">Rationale</div>
                   </div>
                   {generatedPortfolio.assets.map((asset, i) => (
@@ -219,12 +334,25 @@ export default function VibeStudio() {
                       <div className="td sector">{asset.sector || 'N/A'}</div>
                       <div className="td allocation">
                         <div className="allocation-bar-wrapper">
-                          <div className="allocation-bar" style={{ width: `${asset.allocation}%` }}></div>
-                          <span className="allocation-text">{asset.allocation.toFixed(1)}%</span>
+                          <div 
+                            className="allocation-bar" 
+                            style={{ 
+                              width: `${asset.allocation}%`,
+                              backgroundColor: CHART_COLORS[i % CHART_COLORS.length]
+                            }}
+                          ></div>
                         </div>
+                        <span className="allocation-text">{asset.allocation.toFixed(1)}%</span>
                       </div>
                       <div className="td price">
                         {asset.currentPrice ? `$${asset.currentPrice.toFixed(2)}` : 'Loading...'}
+                      </div>
+                      <div className="td technical">
+                        {asset.technicalSignal ? (
+                          <span className={`technical-badge ${asset.technicalSignal.includes('bullish') ? 'bullish' : asset.technicalSignal.includes('bearish') ? 'bearish' : 'neutral'}`}>
+                            {asset.technicalSignal}
+                          </span>
+                        ) : 'N/A'}
                       </div>
                       <div className="td rationale">{asset.rationale}</div>
                     </div>
@@ -234,7 +362,7 @@ export default function VibeStudio() {
             </div>
 
             <div className="detail-card full-width">
-              <h3>💡 AI Reasoning</h3>
+              <h3><Activity size={20} /> AI Reasoning</h3>
               <div className="detail-content">
                 <p>{generatedPortfolio.reasoning}</p>
               </div>
@@ -243,11 +371,11 @@ export default function VibeStudio() {
 
           {chatMode && (
             <div className="chat-section">
-              <h3>💬 Chat with AI about this portfolio</h3>
+              <h3><MessageSquare size={20} /> Chat with AI about this portfolio</h3>
               <div className="chat-messages">
                 {chatHistory.map((msg, i) => (
                   <div key={i} className={`chat-message ${msg.role}`}>
-                    <strong>{msg.role === 'user' ? 'You' : 'AI'}:</strong>
+                    <strong>{msg.role === 'user' ? 'You' : 'AI'}</strong>
                     <p>{msg.content}</p>
                   </div>
                 ))}
@@ -271,7 +399,7 @@ export default function VibeStudio() {
                   onClick={handleChat}
                   disabled={!chatInput.trim() || isChatting}
                 >
-                  {isChatting ? '...' : 'Send'}
+                  {isChatting ? <div className="spinner" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white' }}></div> : <Send size={16} />}
                 </button>
               </div>
             </div>
@@ -292,7 +420,7 @@ export default function VibeStudio() {
                 handleGeneratePlan();
               }
             }}
-            rows={3}
+            rows={2}
             disabled={isGenerating}
           />
           <button
@@ -303,15 +431,15 @@ export default function VibeStudio() {
             {isGenerating ? (
               <>
                 <span className="spinner"></span>
-                Generating Portfolio...
+                Generating...
               </>
             ) : (
-              <>Generate Portfolio ✨</>
+              <>Generate <Sparkles size={16} /></>
             )}
           </button>
         </div>
         <div className="input-hint">
-          💡 Be specific about your risk tolerance, investment goals, preferred sectors, and time horizon
+          <Lightbulb size={14} /> Be specific about your risk tolerance, investment goals, preferred sectors, and time horizon
         </div>
       </div>
     </div>

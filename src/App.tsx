@@ -1,6 +1,21 @@
 import { useState, useEffect } from "react";
 import { invoke } from "./services/tauri";
 import VibeStudio from "./components/VibeStudio";
+import { 
+  LayoutDashboard, 
+  Sparkles, 
+  FileText, 
+  Database, 
+  Activity, 
+  CheckCircle2, 
+  XCircle,
+  BarChart3,
+  PieChart,
+  Calendar,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight
+} from "lucide-react";
 import "./App.css";
 
 interface VibePlan {
@@ -28,6 +43,7 @@ function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [connectionStatus, setConnectionStatus] = useState<string>("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     checkHealth();
@@ -72,22 +88,6 @@ function App() {
     }
   }
 
-  // Unused legacy function - kept for reference
-  // async function compilePlan() {
-  //   if (!prompt.trim()) {
-  //     alert("Please enter a prompt");
-  //     return;
-  //   }
-
-  //   try {
-  //     const compiledPlan = await invoke<VibePlan>("compile_plan", { prompt });
-  //     setPlan(compiledPlan);
-  //     setPrompt("");
-  //   } catch (error) {
-  //     alert("Error compiling plan: " + error);
-  //   }
-  // }
-
   async function testConnection() {
     setIsTestingConnection(true);
     setConnectionStatus("Testing connection...");
@@ -102,112 +102,151 @@ function App() {
     }
   }
 
-  return (
-    <div className="container">
-      <header className="header">
-        <h1>📊 FlowFolio</h1>
-        <p className="tagline">Vibe-investing, compose your plan locally</p>
-        <div className="status">{status}</div>
-      </header>
-
-      <nav className="nav-tabs">
-        <button
-          className={activeTab === "dashboard" ? "active" : ""}
+  const renderSidebar = () => (
+    <aside className={`sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
+      <div className="sidebar-header">
+        <div className="logo-area">
+          <div className="logo-icon-wrapper">
+            <BarChart3 className="logo-icon" size={24} />
+          </div>
+          {!isSidebarCollapsed && <span className="logo-text">FlowFolio</span>}
+        </div>
+        <button 
+          className="sidebar-toggle" 
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
+      </div>
+      
+      <nav className="nav-menu">
+        <button 
+          className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
           onClick={() => setActiveTab("dashboard")}
+          title={isSidebarCollapsed ? "Dashboard" : ""}
         >
-          Dashboard
+          <LayoutDashboard className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Dashboard</span>}
         </button>
-        <button
-          className={activeTab === "vibe-studio" ? "active" : ""}
+        <button 
+          className={`nav-item ${activeTab === "vibe-studio" ? "active" : ""}`}
           onClick={() => setActiveTab("vibe-studio")}
+          title={isSidebarCollapsed ? "Vibe Studio" : ""}
         >
-          Vibe Studio
+          <Sparkles className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Vibe Studio</span>}
         </button>
-        <button
-          className={activeTab === "templates" ? "active" : ""}
+        <button 
+          className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
           onClick={() => setActiveTab("templates")}
+          title={isSidebarCollapsed ? "Templates" : ""}
         >
-          Templates
+          <FileText className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Templates</span>}
         </button>
-        <button
-          className={activeTab === "data" ? "active" : ""}
+        <button 
+          className={`nav-item ${activeTab === "data" ? "active" : ""}`}
           onClick={() => setActiveTab("data")}
+          title={isSidebarCollapsed ? "Data Sources" : ""}
         >
-          Data Sources
+          <Database className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Data Sources</span>}
         </button>
       </nav>
 
+      <div className="sidebar-footer">
+        <div className={`status-badge ${isSidebarCollapsed ? "collapsed" : ""}`}>
+          <div className={`status-dot ${status === "Healthy" ? "online" : "offline"}`}></div>
+          {!isSidebarCollapsed && <span>{status === "Healthy" ? "System Online" : status}</span>}
+        </div>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="app-container">
+      {renderSidebar()}
+
       <main className="main-content">
         {activeTab === "dashboard" && (
-          <div className="dashboard">
-            <h2>Dashboard</h2>
-            <div className="card">
-              <h3>Current Plan: {plan?.name || "No plan loaded"}</h3>
-              {plan && (
-                <div className="plan-summary">
-                  <p><strong>Universe:</strong></p>
-                  <ul>
-                    <li>Exchanges: {plan.universe.exchanges.join(", ")}</li>
-                    <li>Regions: {plan.universe.regions.join(", ")}</li>
-                    {plan.universe.sectors.length > 0 && (
-                      <li>Sectors: {plan.universe.sectors.join(", ")}</li>
-                    )}
-                  </ul>
-                  
-                  {plan.filters.length > 0 && (
-                    <>
-                      <p><strong>Filters:</strong></p>
-                      <ul>
-                        {plan.filters.map((filter, i) => (
-                          <li key={i}>{filter.name}: {filter.operator} {JSON.stringify(filter.value)}</li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Dashboard</h1>
+              <p className="page-subtitle">Overview of your investment strategy</p>
+            </header>
 
-                  <p><strong>Ranking Factors:</strong></p>
-                  <ul>
+            <div className="dashboard-grid">
+              <div className="card">
+                <h3><PieChart size={20} /> Current Plan</h3>
+                {plan ? (
+                  <div className="plan-summary">
+                    <div className="stat-row">
+                      <span className="stat-label">Name</span>
+                      <span className="stat-value">{plan.name}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span className="stat-label">Regions</span>
+                      <span className="stat-value">{plan.universe.regions.join(", ")}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span className="stat-label">Sectors</span>
+                      <span className="stat-value">{plan.universe.sectors.length > 0 ? plan.universe.sectors.join(", ") : "All"}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span className="stat-label">Rebalance</span>
+                      <span className="stat-value">{plan.cadence.quarterly_rebalance ? "Quarterly" : "Manual"}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted">No plan loaded</p>
+                )}
+              </div>
+
+              <div className="card">
+                <h3><Activity size={20} /> Ranking Factors</h3>
+                {plan && (
+                  <div className="plan-summary">
                     {plan.ranking.factors.map((factor, i) => (
-                      <li key={i}>
-                        {factor.name}: {(factor.weight * 100).toFixed(0)}%
-                      </li>
+                      <div key={i} className="stat-row">
+                        <span className="stat-label">{factor.name}</span>
+                        <span className="stat-value">{(factor.weight * 100).toFixed(0)}%</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
+                )}
+              </div>
 
-                  <p><strong>Portfolio:</strong></p>
-                  <ul>
-                    <li>Allocation: {plan.portfolio.allocation_method}</li>
-                    <li>Max Position: {plan.portfolio.max_position_pct}%</li>
-                    <li>Cash Buffer: {plan.portfolio.cash_buffer_pct}%</li>
-                  </ul>
-
-                  <p><strong>Cadence:</strong></p>
-                  <ul>
-                    <li>Monthly Contributions: {plan.cadence.monthly_contributions ? "Yes" : "No"}</li>
-                    <li>Quarterly Rebalance: {plan.cadence.quarterly_rebalance ? "Yes" : "No"}</li>
-                    <li>Yearly Review: {plan.cadence.yearly_review ? "Yes" : "No"}</li>
-                  </ul>
+              <div className="card">
+                <h3><Calendar size={20} /> Next Actions</h3>
+                <div className="plan-summary">
+                  <div className="stat-row">
+                    <span className="stat-label">Monthly Buy List</span>
+                    <span className="stat-value">Coming soon</span>
+                  </div>
+                  <div className="stat-row">
+                    <span className="stat-label">Quarterly Rebalance</span>
+                    <span className="stat-value">Coming soon</span>
+                  </div>
                 </div>
-              )}
-            </div>
-            <div className="card">
-              <h3>Next Actions</h3>
-              <ul>
-                <li>📅 Monthly Buy List - Coming soon</li>
-                <li>🔄 Quarterly Rebalance - Coming soon</li>
-                <li>📝 Yearly Review - Coming soon</li>
-              </ul>
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === "vibe-studio" && (
-          <VibeStudio />
+          <div className="animate-fade-in">
+            <VibeStudio />
+          </div>
         )}
 
         {activeTab === "templates" && (
-          <div className="templates">
-            <h2>Plan Templates</h2>
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Templates</h1>
+              <p className="page-subtitle">Start with a pre-configured strategy</p>
+            </header>
+
             <div className="template-grid">
               {templates.map((template) => (
                 <div
@@ -216,24 +255,25 @@ function App() {
                   onClick={() => loadTemplate(template)}
                 >
                   <h3>{template}</h3>
-                  <p>Click to load this template</p>
+                  <p>Click to load this template configuration</p>
                 </div>
               ))}
             </div>
+
             {plan && selectedTemplate && (
-              <div className="card">
+              <div className="card" style={{ marginTop: '2rem' }}>
                 <h3>Selected: {plan.name}</h3>
                 <div className="plan-summary">
-                  <p><strong>Strategy Focus:</strong></p>
-                  <ul>
+                  <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}><strong>Strategy Focus:</strong></p>
+                  <ul style={{ paddingLeft: '1.5rem', marginBottom: '1.5rem', color: 'var(--text-main)' }}>
                     {plan.ranking.factors.map((factor, i) => (
-                      <li key={i}>
+                      <li key={i} style={{ marginBottom: '0.5rem' }}>
                         {factor.name.charAt(0).toUpperCase() + factor.name.slice(1)}: {(factor.weight * 100).toFixed(0)}% weight
                       </li>
                     ))}
                   </ul>
                   <button className="btn-primary" onClick={() => setActiveTab("dashboard")}>
-                    Use This Plan
+                    Use This Plan <ArrowRight size={16} />
                   </button>
                 </div>
               </div>
@@ -242,46 +282,62 @@ function App() {
         )}
 
         {activeTab === "data" && (
-          <div className="data-sources">
-            <h2>Data Sources</h2>
-            <div className="card">
-              <h3>Alpha Vantage</h3>
-              <p>Provider: Alpha Vantage (Free Tier)</p>
-              <p>Quota: 25 requests per day</p>
-              <p>Status: Ready</p>
-              
-              <button 
-                className="btn-primary" 
-                onClick={testConnection}
-                disabled={isTestingConnection}
-              >
-                {isTestingConnection ? "Testing..." : "Test Connection"}
-              </button>
-              
-              {connectionStatus && (
-                <div className={`connection-status ${connectionStatus.startsWith("✅") ? "success" : "error"}`}>
-                  {connectionStatus}
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Data Sources</h1>
+              <p className="page-subtitle">Manage your market data connections</p>
+            </header>
+
+            <div className="dashboard-grid">
+              <div className="card">
+                <h3>Alpha Vantage</h3>
+                <div className="stat-row">
+                  <span className="stat-label">Provider</span>
+                  <span className="stat-value">Alpha Vantage (Free Tier)</span>
                 </div>
-              )}
-
-              <div className="info-box">
-                <h4>Setup Instructions:</h4>
-                <ol>
-                  <li>Get a free API key from <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener noreferrer">Alpha Vantage</a></li>
-                  <li>Store your key securely (Stronghold integration coming soon)</li>
-                  <li>Configure refresh schedule and symbol watchlist</li>
-                </ol>
+                <div className="stat-row">
+                  <span className="stat-label">Quota</span>
+                  <span className="stat-value">25 requests/day</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Status</span>
+                  <span className="stat-value">Ready</span>
+                </div>
+                
+                <div style={{ marginTop: '1.5rem' }}>
+                  <button 
+                    className="btn-primary" 
+                    onClick={testConnection}
+                    disabled={isTestingConnection}
+                  >
+                    {isTestingConnection ? "Testing..." : "Test Connection"}
+                  </button>
+                </div>
+                
+                {connectionStatus && (
+                  <div className={`connection-status ${connectionStatus.startsWith("✅") ? "success" : "error"}`}>
+                    {connectionStatus.startsWith("✅") ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                    {connectionStatus.replace(/^[✅❌]\s*/, "")}
+                  </div>
+                )}
               </div>
-            </div>
 
-            <div className="card">
-              <h3>Data Sync Status</h3>
-              <p>Last sync: Never</p>
-              <p>Cached symbols: 0</p>
-              <p>Data freshness: No data</p>
-              <button className="btn-primary" disabled>
-                Sync Now (Coming Soon)
-              </button>
+              <div className="card">
+                <h3>Data Sync Status</h3>
+                <div className="stat-row">
+                  <span className="stat-label">Last sync</span>
+                  <span className="stat-value">Never</span>
+                </div>
+                <div className="stat-row">
+                  <span className="stat-label">Cached symbols</span>
+                  <span className="stat-value">0</span>
+                </div>
+                <div style={{ marginTop: '1.5rem' }}>
+                  <button className="btn-primary" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+                    Sync Now (Coming Soon)
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

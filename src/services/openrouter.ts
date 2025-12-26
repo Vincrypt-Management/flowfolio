@@ -42,7 +42,15 @@ class OpenRouterService {
     this.defaultModel = import.meta.env.VITE_DEFAULT_LLM_MODEL || 'anthropic/claude-3-sonnet-20240229';
   }
 
-  async chat(messages: OpenRouterMessage[], model?: string): Promise<string> {
+  async chat(
+    messages: OpenRouterMessage[], 
+    model?: string,
+    options?: {
+      temperature?: number;
+      max_tokens?: number;
+      top_p?: number;
+    }
+  ): Promise<string> {
     if (!this.apiKey) {
       throw new Error('OpenRouter API key not configured');
     }
@@ -51,7 +59,8 @@ class OpenRouterService {
       console.log('Sending request to OpenRouter:', {
         url: `${this.apiUrl}/chat/completions`,
         model: model || this.defaultModel,
-        messageCount: messages.length
+        messageCount: messages.length,
+        options
       });
 
       const response = await axios.post(
@@ -59,8 +68,9 @@ class OpenRouterService {
         {
           model: model || this.defaultModel,
           messages,
-          max_tokens: 8000, // Safe limit for most models including MiniMax
-          temperature: 0.7,
+          max_tokens: options?.max_tokens || 8000,
+          temperature: options?.temperature || 0.7,
+          top_p: options?.top_p || 1,
         } as OpenRouterRequest,
         {
           headers: {
