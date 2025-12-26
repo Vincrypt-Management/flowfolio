@@ -923,3 +923,266 @@ button:disabled {
     background: rgba(100, 108, 255, 0.3);
   }
 }
+
+/* Backtest Tab Styles */
+.backtest-tab {
+  padding: 1rem 0;
+}
+
+.subtitle {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 1.1rem;
+  margin-top: -1rem;
+  margin-bottom: 2rem;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.config-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.config-group label {
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.config-group input,
+.config-group select {
+  padding: 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.metrics-card {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.05), rgba(33, 150, 243, 0.05));
+  border-left: 4px solid #4caf50;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.metric-item {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.metric-item.highlight {
+  background: linear-gradient(135deg, rgba(100, 108, 255, 0.1), rgba(139, 92, 246, 0.1));
+  border-color: #646cff;
+}
+
+.metric-label {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.metric-value.large {
+  font-size: 2.2rem;
+}
+
+.metric-value.positive {
+  color: #4caf50;
+}
+
+.metric-value.negative {
+  color: #f44336;
+}
+
+.summary-box {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  border-left: 4px solid #646cff;
+}
+
+.summary-box pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.view-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.view-tabs button {
+  background: transparent;
+  border: none;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.view-tabs button:hover {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.view-tabs button.active {
+  color: #646cff;
+  border-bottom-color: #646cff;
+  font-weight: 600;
+}
+
+.timeline-view,
+.trades-view {
+  margin-top: 1rem;
+}
+
+.timeline-table,
+.trades-table {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.timeline-table table,
+.trades-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.timeline-table th,
+.timeline-table td,
+.trades-table th,
+.trades-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.timeline-table th,
+.trades-table th {
+  background: rgba(100, 108, 255, 0.1);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.trade-action {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.trade-action.buy {
+  background: rgba(76, 175, 80, 0.2);
+  color: #2d6a2f;
+}
+
+.trade-action.sell {
+  background: rgba(244, 67, 54, 0.2);
+  color: #c62828;
+}
+
+.trades-table .reason {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+  font-style: italic;
+}
+
+@media (prefers-color-scheme: dark) {
+  .subtitle {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .config-group input,
+  .config-group select {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .metric-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .metric-item.highlight {
+    background: linear-gradient(135deg, rgba(100, 108, 255, 0.2), rgba(139, 92, 246, 0.2));
+  }
+
+  .metric-label {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .metric-value {
+    color: #f7fafc;
+  }
+
+  .summary-box {
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .summary-box pre {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .view-tabs {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .view-tabs button {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .view-tabs button:hover {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .timeline-table th,
+  .trades-table th {
+    background: rgba(100, 108, 255, 0.2);
+  }
+
+  .timeline-table th,
+  .timeline-table td,
+  .trades-table th,
+  .trades-table td {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .trades-table .reason {
+    color: rgba(255, 255, 255, 0.6);
+  }
+}

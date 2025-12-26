@@ -9,6 +9,7 @@ use modules::{
         BuyList, RebalanceReport, TargetAllocation,
         review::{ReviewGenerator, YearlyReview},
     },
+    backtest::{BacktestEngine, BacktestConfig, BacktestResult},
 };
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -288,6 +289,33 @@ fn generate_yearly_review(
     Ok(ReviewGenerator::generate_yearly_review(&portfolio_name, year))
 }
 
+/// Run backtest simulation
+#[tauri::command]
+fn run_backtest_simulation(config: BacktestConfig) -> Result<BacktestResult, String> {
+    Ok(BacktestEngine::run_backtest(config))
+}
+
+/// Create a demo backtest configuration
+#[tauri::command]
+fn create_demo_backtest_config() -> Result<BacktestConfig, String> {
+    Ok(BacktestConfig {
+        start_date: "2020-01-01".to_string(),
+        end_date: "2024-01-01".to_string(),
+        initial_cash: 10000.0,
+        monthly_contribution: 1000.0,
+        rebalance_frequency: "quarterly".to_string(),
+        rebalance_threshold: 5.0,
+        symbols: vec![
+            "AAPL".to_string(),
+            "MSFT".to_string(),
+            "GOOGL".to_string(),
+            "AMZN".to_string(),
+            "META".to_string(),
+        ],
+        allocation_method: "equal_weight".to_string(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -310,6 +338,8 @@ pub fn run() {
             check_portfolio_rebalance,
             create_demo_portfolio,
             generate_yearly_review,
+            run_backtest_simulation,
+            create_demo_backtest_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
