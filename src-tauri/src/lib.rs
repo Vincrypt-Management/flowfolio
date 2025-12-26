@@ -3,8 +3,10 @@ mod modules;
 use modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
     data_provider::AlphaVantageClient,
+    scoring::{ScoringEngine, ScoringConfig, SymbolScore, factors::{FinancialMetrics, MomentumMetrics}},
 };
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 struct TemplateInfo {
@@ -79,6 +81,108 @@ async fn test_data_connection() -> Result<String, String> {
     }
 }
 
+/// Score a symbol with demo data
+#[tauri::command]
+fn score_demo_symbol(symbol: String) -> Result<SymbolScore, String> {
+    // Create demo financial metrics
+    let financial = FinancialMetrics {
+        roe: Some(0.18),
+        roic: Some(0.14),
+        pe_ratio: Some(16.5),
+        pb_ratio: Some(2.2),
+        ps_ratio: Some(1.8),
+        operating_margin: Some(0.22),
+        debt_to_equity: Some(0.6),
+        revenue_growth_yoy: Some(0.12),
+        earnings_growth_yoy: Some(0.15),
+        dividend_yield: Some(0.025),
+        ..Default::default()
+    };
+    
+    // Create demo momentum metrics
+    let momentum = MomentumMetrics {
+        return_1m: Some(0.03),
+        return_3m: Some(0.08),
+        return_6m: Some(0.15),
+        return_12m: Some(0.22),
+        volatility_30d: Some(0.018),
+        avg_volume_30d: Some(5_000_000.0),
+    };
+    
+    // Create scoring engine with default config
+    let engine = ScoringEngine::with_default_config();
+    
+    // Calculate score
+    let score = engine.calculate_score(&symbol, &financial, &momentum);
+    
+    Ok(score)
+}
+
+/// Get scoring configuration for a plan
+#[tauri::command]
+fn get_scoring_config(plan: VibePlanScript) -> Result<ScoringConfig, String> {
+    // Extract factor weights from plan
+    let mut weights = HashMap::new();
+    
+    for factor in &plan.ranking.factors {
+        weights.insert(factor.name.clone(), factor.weight);
+    }
+    
+    Ok(ScoringConfig {
+        factor_weights: weights,
+    })
+}
+
+/// Score multiple symbols with custom config
+#[tauri::command]
+fn score_symbols_batch(
+    symbols: Vec<String>,
+    config: ScoringConfig,
+) -> Result<Vec<SymbolScore>, String> {
+    let engine = ScoringEngine::new(config);
+    
+    // For demo, generate dummy data for each symbol
+    let scores: Vec<SymbolScore> = symbols
+        .into_iter()
+        .enumerate()
+        .map(|(i, symbol)| {
+            let financial = generate_demo_financials(i);
+            let momentum = generate_demo_momentum(i);
+            engine.calculate_score(&symbol, &financial, &momentum)
+        })
+        .collect();
+    
+    // Rank by total score
+    let ranked = engine.rank_symbols(scores);
+    
+    Ok(ranked)
+}
+
+// Helper functions for demo data
+fn generate_demo_financials(seed: usize) -> FinancialMetrics {
+    let offset = seed as f64 * 0.02;
+    FinancialMetrics {
+        roe: Some(0.15 + offset),
+        roic: Some(0.12 + offset),
+        pe_ratio: Some(18.0 - offset * 10.0),
+        pb_ratio: Some(2.0 + offset),
+        revenue_growth_yoy: Some(0.10 + offset),
+        operating_margin: Some(0.20 + offset * 0.5),
+        debt_to_equity: Some(0.8 - offset * 2.0),
+        ..Default::default()
+    }
+}
+
+fn generate_demo_momentum(seed: usize) -> MomentumMetrics {
+    let offset = seed as f64 * 0.01;
+    MomentumMetrics {
+        return_3m: Some(0.05 + offset),
+        return_6m: Some(0.10 + offset),
+        return_12m: Some(0.18 + offset),
+        ..Default::default()
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -92,6 +196,9 @@ pub fn run() {
             validate_plan,
             get_provider_status,
             test_data_connection,
+            score_demo_symbol,
+            get_scoring_config,
+            score_symbols_batch,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
