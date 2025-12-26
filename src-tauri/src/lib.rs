@@ -10,6 +10,7 @@ use modules::{
         review::{ReviewGenerator, YearlyReview},
     },
     backtest::{BacktestEngine, BacktestConfig, BacktestResult},
+    journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
 };
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -316,6 +317,161 @@ fn create_demo_backtest_config() -> Result<BacktestConfig, String> {
     })
 }
 
+/// Create a journal entry
+#[tauri::command]
+fn create_journal_entry(
+    event_type: String,
+    title: String,
+    content: String,
+    plan_version: Option<String>,
+    tags: Vec<String>,
+) -> Result<JournalEntry, String> {
+    Ok(Journal::create_entry(
+        &event_type,
+        &title,
+        &content,
+        plan_version,
+        tags,
+    ))
+}
+
+/// Log a strategy change
+#[tauri::command]
+fn log_strategy_change(
+    change_description: String,
+    old_plan: String,
+    new_plan: String,
+) -> Result<JournalEntry, String> {
+    Ok(Journal::log_strategy_change(&change_description, &old_plan, &new_plan))
+}
+
+/// Log a trade decision
+#[tauri::command]
+fn log_trade_decision(
+    symbol: String,
+    action: String,
+    rationale: String,
+) -> Result<JournalEntry, String> {
+    Ok(Journal::log_trade_decision(&symbol, &action, &rationale))
+}
+
+/// Log a rebalance event
+#[tauri::command]
+fn log_rebalance_event(
+    trigger_reason: String,
+    actions_summary: String,
+) -> Result<JournalEntry, String> {
+    Ok(Journal::log_rebalance(&trigger_reason, &actions_summary))
+}
+
+/// Log a review
+#[tauri::command]
+fn log_review_event(
+    review_type: String,
+    findings: String,
+    action_items: Vec<String>,
+) -> Result<JournalEntry, String> {
+    Ok(Journal::log_review(&review_type, &findings, action_items))
+}
+
+/// Compare plan versions
+#[tauri::command]
+fn compare_plan_versions(
+    old_plan: String,
+    new_plan: String,
+    from_version: String,
+    to_version: String,
+) -> Result<PlanVersionDiff, String> {
+    Ok(Journal::compare_plans(&old_plan, &new_plan, &from_version, &to_version))
+}
+
+/// Filter journal entries
+#[tauri::command]
+fn filter_journal_entries(
+    entries: Vec<JournalEntry>,
+    filter: JournalFilter,
+) -> Result<Vec<JournalEntry>, String> {
+    Ok(Journal::filter_entries(&entries, &filter))
+}
+
+/// Calculate journal statistics
+#[tauri::command]
+fn calculate_journal_stats(
+    entries: Vec<JournalEntry>,
+) -> Result<JournalStats, String> {
+    Ok(Journal::calculate_stats(&entries))
+}
+
+/// Export journal to markdown
+#[tauri::command]
+fn export_journal_markdown(
+    entries: Vec<JournalEntry>,
+) -> Result<String, String> {
+    Ok(Journal::export_to_markdown(&entries))
+}
+
+/// Create demo journal entries
+#[tauri::command]
+fn create_demo_journal() -> Result<Vec<JournalEntry>, String> {
+    let mut entries = Vec::new();
+
+    // Initial strategy creation
+    entries.push(Journal::create_entry(
+        "strategy_creation",
+        "Created Investment Strategy",
+        "Started with Quality Factor template. Focus on high ROE (>15%) and low debt companies.",
+        Some("v1.0".to_string()),
+        vec!["strategy".to_string(), "initial".to_string()],
+    ));
+
+    // Trade decision
+    entries.push(Journal::log_trade_decision(
+        "AAPL",
+        "BUY",
+        "Strong fundamentals: ROE 45%, consistent revenue growth, low debt-to-equity.",
+    ));
+
+    entries.push(Journal::log_trade_decision(
+        "MSFT",
+        "BUY",
+        "Excellent quality metrics: Operating margin 42%, ROIC 35%, diversified revenue.",
+    ));
+
+    // Rebalance
+    entries.push(Journal::log_rebalance(
+        "Quarterly drift check - AAPL exceeded 30% allocation",
+        "SELL AAPL: $2,500 (15 shares)\nBUY GOOGL: $1,800 (12 shares)",
+    ));
+
+    // Review
+    entries.push(Journal::log_review(
+        "Quarterly",
+        "Portfolio up 8.5% vs S&P 500 +6.2%. Quality factor outperforming.\nMax drawdown: -12% (within tolerance).",
+        vec![
+            "Consider adding value factor".to_string(),
+            "Review tech concentration".to_string(),
+        ],
+    ));
+
+    // Strategy adjustment
+    entries.push(Journal::log_strategy_change(
+        "Added value factor (P/E < 25) to complement quality screening.",
+        "v1.0",
+        "v1.1",
+    ));
+
+    // Reflection
+    entries.push(Journal::log_reflection(
+        "Learning: Patience Pays Off",
+        "MSFT dropped 15% after earnings but fundamentals remained strong. \
+        Resisted urge to sell. Stock recovered +22% over next 3 months. \
+        Reminder: Focus on long-term thesis, not short-term noise.",
+        vec!["lesson".to_string(), "psychology".to_string()],
+    ));
+
+    Ok(entries)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -340,6 +496,16 @@ pub fn run() {
             generate_yearly_review,
             run_backtest_simulation,
             create_demo_backtest_config,
+            create_journal_entry,
+            log_strategy_change,
+            log_trade_decision,
+            log_rebalance_event,
+            log_review_event,
+            compare_plan_versions,
+            filter_journal_entries,
+            calculate_journal_stats,
+            export_journal_markdown,
+            create_demo_journal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
