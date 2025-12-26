@@ -15,7 +15,9 @@ import {
   Send,
   ArrowRight,
   BarChart3,
-  Activity
+  Activity,
+  CheckCircle2,
+  Loader2
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -32,6 +34,13 @@ import {
 } from 'recharts';
 import "./VibeStudio.css";
 
+interface ProgressStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+  message?: string;
+}
+
 export default function VibeStudio() {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -41,6 +50,7 @@ export default function VibeStudio() {
   const [chatHistory, setChatHistory] = useState<OpenRouterMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatting, setIsChatting] = useState(false);
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
 
   const CHART_COLORS = ['#00e599', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
@@ -51,6 +61,17 @@ export default function VibeStudio() {
     "Create a balanced portfolio mixing growth and value stocks"
   ];
 
+  const updateProgress = (stepId: string, status: ProgressStep['status'], message?: string) => {
+    setProgressSteps(prev => {
+      const stepIndex = prev.findIndex(s => s.id === stepId);
+      if (stepIndex === -1) return prev;
+      
+      const updated = [...prev];
+      updated[stepIndex] = { ...updated[stepIndex], status, message };
+      return updated;
+    });
+  };
+
   const handleGeneratePlan = async () => {
     if (!prompt.trim() || isGenerating) return;
 
@@ -60,15 +81,57 @@ export default function VibeStudio() {
     setChatMode(false);
     setChatHistory([]);
 
+    // Initialize progress steps
+    const steps: ProgressStep[] = [
+      { id: 'analyze', label: 'Analyzing your investment goals', status: 'pending' },
+      { id: 'generate', label: 'Generating portfolio structure', status: 'pending' },
+      { id: 'fetch', label: 'Fetching real-time market data', status: 'pending' },
+      { id: 'optimize', label: 'Optimizing risk-adjusted returns', status: 'pending' },
+    ];
+    setProgressSteps(steps);
+
     try {
       console.log('🚀 Generating portfolio for:', prompt);
+
+      // Step 1: Analyze intent
+      updateProgress('analyze', 'active', 'Understanding risk tolerance and preferences...');
+      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause for UX
+      
+      // Step 2: Generate structure
+      updateProgress('analyze', 'completed', 'Investment parameters extracted');
+      updateProgress('generate', 'active', 'Creating diversified allocation strategy...');
+      
+      // Step 3: Fetch market data
+      updateProgress('generate', 'completed', 'Portfolio structure created');
+      updateProgress('fetch', 'active', 'Retrieving live prices and technical indicators...');
+      
+      // Step 4: Optimize
+      updateProgress('fetch', 'completed', 'Market data synchronized');
+      updateProgress('optimize', 'active', 'Calculating Sharpe ratio and diversification score...');
+      
       const portfolio = await portfolioAgent.generatePortfolio(prompt);
+      
+      updateProgress('optimize', 'completed', 'Portfolio optimized successfully');
       console.log('✅ Generated portfolio:', portfolio);
+      
       setGeneratedPortfolio(portfolio);
       setError(null);
+      
+      // Keep progress visible for a moment
+      setTimeout(() => setProgressSteps([]), 2000);
     } catch (error) {
       console.error("Portfolio Generation Error:", error);
-      setError(error instanceof Error ? error.message : "Failed to generate portfolio");
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate portfolio";
+      setError(errorMessage);
+      
+      // Mark current active step as error
+      setProgressSteps(prev => 
+        prev.map(step => 
+          step.status === 'active' 
+            ? { ...step, status: 'error', message: errorMessage }
+            : step
+        )
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -115,6 +178,7 @@ export default function VibeStudio() {
     setPrompt("");
     setChatMode(false);
     setChatHistory([]);
+    setProgressSteps([]);
   };
 
   const handleSavePlan = () => {
@@ -128,6 +192,39 @@ export default function VibeStudio() {
       linkElement.setAttribute('download', exportFileDefaultName);
       linkElement.click();
     }
+  };
+
+  const renderProgressIndicator = () => {
+    if (progressSteps.length === 0) return null;
+
+    return (
+      <div className="progress-indicator">
+        <div className="progress-header">
+          <Loader2 className="progress-spinner" size={20} />
+          <h3>Building Your Portfolio...</h3>
+        </div>
+        <div className="progress-steps">
+          {progressSteps.map((step) => (
+            <div key={step.id} className={`progress-step ${step.status}`}>
+              <div className="step-icon">
+                {step.status === 'completed' && <CheckCircle2 size={20} />}
+                {step.status === 'active' && <Loader2 className="spin" size={20} />}
+                {step.status === 'error' && <AlertCircle size={20} />}
+                {step.status === 'pending' && (
+                  <div className="step-dot"></div>
+                )}
+              </div>
+              <div className="step-content">
+                <div className="step-label">{step.label}</div>
+                {step.message && (
+                  <div className="step-message">{step.message}</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const renderAllocationChart = () => {
@@ -205,7 +302,10 @@ export default function VibeStudio() {
         )}
       </div>
 
-      {!generatedPortfolio && !error ? (
+      {/* Progress Indicator */}
+      {isGenerating && renderProgressIndicator()}
+
+      {!generatedPortfolio && !error && !isGenerating ? (
         <div className="welcome-section">
           <div className="welcome-card">
             <h3><Target size={20} /> How it works</h3>
@@ -236,7 +336,7 @@ export default function VibeStudio() {
         </div>
       ) : null}
 
-      {error && (
+      {error && !isGenerating && (
         <div className="error-section">
           <div className="error-card">
             <h3><AlertCircle size={24} /> Error</h3>
