@@ -4,6 +4,13 @@ use modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
     data_provider::AlphaVantageClient,
 };
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+struct TemplateInfo {
+    name: String,
+    description: String,
+}
 
 /// Health check command
 #[tauri::command]
@@ -15,6 +22,19 @@ fn health_check() -> String {
 #[tauri::command]
 fn get_default_plan() -> Result<VibePlanScript, String> {
     Ok(PlanCompiler::default_template())
+}
+
+/// List available templates
+#[tauri::command]
+fn list_templates() -> Vec<String> {
+    PlanCompiler::list_templates()
+}
+
+/// Get a specific template by name
+#[tauri::command]
+fn get_template(name: String) -> Result<VibePlanScript, String> {
+    PlanCompiler::get_template(&name)
+        .ok_or_else(|| format!("Template '{}' not found", name))
 }
 
 /// Compile a prompt into a VibePlan
@@ -41,6 +61,24 @@ fn get_provider_status() -> String {
     }).to_string()
 }
 
+/// Test Alpha Vantage connection (using demo key)
+#[tauri::command]
+async fn test_data_connection() -> Result<String, String> {
+    let client = AlphaVantageClient::new("demo".to_string());
+    
+    // Try to fetch IBM data with demo key
+    match client.get_time_series_daily("IBM", "compact").await {
+        Ok(data) => {
+            if data.is_empty() {
+                Ok("Connected, but no data returned. You may need a valid API key.".to_string())
+            } else {
+                Ok(format!("Connected successfully! Retrieved {} days of data for IBM.", data.len()))
+            }
+        }
+        Err(e) => Err(format!("Connection failed: {}", e))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -48,9 +86,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_default_plan,
+            list_templates,
+            get_template,
             compile_plan,
             validate_plan,
             get_provider_status,
+            test_data_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

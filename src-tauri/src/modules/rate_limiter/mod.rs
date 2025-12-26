@@ -1,5 +1,4 @@
 use governor::{Quota, RateLimiter as GovernorLimiter, DefaultDirectRateLimiter};
-use nonzero_ext::nonzero;
 use anyhow::Result;
 use std::time::Duration;
 

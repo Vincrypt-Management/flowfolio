@@ -1,7 +1,11 @@
+pub mod sync_service;
+
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use crate::modules::rate_limiter::RateLimiter;
+use std::collections::HashMap;
 
 /// Alpha Vantage API client
 pub struct AlphaVantageClient {
@@ -14,22 +18,41 @@ pub struct AlphaVantageClient {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TimeSeriesDaily {
     pub date: String,
-    pub open: String,
-    pub high: String,
-    pub low: String,
-    pub close: String,
-    pub volume: String,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CompanyOverview {
+    #[serde(rename = "Symbol")]
     pub symbol: String,
+    #[serde(rename = "Name")]
     pub name: Option<String>,
+    #[serde(rename = "Exchange")]
     pub exchange: Option<String>,
+    #[serde(rename = "Currency")]
     pub currency: Option<String>,
+    #[serde(rename = "MarketCapitalization")]
     pub market_cap: Option<String>,
+    #[serde(rename = "PERatio")]
     pub pe_ratio: Option<String>,
+    #[serde(rename = "DividendYield")]
     pub dividend_yield: Option<String>,
+    #[serde(rename = "ReturnOnEquityTTM")]
+    pub roe: Option<String>,
+    #[serde(rename = "ROIC")]
+    pub roic: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AlphaVantageError {
+    #[serde(rename = "Note")]
+    pub note: Option<String>,
+    #[serde(rename = "Error Message")]
+    pub error_message: Option<String>,
 }
 
 impl AlphaVantageClient {
@@ -46,20 +69,70 @@ impl AlphaVantageClient {
     }
 
     /// Fetch daily time series for a symbol
-    pub async fn get_time_series_daily(&self, symbol: &str) -> Result<Vec<TimeSeriesDaily>> {
+    pub async fn get_time_series_daily(&self, symbol: &str, outputsize: &str) -> Result<Vec<TimeSeriesDaily>> {
         self.rate_limiter.check("alpha_vantage".to_string()).await?;
 
         let url = format!(
-            "{}?function=TIME_SERIES_DAILY&symbol={}&apikey={}",
-            self.base_url, symbol, self.api_key
+            "{}?function=TIME_SERIES_DAILY&symbol={}&outputsize={}&apikey={}",
+            self.base_url, symbol, outputsize, self.api_key
         );
 
         let response = self.client.get(&url).send().await?;
         let body = response.text().await?;
         
-        // TODO: Parse Alpha Vantage response format
-        // For now, return empty vec - will implement full parsing later
-        Ok(vec![])
+        // Parse response
+        let json: Value = serde_json::from_str(&body)?;
+
+        // Check for errors
+        if let Some(note) = json.get("Note") {
+            anyhow::bail!("API limit: {}", note.as_str().unwrap_or("Rate limit exceeded"));
+        }
+        if let Some(error) = json.get("Error Message") {
+            anyhow::bail!("API error: {}", error.as_str().unwrap_or("Unknown error"));
+        }
+
+        // Parse time series data
+        let time_series = json
+            .get("Time Series (Daily)")
+            .ok_or_else(|| anyhow::anyhow!("No time series data found"))?;
+
+        let mut results = Vec::new();
+
+        if let Some(series_map) = time_series.as_object() {
+            for (date, values) in series_map {
+                if let Some(vals) = values.as_object() {
+                    let entry = TimeSeriesDaily {
+                        date: date.clone(),
+                        open: vals.get("1. open")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0.0),
+                        high: vals.get("2. high")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0.0),
+                        low: vals.get("3. low")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0.0),
+                        close: vals.get("4. close")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0.0),
+                        volume: vals.get("5. volume")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0),
+                    };
+                    results.push(entry);
+                }
+            }
+        }
+
+        // Sort by date descending
+        results.sort_by(|a, b| b.date.cmp(&a.date));
+
+        Ok(results)
     }
 
     /// Fetch company overview/fundamentals
@@ -72,8 +145,18 @@ impl AlphaVantageClient {
         );
 
         let response = self.client.get(&url).send().await?;
-        let overview: CompanyOverview = response.json().await?;
+        let body = response.text().await?;
         
+        // Check for errors first
+        let json: Value = serde_json::from_str(&body)?;
+        if let Some(note) = json.get("Note") {
+            anyhow::bail!("API limit: {}", note.as_str().unwrap_or("Rate limit exceeded"));
+        }
+        if let Some(error) = json.get("Error Message") {
+            anyhow::bail!("API error: {}", error.as_str().unwrap_or("Unknown error"));
+        }
+
+        let overview: CompanyOverview = serde_json::from_str(&body)?;
         Ok(overview)
     }
 
@@ -96,5 +179,16 @@ impl DataProvider for AlphaVantageClient {
 
     fn remaining_quota(&self) -> u32 {
         self.remaining_quota()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_creation() {
+        let client = AlphaVantageClient::new("demo".to_string());
+        assert_eq!(client.name(), "Alpha Vantage");
     }
 }

@@ -22,11 +22,16 @@ interface VibePlan {
 function App() {
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
+  const [templates, setTemplates] = useState<string[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [connectionStatus, setConnectionStatus] = useState<string>("");
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
   useEffect(() => {
     checkHealth();
+    loadTemplates();
     loadDefaultPlan();
   }, []);
 
@@ -39,6 +44,15 @@ function App() {
     }
   }
 
+  async function loadTemplates() {
+    try {
+      const templateList = await invoke<string[]>("list_templates");
+      setTemplates(templateList);
+    } catch (error) {
+      console.error("Failed to load templates:", error);
+    }
+  }
+
   async function loadDefaultPlan() {
     try {
       const defaultPlan = await invoke<VibePlan>("get_default_plan");
@@ -48,13 +62,42 @@ function App() {
     }
   }
 
+  async function loadTemplate(templateName: string) {
+    try {
+      const template = await invoke<VibePlan>("get_template", { name: templateName });
+      setPlan(template);
+      setSelectedTemplate(templateName);
+    } catch (error) {
+      alert("Error loading template: " + error);
+    }
+  }
+
   async function compilePlan() {
+    if (!prompt.trim()) {
+      alert("Please enter a prompt");
+      return;
+    }
+
     try {
       const compiledPlan = await invoke<VibePlan>("compile_plan", { prompt });
       setPlan(compiledPlan);
       setPrompt("");
     } catch (error) {
       alert("Error compiling plan: " + error);
+    }
+  }
+
+  async function testConnection() {
+    setIsTestingConnection(true);
+    setConnectionStatus("Testing connection...");
+    
+    try {
+      const result = await invoke<string>("test_data_connection");
+      setConnectionStatus("✅ " + result);
+    } catch (error) {
+      setConnectionStatus("❌ " + error);
+    } finally {
+      setIsTestingConnection(false);
     }
   }
 
@@ -80,16 +123,16 @@ function App() {
           Vibe Studio
         </button>
         <button
-          className={activeTab === "universe" ? "active" : ""}
-          onClick={() => setActiveTab("universe")}
+          className={activeTab === "templates" ? "active" : ""}
+          onClick={() => setActiveTab("templates")}
         >
-          Universe
+          Templates
         </button>
         <button
-          className={activeTab === "rankings" ? "active" : ""}
-          onClick={() => setActiveTab("rankings")}
+          className={activeTab === "data" ? "active" : ""}
+          onClick={() => setActiveTab("data")}
         >
-          Rankings
+          Data Sources
         </button>
       </nav>
 
@@ -101,15 +144,47 @@ function App() {
               <h3>Current Plan: {plan?.name || "No plan loaded"}</h3>
               {plan && (
                 <div className="plan-summary">
-                  <p><strong>Exchanges:</strong> {plan.universe.exchanges.join(", ")}</p>
-                  <p><strong>Regions:</strong> {plan.universe.regions.join(", ")}</p>
-                  <h4>Ranking Factors:</h4>
+                  <p><strong>Universe:</strong></p>
+                  <ul>
+                    <li>Exchanges: {plan.universe.exchanges.join(", ")}</li>
+                    <li>Regions: {plan.universe.regions.join(", ")}</li>
+                    {plan.universe.sectors.length > 0 && (
+                      <li>Sectors: {plan.universe.sectors.join(", ")}</li>
+                    )}
+                  </ul>
+                  
+                  {plan.filters.length > 0 && (
+                    <>
+                      <p><strong>Filters:</strong></p>
+                      <ul>
+                        {plan.filters.map((filter, i) => (
+                          <li key={i}>{filter.name}: {filter.operator} {JSON.stringify(filter.value)}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+
+                  <p><strong>Ranking Factors:</strong></p>
                   <ul>
                     {plan.ranking.factors.map((factor, i) => (
                       <li key={i}>
                         {factor.name}: {(factor.weight * 100).toFixed(0)}%
                       </li>
                     ))}
+                  </ul>
+
+                  <p><strong>Portfolio:</strong></p>
+                  <ul>
+                    <li>Allocation: {plan.portfolio.allocation_method}</li>
+                    <li>Max Position: {plan.portfolio.max_position_pct}%</li>
+                    <li>Cash Buffer: {plan.portfolio.cash_buffer_pct}%</li>
+                  </ul>
+
+                  <p><strong>Cadence:</strong></p>
+                  <ul>
+                    <li>Monthly Contributions: {plan.cadence.monthly_contributions ? "Yes" : "No"}</li>
+                    <li>Quarterly Rebalance: {plan.cadence.quarterly_rebalance ? "Yes" : "No"}</li>
+                    <li>Yearly Review: {plan.cadence.yearly_review ? "Yes" : "No"}</li>
                   </ul>
                 </div>
               )}
@@ -140,6 +215,7 @@ function App() {
               <button className="btn-primary" onClick={compilePlan}>
                 Compile Plan
               </button>
+              <p className="note">Note: Prompt parsing is currently basic. For full customization, use templates or edit JSON directly.</p>
             </div>
             {plan && (
               <div className="card">
@@ -152,20 +228,83 @@ function App() {
           </div>
         )}
 
-        {activeTab === "universe" && (
-          <div className="universe">
-            <h2>Universe & Watchlists</h2>
-            <div className="card">
-              <p>Symbol browser and data management - Coming soon</p>
+        {activeTab === "templates" && (
+          <div className="templates">
+            <h2>Plan Templates</h2>
+            <div className="template-grid">
+              {templates.map((template) => (
+                <div
+                  key={template}
+                  className={`template-card ${selectedTemplate === template ? "selected" : ""}`}
+                  onClick={() => loadTemplate(template)}
+                >
+                  <h3>{template}</h3>
+                  <p>Click to load this template</p>
+                </div>
+              ))}
             </div>
+            {plan && selectedTemplate && (
+              <div className="card">
+                <h3>Selected: {plan.name}</h3>
+                <div className="plan-summary">
+                  <p><strong>Strategy Focus:</strong></p>
+                  <ul>
+                    {plan.ranking.factors.map((factor, i) => (
+                      <li key={i}>
+                        {factor.name.charAt(0).toUpperCase() + factor.name.slice(1)}: {(factor.weight * 100).toFixed(0)}% weight
+                      </li>
+                    ))}
+                  </ul>
+                  <button className="btn-primary" onClick={() => setActiveTab("dashboard")}>
+                    Use This Plan
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {activeTab === "rankings" && (
-          <div className="rankings">
-            <h2>Rankings & Scoring</h2>
+        {activeTab === "data" && (
+          <div className="data-sources">
+            <h2>Data Sources</h2>
             <div className="card">
-              <p>Factor analysis and symbol rankings - Coming soon</p>
+              <h3>Alpha Vantage</h3>
+              <p>Provider: Alpha Vantage (Free Tier)</p>
+              <p>Quota: 25 requests per day</p>
+              <p>Status: Ready</p>
+              
+              <button 
+                className="btn-primary" 
+                onClick={testConnection}
+                disabled={isTestingConnection}
+              >
+                {isTestingConnection ? "Testing..." : "Test Connection"}
+              </button>
+              
+              {connectionStatus && (
+                <div className={`connection-status ${connectionStatus.startsWith("✅") ? "success" : "error"}`}>
+                  {connectionStatus}
+                </div>
+              )}
+
+              <div className="info-box">
+                <h4>Setup Instructions:</h4>
+                <ol>
+                  <li>Get a free API key from <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener noreferrer">Alpha Vantage</a></li>
+                  <li>Store your key securely (Stronghold integration coming soon)</li>
+                  <li>Configure refresh schedule and symbol watchlist</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="card">
+              <h3>Data Sync Status</h3>
+              <p>Last sync: Never</p>
+              <p>Cached symbols: 0</p>
+              <p>Data freshness: No data</p>
+              <button className="btn-primary" disabled>
+                Sync Now (Coming Soon)
+              </button>
             </div>
           </div>
         )}

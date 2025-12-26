@@ -202,3 +202,134 @@ body {
     color: #4ade80;
   }
 }
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.template-card {
+  background: white;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.template-card:hover {
+  border-color: #646cff;
+  box-shadow: 0 4px 8px rgba(100, 108, 255, 0.2);
+}
+
+.template-card.selected {
+  border-color: #646cff;
+  background: rgba(100, 108, 255, 0.05);
+}
+
+.template-card h3 {
+  margin: 0 0 0.5rem 0;
+  color: #646cff;
+  font-size: 1.2rem;
+}
+
+.template-card p {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 0.9rem;
+}
+
+.connection-status {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.connection-status.success {
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  color: #2d6a2f;
+}
+
+.connection-status.error {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  color: #c62828;
+}
+
+.info-box {
+  background: rgba(33, 150, 243, 0.05);
+  border: 1px solid rgba(33, 150, 243, 0.2);
+  border-radius: 4px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.info-box h4 {
+  margin-top: 0;
+  color: #1976d2;
+}
+
+.info-box ol {
+  margin-bottom: 0;
+}
+
+.info-box a {
+  color: #646cff;
+  text-decoration: underline;
+}
+
+.note {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.5);
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-color-scheme: dark) {
+  .template-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .template-card:hover {
+    border-color: #646cff;
+  }
+
+  .template-card p {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .connection-status.success {
+    background: rgba(76, 175, 80, 0.2);
+    border-color: rgba(76, 175, 80, 0.4);
+    color: #4ade80;
+  }
+
+  .connection-status.error {
+    background: rgba(244, 67, 54, 0.2);
+    border-color: rgba(244, 67, 54, 0.4);
+    color: #ff6b6b;
+  }
+
+  .info-box {
+    background: rgba(33, 150, 243, 0.1);
+    border-color: rgba(33, 150, 243, 0.3);
+  }
+
+  .info-box h4 {
+    color: #64b5f6;
+  }
+
+  .note {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
