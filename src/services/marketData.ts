@@ -47,6 +47,13 @@ class MarketDataService {
   // Persistent cache in localStorage for longer-term data
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_market_cache';
   private readonly PERSISTENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  
+  // Background prefetch system
+  private prefetchQueue: Set<string> = new Set();
+  private isPrefetching: boolean = false;
+  
+  // Instant loading with stale-while-revalidate
+  private staleCache: Map<string, MarketDataResponse> = new Map();
 
   private getAlpacaBaseUrl(): string {
     return this.alpacaPaper 
@@ -54,8 +61,8 @@ class MarketDataService {
       : 'https://api.alpaca.markets';
   }
 
-  // Check cache validity (in-memory first, then localStorage)
-  private getCachedData(symbol: string): MarketDataResponse | null {
+  // Check cache validity with stale-while-revalidate pattern
+  private getCachedData(symbol: string, allowStale: boolean = false): MarketDataResponse | null {
     // Check in-memory cache first
     const cached = this.cache.get(symbol);
     if (cached) {
@@ -64,6 +71,15 @@ class MarketDataService {
         console.log(`✅ Memory cache hit for ${symbol}`);
         return cached.data;
       }
+      
+      // If stale data is allowed, return it and trigger background refresh
+      if (allowStale) {
+        console.log(`⚡ Serving stale data for ${symbol} while revalidating`);
+        this.staleCache.set(symbol, cached.data);
+        this.prefetchInBackground(symbol);
+        return cached.data;
+      }
+      
       this.cache.delete(symbol);
     }
     
@@ -73,10 +89,15 @@ class MarketDataService {
       if (persistentCache) {
         const parsed: CacheEntry = JSON.parse(persistentCache);
         const isExpired = Date.now() - parsed.timestamp > this.PERSISTENT_CACHE_TTL;
-        if (!isExpired) {
-          console.log(`✅ Persistent cache hit for ${symbol}`);
+        if (!isExpired || allowStale) {
+          console.log(`✅ Persistent cache hit for ${symbol}${isExpired ? ' (stale)' : ''}`);
           // Restore to memory cache
           this.cache.set(symbol, parsed);
+          
+          if (isExpired && allowStale) {
+            this.prefetchInBackground(symbol);
+          }
+          
           return parsed.data;
         }
         localStorage.removeItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`);
@@ -86,6 +107,40 @@ class MarketDataService {
     }
     
     return null;
+  }
+  
+  // Background prefetch for instant loading
+  private prefetchInBackground(symbol: string): void {
+    if (!this.prefetchQueue.has(symbol)) {
+      this.prefetchQueue.add(symbol);
+      this.processPrefetchQueue();
+    }
+  }
+  
+  private async processPrefetchQueue(): Promise<void> {
+    if (this.isPrefetching || this.prefetchQueue.size === 0) return;
+    
+    this.isPrefetching = true;
+    const symbolsToFetch = Array.from(this.prefetchQueue);
+    this.prefetchQueue.clear();
+    
+    // Fetch all in parallel for maximum speed
+    await Promise.allSettled(
+      symbolsToFetch.map(async (symbol) => {
+        try {
+          await this.fetchFreshData(symbol);
+        } catch (error) {
+          console.warn(`Background prefetch failed for ${symbol}:`, error);
+        }
+      })
+    );
+    
+    this.isPrefetching = false;
+    
+    // Process any new items added during fetch
+    if (this.prefetchQueue.size > 0) {
+      this.processPrefetchQueue();
+    }
   }
 
   private setCachedData(symbol: string, data: MarketDataResponse): void {
@@ -294,10 +349,35 @@ class MarketDataService {
     }
   }
 
-  // Main method with fallback cascade and caching
-  async getMarketData(symbol: string): Promise<MarketDataResponse> {
-    // Check cache first
-    const cached = this.getCachedData(symbol);
+  // Fetch fresh data from providers
+  private async fetchFreshData(symbol: string): Promise<MarketDataResponse> {
+    const providers: Array<() => Promise<MarketDataResponse>> = [
+      () => this.fetchFromAlpaca(symbol),
+      () => this.fetchFromPolygon(symbol),
+      () => this.fetchFromAlphaVantage(symbol),
+      () => this.fetchFromYahooFinance(symbol),
+    ];
+
+    for (const provider of providers) {
+      try {
+        const data = await provider();
+        if (data.quote && data.quote.price > 0) {
+          this.setCachedData(symbol, data);
+          return data;
+        }
+      } catch (error) {
+        console.warn(`Provider failed for ${symbol}, trying next...`);
+        continue;
+      }
+    }
+
+    throw new Error(`Failed to fetch market data for ${symbol} from all providers`);
+  }
+
+  // Main method with instant loading (stale-while-revalidate)
+  async getMarketData(symbol: string, instant: boolean = true): Promise<MarketDataResponse> {
+    // Try to get cached data first (allow stale if instant mode)
+    const cached = this.getCachedData(symbol, instant);
     if (cached) return cached;
 
     // Check if request is already in progress (deduplication)
@@ -307,78 +387,84 @@ class MarketDataService {
       return inProgress;
     }
 
-    const providers: Array<() => Promise<MarketDataResponse>> = [
-      () => this.fetchFromAlpaca(symbol),
-      () => this.fetchFromPolygon(symbol),
-      () => this.fetchFromAlphaVantage(symbol),
-      () => this.fetchFromYahooFinance(symbol),
-    ];
-
-    const requestPromise = (async () => {
-      for (const provider of providers) {
-        try {
-          const data = await provider();
-          if (data.quote && data.quote.price > 0) {
-            console.log(`✅ Fetched ${symbol} from ${data.source}`);
-            this.setCachedData(symbol, data);
-            return data;
-          }
-        } catch (error) {
-          console.warn(`Provider failed for ${symbol}, trying next...`);
-          continue;
-        }
-      }
-
-      throw new Error(`Failed to fetch market data for ${symbol} from all providers`);
-    })();
-
+    const requestPromise = this.fetchFreshData(symbol);
     this.requestQueue.set(symbol, requestPromise);
 
     try {
       const result = await requestPromise;
+      console.log(`✅ Fetched ${symbol} from ${result.source}`);
       return result;
     } finally {
       this.requestQueue.delete(symbol);
     }
   }
 
-  // Optimized batch fetch with higher concurrency and streaming
+  // Optimized batch fetch with instant loading and maximum concurrency
   async getBatchMarketData(
     symbols: string[], 
-    concurrency: number = 20, // Increased from 10 to 20
-    onProgress?: (symbol: string, data: MarketDataResponse) => void
+    _concurrency: number = 50, // Underscore prefix to indicate intentionally unused (for API compatibility)
+    onProgress?: (symbol: string, data: MarketDataResponse) => void,
+    instant: boolean = true // Enable instant loading by default
   ): Promise<Record<string, MarketDataResponse>> {
     const results: Record<string, MarketDataResponse> = {};
     
-    // Process in batches with higher concurrency
-    for (let i = 0; i < symbols.length; i += concurrency) {
-      const batch = symbols.slice(i, i + concurrency);
-      
-      const batchResults = await Promise.allSettled(
-        batch.map(async (symbol) => {
-          try {
-            const data = await this.getMarketData(symbol);
-            if (onProgress && data) {
-              onProgress(symbol, data);
-            }
-            return { symbol, data };
-          } catch (error) {
-            console.error(`Failed to fetch ${symbol}:`, error);
-            return { symbol, data: null };
+    // First pass: return all cached data instantly
+    if (instant) {
+      symbols.forEach(symbol => {
+        const cached = this.getCachedData(symbol, true);
+        if (cached) {
+          results[symbol] = cached;
+          if (onProgress) {
+            onProgress(symbol, cached);
           }
-        })
-      );
-
-      batchResults.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value.data) {
-          results[result.value.symbol] = result.value.data;
         }
       });
-
-      // No delay between batches for maximum speed
     }
-
+    
+    // Get symbols that need fresh data
+    const symbolsToFetch = symbols.filter(s => !results[s] || this.shouldRefresh(s));
+    
+    if (symbolsToFetch.length === 0) {
+      return results;
+    }
+    
+    // Fetch fresh data with maximum concurrency
+    const fetchPromises = symbolsToFetch.map(async (symbol) => {
+      try {
+        const data = await this.getMarketData(symbol, instant);
+        if (data) {
+          results[symbol] = data;
+          if (onProgress) {
+            onProgress(symbol, data);
+          }
+        }
+        return { symbol, data };
+      } catch (error) {
+        console.error(`Failed to fetch ${symbol}:`, error);
+        return { symbol, data: null };
+      }
+    });
+    
+    // Process all at once with maximum parallelism
+    await Promise.allSettled(fetchPromises);
+    
     return results;
+  }
+  
+  // Check if symbol data should be refreshed
+  private shouldRefresh(symbol: string): boolean {
+    const cached = this.cache.get(symbol);
+    if (!cached) return true;
+    
+    const age = Date.now() - cached.timestamp;
+    return age > this.CACHE_TTL;
+  }
+  
+  // Preload symbols for instant access
+  async preloadSymbols(symbols: string[]): Promise<void> {
+    console.log(`🚀 Preloading ${symbols.length} symbols...`);
+    await this.getBatchMarketData(symbols, 50, undefined, false);
+    console.log(`✅ Preloaded ${symbols.length} symbols`);
   }
 
   // Clear cache manually

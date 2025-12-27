@@ -360,9 +360,14 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
     console.log('📈 Fetching market data with quantitative analysis...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
-    const marketData = await marketDataService.getBatchMarketData(symbols, 10, (symbol) => {
-      if (onProgress) onProgress(symbol);
-    }); // Faster concurrency with streaming
+    const marketData = await marketDataService.getBatchMarketData(
+      symbols, 
+      50, // Maximum concurrency for instant loading
+      (symbol) => {
+        if (onProgress) onProgress(symbol);
+      },
+      true // Enable instant mode (stale-while-revalidate)
+    );
 
     // Collect all historical data for portfolio-level analysis
     const allHistoricalData: Record<string, HistoricalData[]> = {};

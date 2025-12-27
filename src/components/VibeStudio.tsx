@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage } from "../services/openrouter";
+import { marketDataService } from "../services/marketData";
 import { 
   Sparkles, 
   RotateCcw, 
@@ -52,6 +53,22 @@ export default function VibeStudio() {
   const [isChatting, setIsChatting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<string>('');
+
+  // Preload common symbols for instant access
+  useEffect(() => {
+    const commonSymbols = [
+      'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B',
+      'JPM', 'JNJ', 'V', 'PG', 'XOM', 'UNH', 'MA', 'HD',
+      'BAC', 'ABBV', 'PFE', 'COST', 'DIS', 'CSCO', 'ADBE', 'CRM',
+      'VZ', 'NFLX', 'INTC', 'CMCSA', 'PEP', 'T', 'AMD', 'NKE',
+      'QCOM', 'TXN', 'LOW', 'UNP', 'BMY', 'HON', 'ORCL', 'IBM'
+    ];
+    
+    // Preload in background for instant access
+    marketDataService.preloadSymbols(commonSymbols).catch(err => {
+      console.warn('Preload warning:', err);
+    });
+  }, []);
 
   const CHART_COLORS = ['#00e599', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
