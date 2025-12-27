@@ -536,6 +536,113 @@ export default function VibeStudio() {
                 </div>
               </div>
             </div>
+
+            {/* Monte Carlo Simulation Results */}
+            {generatedPortfolio.monteCarloResult && (
+              <div className="detail-card full-width">
+                <h3><Activity size={20} /> Monte Carlo Simulation (1-Year Forecast)</h3>
+                <div className="detail-content">
+                  <div className="monte-carlo-grid">
+                    <div className="monte-stat">
+                      <div className="monte-label">Expected Value</div>
+                      <div className="monte-value success">
+                        ${generatedPortfolio.monteCarloResult.expectedValue.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="monte-stat">
+                      <div className="monte-label">Probability of Loss</div>
+                      <div className="monte-value danger">
+                        {generatedPortfolio.monteCarloResult.probabilityOfLoss.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="monte-stat">
+                      <div className="monte-label">5th Percentile (Worst Case)</div>
+                      <div className="monte-value">
+                        ${generatedPortfolio.monteCarloResult.percentiles.p5.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="monte-stat">
+                      <div className="monte-label">50th Percentile (Median)</div>
+                      <div className="monte-value">
+                        ${generatedPortfolio.monteCarloResult.percentiles.p50.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="monte-stat">
+                      <div className="monte-label">95th Percentile (Best Case)</div>
+                      <div className="monte-value success">
+                        ${generatedPortfolio.monteCarloResult.percentiles.p95.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="monte-carlo-description">
+                    <p>Based on 1,000 simulated paths using historical volatility and expected returns. 
+                    Initial investment: $10,000. Results show potential outcomes after 1 year.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Backtest Results */}
+            {generatedPortfolio.backtestResult && (
+              <div className="detail-card full-width">
+                <h3><TrendingUp size={20} /> Historical Backtest Results</h3>
+                <div className="detail-content">
+                  <div className="backtest-grid">
+                    <div className="backtest-stat">
+                      <div className="stat-label">Total Return</div>
+                      <div className={`stat-value ${generatedPortfolio.backtestResult.totalReturn > 0 ? 'success' : 'danger'}`}>
+                        {generatedPortfolio.backtestResult.totalReturn.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Annualized Return</div>
+                      <div className={`stat-value ${generatedPortfolio.backtestResult.annualizedReturn > 0 ? 'success' : 'danger'}`}>
+                        {generatedPortfolio.backtestResult.annualizedReturn.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Sharpe Ratio</div>
+                      <div className={`stat-value ${generatedPortfolio.backtestResult.sharpeRatio > 1 ? 'success' : generatedPortfolio.backtestResult.sharpeRatio > 0 ? 'neutral' : 'danger'}`}>
+                        {generatedPortfolio.backtestResult.sharpeRatio.toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Max Drawdown</div>
+                      <div className={`stat-value ${generatedPortfolio.backtestResult.maxDrawdown < 20 ? 'success' : generatedPortfolio.backtestResult.maxDrawdown < 35 ? 'neutral' : 'danger'}`}>
+                        {generatedPortfolio.backtestResult.maxDrawdown.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Win Rate</div>
+                      <div className={`stat-value ${generatedPortfolio.backtestResult.winRate > 55 ? 'success' : 'neutral'}`}>
+                        {generatedPortfolio.backtestResult.winRate.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Best Year</div>
+                      <div className="stat-value success">
+                        {generatedPortfolio.backtestResult.bestYear.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Worst Year</div>
+                      <div className="stat-value danger">
+                        {generatedPortfolio.backtestResult.worstYear.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="backtest-stat">
+                      <div className="stat-label">Calmar Ratio</div>
+                      <div className={`stat-value ${generatedPortfolio.backtestResult.calmarRatio > 1 ? 'success' : 'neutral'}`}>
+                        {generatedPortfolio.backtestResult.calmarRatio.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="backtest-description">
+                    <p>Historical performance based on actual market data. Past performance does not guarantee future results.</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {chatMode && (

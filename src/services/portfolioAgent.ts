@@ -22,6 +22,29 @@ interface PortfolioAsset {
   };
 }
 
+interface MonteCarloResult {
+  percentiles: {
+    p5: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p95: number;
+  };
+  probabilityOfLoss: number;
+  expectedValue: number;
+}
+
+interface BacktestResult {
+  totalReturn: number;
+  annualizedReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  winRate: number;
+  bestYear: number;
+  worstYear: number;
+  calmarRatio: number;
+}
+
 interface GeneratedPortfolio {
   title: string;
   description: string;
@@ -35,6 +58,8 @@ interface GeneratedPortfolio {
   reasoning: string;
   diversificationScore?: number;
   sharpeRatioEstimate?: number;
+  monteCarloResult?: MonteCarloResult;
+  backtestResult?: BacktestResult;
 }
 
 interface TechnicalAnalysis {
@@ -267,18 +292,29 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
     return { trend, momentum, support, resistance, signals };
   }
 
-  private async enrichWithMarketData(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
+  private async enrichWithMarketData(portfolio: GeneratedPortfolio, onProgress?: (symbol: string) => void): Promise<GeneratedPortfolio> {
     console.log('📈 Fetching market data with quantitative analysis...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
-    const marketData = await marketDataService.getBatchMarketData(symbols, 3); // Controlled concurrency
+    const marketData = await marketDataService.getBatchMarketData(symbols, 10, (symbol) => {
+      if (onProgress) onProgress(symbol);
+    }); // Faster concurrency with streaming
+
+    // Collect all historical data for portfolio-level analysis
+    const allHistoricalData: Record<string, HistoricalData[]> = {};
+    const allReturns: Record<string, number[]> = {};
 
     const enrichedAssets = portfolio.assets.map(asset => {
       const data = marketData[asset.symbol];
       if (!data) return asset;
 
+      allHistoricalData[asset.symbol] = data.historical;
+
       // Deep quantitative analysis
       const quantReport = quantAnalyzer.analyze(asset.symbol, data.historical);
+      
+      // Store returns for portfolio analysis
+      allReturns[asset.symbol] = quantReport.returnsAnalysis.dailyReturns;
       
       // Technical signal
       const technical = quantReport.signals;
@@ -300,9 +336,139 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
       };
     });
 
+    // Portfolio-level Monte Carlo simulation
+    console.log('🎲 Running Monte Carlo simulation...');
+    const portfolioReturn = enrichedAssets.reduce((sum, asset) => {
+      const ret = asset.quantMetrics?.expectedReturn || 0;
+      return sum + (ret / 100) * (asset.allocation / 100);
+    }, 0);
+    
+    const portfolioVolatility = enrichedAssets.reduce((sum, asset) => {
+      const vol = asset.quantMetrics?.volatility || 0;
+      return sum + (vol / 100) * (asset.allocation / 100);
+    }, 0);
+
+    const initialInvestment = 10000;
+    const mcResult = quantAnalyzer.simulateMonteCarlo(
+      initialInvestment,
+      portfolioReturn,
+      portfolioVolatility,
+      252 // 1 year
+    );
+
+    const monteCarloResult: MonteCarloResult = {
+      percentiles: mcResult.percentiles,
+      probabilityOfLoss: mcResult.probabilityOfLoss,
+      expectedValue: mcResult.expectedValue
+    };
+
+    // Backtest using historical data
+    console.log('📊 Running backtest...');
+    const backtestResult = this.runBacktest(enrichedAssets, allHistoricalData);
+
     return {
       ...portfolio,
       assets: enrichedAssets,
+      monteCarloResult,
+      backtestResult
+    };
+  }
+
+  private runBacktest(assets: PortfolioAsset[], historicalData: Record<string, HistoricalData[]>): BacktestResult {
+    // Find common date range across all assets
+    const allDates = Object.values(historicalData).map(hist => hist.map(h => h.date));
+    if (allDates.length === 0) {
+      return {
+        totalReturn: 0,
+        annualizedReturn: 0,
+        sharpeRatio: 0,
+        maxDrawdown: 0,
+        winRate: 0,
+        bestYear: 0,
+        worstYear: 0,
+        calmarRatio: 0
+      };
+    }
+
+    // Get portfolio returns for each day
+    const portfolioReturns: number[] = [];
+    const portfolioValues: number[] = [10000]; // Start with $10,000
+
+    // Simplified backtest: calculate weighted returns
+    const minLength = Math.min(...Object.values(historicalData).map(h => h.length));
+    
+    for (let i = 1; i < minLength; i++) {
+      let dailyReturn = 0;
+      
+      assets.forEach(asset => {
+        const hist = historicalData[asset.symbol];
+        if (hist && hist.length > i) {
+          const prevClose = hist[i - 1].close;
+          const currClose = hist[i].close;
+          if (prevClose > 0) {
+            const assetReturn = (currClose - prevClose) / prevClose;
+            dailyReturn += assetReturn * (asset.allocation / 100);
+          }
+        }
+      });
+      
+      portfolioReturns.push(dailyReturn);
+      portfolioValues.push(portfolioValues[portfolioValues.length - 1] * (1 + dailyReturn));
+    }
+
+    // Calculate metrics
+    const totalReturn = (portfolioValues[portfolioValues.length - 1] - portfolioValues[0]) / portfolioValues[0];
+    const years = portfolioReturns.length / 252;
+    const annualizedReturn = years > 0 ? (Math.pow(1 + totalReturn, 1 / years) - 1) * 100 : 0;
+
+    // Sharpe ratio
+    const avgReturn = portfolioReturns.reduce((a, b) => a + b, 0) / portfolioReturns.length;
+    const stdDev = Math.sqrt(
+      portfolioReturns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / portfolioReturns.length
+    );
+    const sharpeRatio = stdDev > 0 ? (avgReturn * Math.sqrt(252) - 0.045) / (stdDev * Math.sqrt(252)) : 0;
+
+    // Max drawdown
+    let maxDrawdown = 0;
+    let peak = portfolioValues[0];
+    
+    for (const value of portfolioValues) {
+      if (value > peak) peak = value;
+      const drawdown = (peak - value) / peak;
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+    }
+
+    // Win rate
+    const positiveReturns = portfolioReturns.filter(r => r > 0).length;
+    const winRate = (positiveReturns / portfolioReturns.length) * 100;
+
+    // Yearly returns (simplified)
+    const yearlyReturns: number[] = [];
+    for (let year = 0; year < Math.floor(portfolioReturns.length / 252); year++) {
+      const yearStart = year * 252;
+      const yearEnd = Math.min((year + 1) * 252, portfolioReturns.length);
+      let yearReturn = 1;
+      for (let i = yearStart; i < yearEnd; i++) {
+        yearReturn *= (1 + portfolioReturns[i]);
+      }
+      yearlyReturns.push((yearReturn - 1) * 100);
+    }
+
+    const bestYear = yearlyReturns.length > 0 ? Math.max(...yearlyReturns) : 0;
+    const worstYear = yearlyReturns.length > 0 ? Math.min(...yearlyReturns) : 0;
+
+    // Calmar ratio
+    const calmarRatio = maxDrawdown > 0.001 ? annualizedReturn / (maxDrawdown * 100) : 0;
+
+    return {
+      totalReturn: totalReturn * 100,
+      annualizedReturn: isFinite(annualizedReturn) ? annualizedReturn : 0,
+      sharpeRatio: isFinite(sharpeRatio) ? sharpeRatio : 0,
+      maxDrawdown: maxDrawdown * 100,
+      winRate: isFinite(winRate) ? winRate : 0,
+      bestYear: isFinite(bestYear) ? bestYear : 0,
+      worstYear: isFinite(worstYear) ? worstYear : 0,
+      calmarRatio: isFinite(calmarRatio) ? calmarRatio : 0
     };
   }
 
@@ -511,4 +677,4 @@ Provide:
 }
 
 export const portfolioAgent = new PortfolioAgentService();
-export type { GeneratedPortfolio, PortfolioAsset, TechnicalAnalysis };
+export type { GeneratedPortfolio, PortfolioAsset, TechnicalAnalysis, MonteCarloResult, BacktestResult };

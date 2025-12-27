@@ -24,11 +24,28 @@ export interface StatisticalMetrics {
 
 export class Statistics {
   static calculateMetrics(data: number[]): StatisticalMetrics {
-    const sorted = [...data].sort((a, b) => a - b);
-    const n = data.length;
+    // Filter out invalid values
+    const validData = data.filter(x => !isNaN(x) && isFinite(x));
+    
+    if (validData.length === 0) {
+      return {
+        mean: 0,
+        median: 0,
+        stdDev: 0,
+        variance: 0,
+        skewness: 0,
+        kurtosis: 0,
+        min: 0,
+        max: 0,
+        range: 0
+      };
+    }
+    
+    const sorted = [...validData].sort((a, b) => a - b);
+    const n = validData.length;
     
     // Mean
-    const mean = data.reduce((a, b) => a + b, 0) / n;
+    const mean = validData.reduce((a, b) => a + b, 0) / n;
     
     // Median
     const median = n % 2 === 0
@@ -36,30 +53,37 @@ export class Statistics {
       : sorted[Math.floor(n / 2)];
     
     // Variance and Standard Deviation
-    const variance = data.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n;
+    const variance = validData.reduce((sum, x) => sum + Math.pow(x - mean, 2), 0) / n;
     const stdDev = Math.sqrt(variance);
     
     // Skewness (Fisher-Pearson coefficient)
-    const skewness = data.reduce((sum, x) => sum + Math.pow((x - mean) / stdDev, 3), 0) / n;
+    const skewness = stdDev > 0 
+      ? validData.reduce((sum, x) => sum + Math.pow((x - mean) / stdDev, 3), 0) / n
+      : 0;
     
     // Kurtosis (excess kurtosis)
-    const kurtosis = (data.reduce((sum, x) => sum + Math.pow((x - mean) / stdDev, 4), 0) / n) - 3;
+    const kurtosis = stdDev > 0
+      ? (validData.reduce((sum, x) => sum + Math.pow((x - mean) / stdDev, 4), 0) / n) - 3
+      : 0;
     
     return {
-      mean,
-      median,
-      stdDev,
-      variance,
-      skewness,
-      kurtosis,
-      min: sorted[0],
-      max: sorted[n - 1],
-      range: sorted[n - 1] - sorted[0]
+      mean: isFinite(mean) ? mean : 0,
+      median: isFinite(median) ? median : 0,
+      stdDev: isFinite(stdDev) ? stdDev : 0,
+      variance: isFinite(variance) ? variance : 0,
+      skewness: isFinite(skewness) ? skewness : 0,
+      kurtosis: isFinite(kurtosis) ? kurtosis : 0,
+      min: sorted[0] || 0,
+      max: sorted[n - 1] || 0,
+      range: (sorted[n - 1] - sorted[0]) || 0
     };
   }
 
   static correlation(x: number[], y: number[]): number {
     const n = Math.min(x.length, y.length);
+    
+    if (n === 0) return 0;
+    
     const xMean = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
     const yMean = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
     
@@ -75,7 +99,11 @@ export class Statistics {
       ySumSq += yDiff * yDiff;
     }
     
-    return numerator / Math.sqrt(xSumSq * ySumSq);
+    const denominator = Math.sqrt(xSumSq * ySumSq);
+    if (denominator === 0) return 0;
+    
+    const corr = numerator / denominator;
+    return isFinite(corr) ? Math.max(-1, Math.min(1, corr)) : 0;
   }
 
   static covariance(x: number[], y: number[]): number {
@@ -113,12 +141,57 @@ export class ReturnsCalculator {
   private static readonly RISK_FREE_RATE = 0.045; // 4.5% risk-free rate
 
   static calculateReturns(historicalData: HistoricalData[]): ReturnsAnalysis {
-    const prices = historicalData.map(d => d.close).reverse();
+    if (!historicalData || historicalData.length < 2) {
+      return {
+        dailyReturns: [],
+        cumulativeReturns: [],
+        annualizedReturn: 0,
+        annualizedVolatility: 0,
+        sharpeRatio: 0,
+        sortinoRatio: 0,
+        maxDrawdown: 0,
+        calmarRatio: 0,
+        informationRatio: 0
+      };
+    }
+    
+    const prices = historicalData.map(d => d.close).filter(p => !isNaN(p) && isFinite(p) && p > 0).reverse();
+    
+    if (prices.length < 2) {
+      return {
+        dailyReturns: [],
+        cumulativeReturns: [],
+        annualizedReturn: 0,
+        annualizedVolatility: 0,
+        sharpeRatio: 0,
+        sortinoRatio: 0,
+        maxDrawdown: 0,
+        calmarRatio: 0,
+        informationRatio: 0
+      };
+    }
     
     // Calculate daily returns
     const dailyReturns: number[] = [];
     for (let i = 1; i < prices.length; i++) {
-      dailyReturns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
+      const ret = (prices[i] - prices[i - 1]) / prices[i - 1];
+      if (isFinite(ret)) {
+        dailyReturns.push(ret);
+      }
+    }
+    
+    if (dailyReturns.length === 0) {
+      return {
+        dailyReturns: [],
+        cumulativeReturns: [],
+        annualizedReturn: 0,
+        annualizedVolatility: 0,
+        sharpeRatio: 0,
+        sortinoRatio: 0,
+        maxDrawdown: 0,
+        calmarRatio: 0,
+        informationRatio: 0
+      };
     }
     
     // Calculate cumulative returns
@@ -132,7 +205,7 @@ export class ReturnsCalculator {
     // Annualized return (geometric mean)
     const totalReturn = cumReturn - 1;
     const years = prices.length / this.TRADING_DAYS;
-    const annualizedReturn = Math.pow(1 + totalReturn, 1 / years) - 1;
+    const annualizedReturn = years > 0 ? Math.pow(1 + totalReturn, 1 / years) - 1 : 0;
     
     // Annualized volatility
     const returnStats = Statistics.calculateMetrics(dailyReturns);
@@ -140,14 +213,14 @@ export class ReturnsCalculator {
     
     // Sharpe Ratio
     const excessReturn = annualizedReturn - this.RISK_FREE_RATE;
-    const sharpeRatio = excessReturn / annualizedVolatility;
+    const sharpeRatio = annualizedVolatility > 0 ? excessReturn / annualizedVolatility : 0;
     
     // Sortino Ratio (downside deviation)
     const downsideReturns = dailyReturns.filter(r => r < 0);
     const downsideDeviation = downsideReturns.length > 0
       ? Math.sqrt(downsideReturns.reduce((sum, r) => sum + r * r, 0) / downsideReturns.length) * Math.sqrt(this.TRADING_DAYS)
       : annualizedVolatility;
-    const sortinoRatio = excessReturn / downsideDeviation;
+    const sortinoRatio = downsideDeviation > 0 ? excessReturn / downsideDeviation : 0;
     
     // Maximum Drawdown
     const maxDrawdown = this.calculateMaxDrawdown(prices);
@@ -158,18 +231,18 @@ export class ReturnsCalculator {
     // Information Ratio (assuming benchmark return of 10%)
     const benchmarkReturn = 0.10;
     const trackingError = returnStats.stdDev * Math.sqrt(this.TRADING_DAYS);
-    const informationRatio = (annualizedReturn - benchmarkReturn) / trackingError;
+    const informationRatio = trackingError > 0 ? (annualizedReturn - benchmarkReturn) / trackingError : 0;
     
     return {
       dailyReturns,
       cumulativeReturns,
-      annualizedReturn,
-      annualizedVolatility,
-      sharpeRatio,
-      sortinoRatio,
-      maxDrawdown,
-      calmarRatio,
-      informationRatio
+      annualizedReturn: isFinite(annualizedReturn) ? annualizedReturn : 0,
+      annualizedVolatility: isFinite(annualizedVolatility) ? annualizedVolatility : 0,
+      sharpeRatio: isFinite(sharpeRatio) ? sharpeRatio : 0,
+      sortinoRatio: isFinite(sortinoRatio) ? sortinoRatio : 0,
+      maxDrawdown: isFinite(maxDrawdown) ? maxDrawdown : 0,
+      calmarRatio: isFinite(calmarRatio) ? calmarRatio : 0,
+      informationRatio: isFinite(informationRatio) ? informationRatio : 0
     };
   }
 

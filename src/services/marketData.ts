@@ -309,11 +309,15 @@ class MarketDataService {
     }
   }
 
-  // Optimized batch fetch with concurrency control
-  async getBatchMarketData(symbols: string[], concurrency: number = 5): Promise<Record<string, MarketDataResponse>> {
+  // Optimized batch fetch with concurrency control and streaming
+  async getBatchMarketData(
+    symbols: string[], 
+    concurrency: number = 10,
+    onProgress?: (symbol: string, data: MarketDataResponse) => void
+  ): Promise<Record<string, MarketDataResponse>> {
     const results: Record<string, MarketDataResponse> = {};
     
-    // Process in batches to avoid overwhelming APIs
+    // Process in batches with higher concurrency
     for (let i = 0; i < symbols.length; i += concurrency) {
       const batch = symbols.slice(i, i + concurrency);
       
@@ -321,6 +325,9 @@ class MarketDataService {
         batch.map(async (symbol) => {
           try {
             const data = await this.getMarketData(symbol);
+            if (onProgress && data) {
+              onProgress(symbol, data);
+            }
             return { symbol, data };
           } catch (error) {
             console.error(`Failed to fetch ${symbol}:`, error);
@@ -335,9 +342,9 @@ class MarketDataService {
         }
       });
 
-      // Small delay between batches to respect rate limits
+      // Reduced delay between batches
       if (i + concurrency < symbols.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
