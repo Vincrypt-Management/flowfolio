@@ -467,6 +467,75 @@ export default function VibeStudio() {
                 <p>{generatedPortfolio.reasoning}</p>
               </div>
             </div>
+
+            {/* Quantitative Metrics Table */}
+            <div className="detail-card full-width">
+              <h3><Activity size={20} /> Quantitative Metrics</h3>
+              <div className="detail-content">
+                <div className="quant-metrics-table">
+                  <div className="quant-table-header">
+                    <div className="qth">Symbol</div>
+                    <div className="qth">Sharpe Ratio</div>
+                    <div className="qth">Ann. Return</div>
+                    <div className="qth">Volatility</div>
+                    <div className="qth">Max Drawdown</div>
+                    <div className="qth">RSI</div>
+                    <div className="qth">Signal</div>
+                    <div className="qth">Confidence</div>
+                  </div>
+                  {generatedPortfolio.assets.map((asset, i) => (
+                    asset.quantMetrics && (
+                      <div key={i} className="quant-table-row">
+                        <div className="qtd symbol-cell">{asset.symbol}</div>
+                        <div className="qtd">
+                          <span className={`metric-value ${asset.quantMetrics.sharpeRatio > 1 ? 'good' : asset.quantMetrics.sharpeRatio > 0 ? 'neutral' : 'bad'}`}>
+                            {asset.quantMetrics.sharpeRatio.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="qtd">
+                          <span className={`metric-value ${asset.quantMetrics.expectedReturn > 0 ? 'good' : 'bad'}`}>
+                            {asset.quantMetrics.expectedReturn.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="qtd">
+                          <span className={`metric-value ${asset.quantMetrics.volatility > 30 ? 'bad' : asset.quantMetrics.volatility > 20 ? 'neutral' : 'good'}`}>
+                            {asset.quantMetrics.volatility.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="qtd">
+                          <span className={`metric-value ${asset.quantMetrics.maxDrawdown < -30 ? 'bad' : asset.quantMetrics.maxDrawdown < -15 ? 'neutral' : 'good'}`}>
+                            {asset.quantMetrics.maxDrawdown.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="qtd">
+                          <span className={`metric-value ${asset.quantMetrics.rsi < 30 ? 'oversold' : asset.quantMetrics.rsi > 70 ? 'overbought' : 'neutral'}`}>
+                            {asset.quantMetrics.rsi.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="qtd">
+                          <span className={`recommendation-badge ${asset.quantMetrics.recommendation}`}>
+                            {asset.quantMetrics.recommendation.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="qtd">
+                          <div className="confidence-bar">
+                            <div 
+                              className="confidence-fill" 
+                              style={{ 
+                                width: `${asset.quantMetrics.confidence}%`,
+                                backgroundColor: asset.quantMetrics.confidence > 70 ? 'var(--success)' : 
+                                                asset.quantMetrics.confidence > 50 ? 'var(--accent)' : 'var(--text-muted)'
+                              }}
+                            ></div>
+                            <span className="confidence-text">{asset.quantMetrics.confidence}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           {chatMode && (

@@ -1,5 +1,6 @@
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import { marketDataService, HistoricalData } from './marketData';
+import { quantAnalyzer } from './quantAnalysis';
 
 interface PortfolioAsset {
   symbol: string;
@@ -10,6 +11,15 @@ interface PortfolioAsset {
   sector?: string;
   analystRating?: string;
   technicalSignal?: string;
+  quantMetrics?: {
+    sharpeRatio: number;
+    volatility: number;
+    expectedReturn: number;
+    maxDrawdown: number;
+    rsi: number;
+    recommendation: string;
+    confidence: number;
+  };
 }
 
 interface GeneratedPortfolio {
@@ -258,7 +268,7 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
   }
 
   private async enrichWithMarketData(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('📈 Fetching market data with technical analysis...');
+    console.log('📈 Fetching market data with quantitative analysis...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
     const marketData = await marketDataService.getBatchMarketData(symbols, 3); // Controlled concurrency
@@ -267,13 +277,26 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
       const data = marketData[asset.symbol];
       if (!data) return asset;
 
-      // Technical analysis
-      const technical = this.calculateTechnicalIndicators(data.historical);
+      // Deep quantitative analysis
+      const quantReport = quantAnalyzer.analyze(asset.symbol, data.historical);
+      
+      // Technical signal
+      const technical = quantReport.signals;
+      const technicalSignal = `${technical.trend} / ${technical.momentum} / ${technical.recommendation.toUpperCase()}`;
       
       return {
         ...asset,
         currentPrice: data.quote?.price,
-        technicalSignal: `${technical.trend} / ${technical.momentum}`,
+        technicalSignal,
+        quantMetrics: {
+          sharpeRatio: parseFloat(quantReport.returnsAnalysis.sharpeRatio.toFixed(2)),
+          volatility: parseFloat((quantReport.returnsAnalysis.annualizedVolatility * 100).toFixed(2)),
+          expectedReturn: parseFloat((quantReport.returnsAnalysis.annualizedReturn * 100).toFixed(2)),
+          maxDrawdown: parseFloat((quantReport.returnsAnalysis.maxDrawdown * 100).toFixed(2)),
+          rsi: parseFloat(quantReport.technicalIndicators.rsi14.toFixed(2)),
+          recommendation: technical.recommendation,
+          confidence: technical.confidence
+        }
       };
     });
 
