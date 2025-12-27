@@ -1,5 +1,17 @@
 // Integrated Market Data Service - Alpha Vantage, Polygon, Alpaca, and Yahoo Finance
 // With intelligent caching and optimized fetching
+import { invoke } from './tauri';
+
+export interface QuantMetrics {
+  symbol: string;
+  sharpe_ratio: number;
+  annualized_return: number;
+  volatility: number;
+  max_drawdown: number;
+  rsi: number;
+  signal: string;
+  confidence: number;
+}
 
 interface StockQuote {
   symbol: string;
@@ -534,6 +546,62 @@ class MarketDataService {
     } catch (error) {
       console.error('Failed to fetch Alpaca positions:', error);
       throw error;
+    }
+  }
+
+  // Backend methods using Rust API for quantitative analysis
+  async getQuantMetricsBatch(symbols: string[]): Promise<QuantMetrics[]> {
+    try {
+      return await invoke<QuantMetrics[]>('get_quant_metrics_batch', { symbols });
+    } catch (error) {
+      console.error('Failed to fetch quant metrics batch:', error);
+      // Return empty metrics for all symbols on error
+      return symbols.map(symbol => ({
+        symbol,
+        sharpe_ratio: 0,
+        annualized_return: 0,
+        volatility: 0,
+        max_drawdown: 0,
+        rsi: 50,
+        signal: 'INSUFFICIENT DATA',
+        confidence: 0
+      }));
+    }
+  }
+
+  async getCurrentPricesBatch(symbols: string[]): Promise<Record<string, number>> {
+    try {
+      return await invoke<Record<string, number>>('get_current_prices_batch', { symbols });
+    } catch (error) {
+      console.error('Failed to fetch current prices batch:', error);
+      return {};
+    }
+  }
+
+  async getQuantMetricsSingle(symbol: string): Promise<QuantMetrics> {
+    try {
+      return await invoke<QuantMetrics>('get_quant_metrics_single', { symbol });
+    } catch (error) {
+      console.error(`Failed to fetch quant metrics for ${symbol}:`, error);
+      return {
+        symbol,
+        sharpe_ratio: 0,
+        annualized_return: 0,
+        volatility: 0,
+        max_drawdown: 0,
+        rsi: 50,
+        signal: 'INSUFFICIENT DATA',
+        confidence: 0
+      };
+    }
+  }
+
+  async getCurrentPriceSingle(symbol: string): Promise<number> {
+    try {
+      return await invoke<number>('get_current_price_single', { symbol });
+    } catch (error) {
+      console.error(`Failed to fetch current price for ${symbol}:`, error);
+      return 0;
     }
   }
 }

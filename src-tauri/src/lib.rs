@@ -1,4 +1,5 @@
 mod modules;
+mod services;
 
 use modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
@@ -11,9 +12,18 @@ use modules::{
     },
     backtest::{BacktestEngine, BacktestConfig, BacktestResult},
     journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
+    quant_analysis::QuantMetrics,
 };
+use services::market_data_service::MarketDataService;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+// Global market data service instance
+lazy_static::lazy_static! {
+    static ref MARKET_DATA_SERVICE: Arc<Mutex<MarketDataService>> = Arc::new(Mutex::new(MarketDataService::new()));
+}
 
 #[derive(Serialize, Deserialize)]
 struct TemplateInfo {
@@ -472,6 +482,34 @@ fn create_demo_journal() -> Result<Vec<JournalEntry>, String> {
     Ok(entries)
 }
 
+/// Get quantitative metrics for multiple symbols
+#[tauri::command]
+async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
+    let service = MARKET_DATA_SERVICE.lock().await;
+    Ok(service.batch_get_quant_metrics(symbols).await)
+}
+
+/// Get current prices for multiple symbols
+#[tauri::command]
+async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String, f64>, String> {
+    let service = MARKET_DATA_SERVICE.lock().await;
+    Ok(service.batch_get_current_prices(symbols).await)
+}
+
+/// Get single symbol quantitative metrics
+#[tauri::command]
+async fn get_quant_metrics_single(symbol: String) -> Result<QuantMetrics, String> {
+    let service = MARKET_DATA_SERVICE.lock().await;
+    service.get_quant_metrics(&symbol).await
+}
+
+/// Get single symbol current price
+#[tauri::command]
+async fn get_current_price_single(symbol: String) -> Result<f64, String> {
+    let service = MARKET_DATA_SERVICE.lock().await;
+    service.get_current_price(&symbol).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -506,6 +544,10 @@ pub fn run() {
             calculate_journal_stats,
             export_journal_markdown,
             create_demo_journal,
+            get_quant_metrics_batch,
+            get_current_prices_batch,
+            get_quant_metrics_single,
+            get_current_price_single,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

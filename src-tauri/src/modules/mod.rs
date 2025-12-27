@@ -10,3 +10,4 @@ pub mod export;
 pub mod security;
 pub mod cache;
 pub mod worker_pool;
+pub mod quant_analysis;
