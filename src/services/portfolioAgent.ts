@@ -548,37 +548,96 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
     const total = portfolio.assets.length;
     let completed = 0;
 
-    const enrichedAssets = await Promise.all(
-      portfolio.assets.map(async (asset) => {
-        try {
-          const data = await marketDataService.getMarketData(asset.symbol);
-          const quantReport = quantAnalyzer.analyze(asset.symbol, data.historical);
-          
-          completed++;
-          onProgress(asset.symbol, (completed / total) * 100);
+    console.log(`📊 Fetching market data for ${total} symbols instantly...`);
+    
+    // Use batch fetch with instant loading for maximum speed
+    const symbols = portfolio.assets.map(a => a.symbol);
+    const marketDataMap: Record<string, any> = {};
+    
+    // First: Get all data with instant loading (returns cached immediately)
+    try {
+      const batchData = await Promise.race([
+        marketDataService.getBatchMarketData(
+          symbols, 
+          50, // Max concurrency
+          (symbol, data) => {
+            marketDataMap[symbol] = data;
+            completed++;
+            onProgress(symbol, (completed / total) * 100);
+          },
+          true // Instant mode - returns stale data immediately while refreshing
+        ),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Market data fetch timeout')), 15000) // 15s timeout
+        )
+      ]);
+      
+      // Merge any remaining data
+      Object.assign(marketDataMap, batchData);
+    } catch (error) {
+      console.warn('⚠️ Market data batch fetch timeout/error:', error);
+      // Continue with whatever data we have
+    }
 
-          return {
-            ...asset,
-            currentPrice: data.quote?.price,
-            technicalSignal: `${quantReport.signals.trend} / ${quantReport.signals.momentum}`,
-            quantMetrics: {
-              sharpeRatio: parseFloat(quantReport.returnsAnalysis.sharpeRatio.toFixed(2)),
-              volatility: parseFloat((quantReport.returnsAnalysis.annualizedVolatility * 100).toFixed(2)),
-              expectedReturn: parseFloat((quantReport.returnsAnalysis.annualizedReturn * 100).toFixed(2)),
-              maxDrawdown: parseFloat((quantReport.returnsAnalysis.maxDrawdown * 100).toFixed(2)),
-              rsi: parseFloat(quantReport.technicalIndicators.rsi14.toFixed(2)),
-              recommendation: quantReport.signals.recommendation,
-              confidence: quantReport.signals.confidence
-            }
-          };
-        } catch (error) {
-          completed++;
-          onProgress(asset.symbol, (completed / total) * 100);
-          return asset;
-        }
-      })
-    );
+    // Enrich assets with available data
+    const enrichedAssets = portfolio.assets.map((asset) => {
+      const data = marketDataMap[asset.symbol];
+      
+      if (!data || !data.historical || data.historical.length < 10) {
+        console.warn(`⚠️ Insufficient data for ${asset.symbol}, skipping enrichment`);
+        return {
+          ...asset,
+          currentPrice: data?.quote?.price || undefined,
+          technicalSignal: 'Insufficient data',
+          quantMetrics: {
+            sharpeRatio: 0,
+            volatility: 0,
+            expectedReturn: 0,
+            maxDrawdown: 0,
+            rsi: 50,
+            recommendation: 'Insufficient data' as any,
+            confidence: 0
+          }
+        };
+      }
 
+      try {
+        const quantReport = quantAnalyzer.analyze(asset.symbol, data.historical);
+        
+        return {
+          ...asset,
+          currentPrice: data.quote?.price,
+          technicalSignal: `${quantReport.signals.trend} / ${quantReport.signals.momentum}`,
+          quantMetrics: {
+            sharpeRatio: parseFloat(quantReport.returnsAnalysis.sharpeRatio.toFixed(2)),
+            volatility: parseFloat((quantReport.returnsAnalysis.annualizedVolatility * 100).toFixed(2)),
+            expectedReturn: parseFloat((quantReport.returnsAnalysis.annualizedReturn * 100).toFixed(2)),
+            maxDrawdown: parseFloat((quantReport.returnsAnalysis.maxDrawdown * 100).toFixed(2)),
+            rsi: parseFloat(quantReport.technicalIndicators.rsi14.toFixed(2)),
+            recommendation: quantReport.signals.recommendation,
+            confidence: quantReport.signals.confidence
+          }
+        };
+      } catch (error) {
+        console.error(`❌ Analysis failed for ${asset.symbol}:`, error);
+        return {
+          ...asset,
+          currentPrice: data.quote?.price,
+          technicalSignal: 'Analysis error',
+          quantMetrics: {
+            sharpeRatio: 0,
+            volatility: 0,
+            expectedReturn: 0,
+            maxDrawdown: 0,
+            rsi: 50,
+            recommendation: 'Error' as any,
+            confidence: 0
+          }
+        };
+      }
+    });
+
+    console.log(`✅ Enriched ${enrichedAssets.filter(a => a.currentPrice).length}/${total} assets with market data`);
     return { ...portfolio, assets: enrichedAssets };
   }
 

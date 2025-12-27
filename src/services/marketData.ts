@@ -37,16 +37,16 @@ class MarketDataService {
   private alpacaSecret = import.meta.env.VITE_ALPACA_API_SECRET;
   private alpacaPaper = import.meta.env.VITE_ALPACA_PAPER_TRADING === 'true';
 
-  // In-memory cache with 30-second TTL for real-time data (faster updates)
+  // In-memory cache with 60-second TTL for real-time data (instant loading with stale-while-revalidate)
   private cache: Map<string, CacheEntry> = new Map();
-  private readonly CACHE_TTL = 30 * 1000; // 30 seconds for aggressive caching
+  private readonly CACHE_TTL = 60 * 1000; // 60 seconds - longer TTL for instant loading
   
   // Rate limiting and deduplication
   private requestQueue: Map<string, Promise<MarketDataResponse>> = new Map();
   
   // Persistent cache in localStorage for longer-term data
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_market_cache';
-  private readonly PERSISTENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly PERSISTENT_CACHE_TTL = 15 * 60 * 1000; // 15 minutes - longer for offline resilience
   
   // Background prefetch system
   private prefetchQueue: Set<string> = new Set();
@@ -349,7 +349,7 @@ class MarketDataService {
     }
   }
 
-  // Fetch fresh data from providers
+  // Fetch fresh data from providers with timeout protection
   private async fetchFreshData(symbol: string): Promise<MarketDataResponse> {
     const providers: Array<() => Promise<MarketDataResponse>> = [
       () => this.fetchFromAlpaca(symbol),
@@ -360,7 +360,14 @@ class MarketDataService {
 
     for (const provider of providers) {
       try {
-        const data = await provider();
+        // Add 5-second timeout per provider
+        const data = await Promise.race([
+          provider(),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Provider timeout')), 5000)
+          )
+        ]);
+        
         if (data.quote && data.quote.price > 0) {
           this.setCachedData(symbol, data);
           return data;
