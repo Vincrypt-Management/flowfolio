@@ -37,12 +37,16 @@ class MarketDataService {
   private alpacaSecret = import.meta.env.VITE_ALPACA_API_SECRET;
   private alpacaPaper = import.meta.env.VITE_ALPACA_PAPER_TRADING === 'true';
 
-  // In-memory cache with 5-minute TTL for real-time data
+  // In-memory cache with 30-second TTL for real-time data (faster updates)
   private cache: Map<string, CacheEntry> = new Map();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL = 30 * 1000; // 30 seconds for aggressive caching
   
-  // Rate limiting
+  // Rate limiting and deduplication
   private requestQueue: Map<string, Promise<MarketDataResponse>> = new Map();
+  
+  // Persistent cache in localStorage for longer-term data
+  private readonly PERSISTENT_CACHE_KEY = 'flowfolio_market_cache';
+  private readonly PERSISTENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   private getAlpacaBaseUrl(): string {
     return this.alpacaPaper 
@@ -50,26 +54,55 @@ class MarketDataService {
       : 'https://api.alpaca.markets';
   }
 
-  // Check cache validity
+  // Check cache validity (in-memory first, then localStorage)
   private getCachedData(symbol: string): MarketDataResponse | null {
+    // Check in-memory cache first
     const cached = this.cache.get(symbol);
-    if (!cached) return null;
-    
-    const isExpired = Date.now() - cached.timestamp > this.CACHE_TTL;
-    if (isExpired) {
+    if (cached) {
+      const isExpired = Date.now() - cached.timestamp > this.CACHE_TTL;
+      if (!isExpired) {
+        console.log(`✅ Memory cache hit for ${symbol}`);
+        return cached.data;
+      }
       this.cache.delete(symbol);
-      return null;
     }
     
-    console.log(`✅ Cache hit for ${symbol}`);
-    return cached.data;
+    // Check localStorage for persistent cache
+    try {
+      const persistentCache = localStorage.getItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`);
+      if (persistentCache) {
+        const parsed: CacheEntry = JSON.parse(persistentCache);
+        const isExpired = Date.now() - parsed.timestamp > this.PERSISTENT_CACHE_TTL;
+        if (!isExpired) {
+          console.log(`✅ Persistent cache hit for ${symbol}`);
+          // Restore to memory cache
+          this.cache.set(symbol, parsed);
+          return parsed.data;
+        }
+        localStorage.removeItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`);
+      }
+    } catch (e) {
+      console.warn('Error reading persistent cache:', e);
+    }
+    
+    return null;
   }
 
   private setCachedData(symbol: string, data: MarketDataResponse): void {
-    this.cache.set(symbol, {
+    const entry: CacheEntry = {
       data,
       timestamp: Date.now()
-    });
+    };
+    
+    // Set in memory cache
+    this.cache.set(symbol, entry);
+    
+    // Set in persistent cache (localStorage)
+    try {
+      localStorage.setItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`, JSON.stringify(entry));
+    } catch (e) {
+      console.warn('Error writing to persistent cache:', e);
+    }
   }
 
   // Alpaca Data API
@@ -309,10 +342,10 @@ class MarketDataService {
     }
   }
 
-  // Optimized batch fetch with concurrency control and streaming
+  // Optimized batch fetch with higher concurrency and streaming
   async getBatchMarketData(
     symbols: string[], 
-    concurrency: number = 10,
+    concurrency: number = 20, // Increased from 10 to 20
     onProgress?: (symbol: string, data: MarketDataResponse) => void
   ): Promise<Record<string, MarketDataResponse>> {
     const results: Record<string, MarketDataResponse> = {};
@@ -342,10 +375,7 @@ class MarketDataService {
         }
       });
 
-      // Reduced delay between batches
-      if (i + concurrency < symbols.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      // No delay between batches for maximum speed
     }
 
     return results;
@@ -355,9 +385,27 @@ class MarketDataService {
   clearCache(symbol?: string): void {
     if (symbol) {
       this.cache.delete(symbol);
+      try {
+        localStorage.removeItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`);
+      } catch (e) {
+        console.warn('Error clearing persistent cache:', e);
+      }
       console.log(`🗑️ Cleared cache for ${symbol}`);
     } else {
       this.cache.clear();
+      try {
+        // Clear all persistent cache entries
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith(this.PERSISTENT_CACHE_KEY)) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+      } catch (e) {
+        console.warn('Error clearing persistent cache:', e);
+      }
       console.log(`🗑️ Cleared entire cache`);
     }
   }
