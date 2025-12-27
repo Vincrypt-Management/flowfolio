@@ -70,6 +70,14 @@ interface TechnicalAnalysis {
   signals: string[];
 }
 
+interface StreamUpdate {
+  type: 'progress' | 'data' | 'complete' | 'error';
+  step?: string;
+  message?: string;
+  data?: Partial<GeneratedPortfolio>;
+  error?: string;
+}
+
 class PortfolioAgentService {
   private vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
 
@@ -93,6 +101,62 @@ class PortfolioAgentService {
     console.log('✅ Optimized portfolio:', optimizedPortfolio);
 
     return optimizedPortfolio;
+  }
+
+  async *generatePortfolioStream(userPrompt: string): AsyncGenerator<StreamUpdate> {
+    try {
+      yield { type: 'progress', step: 'analyzing', message: 'Analyzing your investment requirements...' };
+
+      // Step 1: Deep intent analysis
+      const intentAnalysis = await this.analyzeUserIntent(userPrompt);
+      yield { type: 'progress', step: 'intent', message: 'Investment strategy identified', data: {} };
+
+      yield { type: 'progress', step: 'generating', message: 'Creating portfolio structure...' };
+
+      // Step 2: Generate portfolio structure
+      const portfolioStructure = await this.generatePortfolioStructure(userPrompt, intentAnalysis);
+      yield { 
+        type: 'data', 
+        step: 'structure', 
+        message: 'Portfolio structure created',
+        data: portfolioStructure 
+      };
+
+      yield { type: 'progress', step: 'fetching', message: 'Fetching real-time market data...' };
+
+      // Step 3: Enrich with market data (streaming)
+      const enrichedPortfolio = await this.enrichWithMarketDataStreaming(
+        portfolioStructure, 
+        (_symbol: string, _progress: number) => {
+          // This will be handled internally but we can yield progress
+        }
+      );
+      
+      yield { 
+        type: 'data', 
+        step: 'enriched', 
+        message: 'Market data integrated',
+        data: enrichedPortfolio 
+      };
+
+      yield { type: 'progress', step: 'analyzing', message: 'Running quantitative analysis...' };
+
+      // Step 4: Optimize portfolio
+      const optimizedPortfolio = await this.optimizePortfolio(enrichedPortfolio);
+      
+      yield { 
+        type: 'complete', 
+        step: 'complete', 
+        message: 'Portfolio optimization complete',
+        data: optimizedPortfolio 
+      };
+
+    } catch (error) {
+      yield { 
+        type: 'error', 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      };
+    }
   }
 
   private async analyzeUserIntent(prompt: string): Promise<any> {
@@ -470,6 +534,47 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
       worstYear: isFinite(worstYear) ? worstYear : 0,
       calmarRatio: isFinite(calmarRatio) ? calmarRatio : 0
     };
+  }
+
+  private async enrichWithMarketDataStreaming(
+    portfolio: GeneratedPortfolio,
+    onProgress: (symbol: string, progress: number) => void
+  ): Promise<GeneratedPortfolio> {
+    const total = portfolio.assets.length;
+    let completed = 0;
+
+    const enrichedAssets = await Promise.all(
+      portfolio.assets.map(async (asset) => {
+        try {
+          const data = await marketDataService.getMarketData(asset.symbol);
+          const quantReport = quantAnalyzer.analyze(asset.symbol, data.historical);
+          
+          completed++;
+          onProgress(asset.symbol, (completed / total) * 100);
+
+          return {
+            ...asset,
+            currentPrice: data.quote?.price,
+            technicalSignal: `${quantReport.signals.trend} / ${quantReport.signals.momentum}`,
+            quantMetrics: {
+              sharpeRatio: parseFloat(quantReport.returnsAnalysis.sharpeRatio.toFixed(2)),
+              volatility: parseFloat((quantReport.returnsAnalysis.annualizedVolatility * 100).toFixed(2)),
+              expectedReturn: parseFloat((quantReport.returnsAnalysis.annualizedReturn * 100).toFixed(2)),
+              maxDrawdown: parseFloat((quantReport.returnsAnalysis.maxDrawdown * 100).toFixed(2)),
+              rsi: parseFloat(quantReport.technicalIndicators.rsi14.toFixed(2)),
+              recommendation: quantReport.signals.recommendation,
+              confidence: quantReport.signals.confidence
+            }
+          };
+        } catch (error) {
+          completed++;
+          onProgress(asset.symbol, (completed / total) * 100);
+          return asset;
+        }
+      })
+    );
+
+    return { ...portfolio, assets: enrichedAssets };
   }
 
   private async optimizePortfolio(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {

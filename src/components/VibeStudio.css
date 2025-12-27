@@ -115,17 +115,50 @@
 
 .progress-header {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
+}
+
+.progress-header > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .progress-header h3 {
   margin: 0;
   font-size: 1.2rem;
   color: var(--text-main);
+}
+
+.streaming-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  color: var(--primary);
+  animation: fadeIn 0.3s ease-in;
+}
+
+.streaming-message svg.pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.95); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .progress-spinner {

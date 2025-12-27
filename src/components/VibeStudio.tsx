@@ -51,6 +51,7 @@ export default function VibeStudio() {
   const [chatInput, setChatInput] = useState("");
   const [isChatting, setIsChatting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
+  const [streamingMessage, setStreamingMessage] = useState<string>('');
 
   const CHART_COLORS = ['#00e599', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
@@ -80,60 +81,57 @@ export default function VibeStudio() {
     setGeneratedPortfolio(null);
     setChatMode(false);
     setChatHistory([]);
+    setStreamingMessage('');
 
     // Initialize progress steps
     const steps: ProgressStep[] = [
-      { id: 'analyze', label: 'Analyzing your investment goals', status: 'pending' },
-      { id: 'generate', label: 'Generating portfolio structure', status: 'pending' },
-      { id: 'fetch', label: 'Fetching real-time market data', status: 'pending' },
-      { id: 'optimize', label: 'Optimizing risk-adjusted returns', status: 'pending' },
+      { id: 'analyzing', label: 'Analyzing your investment goals', status: 'pending' },
+      { id: 'generating', label: 'Generating portfolio structure', status: 'pending' },
+      { id: 'fetching', label: 'Fetching real-time market data', status: 'pending' },
+      { id: 'analyzing', label: 'Running quantitative analysis', status: 'pending' },
+      { id: 'complete', label: 'Finalizing portfolio', status: 'pending' },
     ];
     setProgressSteps(steps);
 
     try {
-      console.log('🚀 Generating portfolio for:', prompt);
+      console.log('🚀 Streaming portfolio generation for:', prompt);
 
-      // Step 1: Analyze intent
-      updateProgress('analyze', 'active', 'Understanding risk tolerance and preferences...');
-      await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause for UX
+      // Use streaming API
+      const stream = portfolioAgent.generatePortfolioStream(prompt);
       
-      // Step 2: Generate structure
-      updateProgress('analyze', 'completed', 'Investment parameters extracted');
-      updateProgress('generate', 'active', 'Creating diversified allocation strategy...');
-      
-      // Step 3: Fetch market data
-      updateProgress('generate', 'completed', 'Portfolio structure created');
-      updateProgress('fetch', 'active', 'Retrieving live prices and technical indicators...');
-      
-      // Step 4: Optimize
-      updateProgress('fetch', 'completed', 'Market data synchronized');
-      updateProgress('optimize', 'active', 'Calculating Sharpe ratio and diversification score...');
-      
-      const portfolio = await portfolioAgent.generatePortfolio(prompt);
-      
-      updateProgress('optimize', 'completed', 'Portfolio optimized successfully');
-      console.log('✅ Generated portfolio:', portfolio);
-      
-      setGeneratedPortfolio(portfolio);
-      setError(null);
-      
-      // Keep progress visible for a moment
-      setTimeout(() => setProgressSteps([]), 2000);
-    } catch (error) {
-      console.error("Portfolio Generation Error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate portfolio";
-      setError(errorMessage);
-      
-      // Mark current active step as error
-      setProgressSteps(prev => 
-        prev.map(step => 
-          step.status === 'active' 
-            ? { ...step, status: 'error', message: errorMessage }
-            : step
-        )
-      );
+      for await (const update of stream) {
+        console.log('📡 Stream update:', update);
+        
+        if (update.type === 'progress' && update.step) {
+          setStreamingMessage(update.message || '');
+          updateProgress(update.step, 'active', update.message);
+        } else if (update.type === 'data' && update.data) {
+          if (update.step) {
+            updateProgress(update.step, 'completed', update.message);
+          }
+          // Merge streaming data into portfolio
+          setGeneratedPortfolio(prev => ({
+            ...prev,
+            ...update.data
+          } as GeneratedPortfolio));
+        } else if (update.type === 'complete' && update.data) {
+          // Mark all as complete
+          steps.forEach(step => updateProgress(step.id, 'completed'));
+          setGeneratedPortfolio(update.data as GeneratedPortfolio);
+          setStreamingMessage('');
+        } else if (update.type === 'error') {
+          throw new Error(update.error || 'Stream error');
+        }
+      }
+
+      console.log('✅ Portfolio generation completed');
+    } catch (err) {
+      console.error('❌ Portfolio generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate portfolio');
+      setProgressSteps(prev => prev.map(s => s.status === 'active' ? { ...s, status: 'error' } : s));
     } finally {
       setIsGenerating(false);
+      setStreamingMessage('');
     }
   };
 
@@ -200,8 +198,16 @@ export default function VibeStudio() {
     return (
       <div className="progress-indicator">
         <div className="progress-header">
-          <Loader2 className="progress-spinner" size={20} />
-          <h3>Building Your Portfolio...</h3>
+          <div>
+            <Loader2 className="progress-spinner" size={20} />
+            <h3>Building Your Portfolio...</h3>
+          </div>
+          {streamingMessage && (
+            <div className="streaming-message">
+              <Activity size={16} className="pulse" />
+              <span>{streamingMessage}</span>
+            </div>
+          )}
         </div>
         <div className="progress-steps">
           {progressSteps.map((step) => (
