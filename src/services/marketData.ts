@@ -361,36 +361,95 @@ class MarketDataService {
     }
   }
 
-  // Fetch fresh data from providers with timeout protection
+  // Rate limiter with exponential backoff
+  private rateLimiter: Map<string, { count: number; resetTime: number }> = new Map();
+  private readonly RATE_LIMIT_WINDOW = 60000; // 1 minute
+  private readonly MAX_REQUESTS_PER_MINUTE = 5;
+  
+  private async waitForRateLimit(provider: string): Promise<void> {
+    const limiter = this.rateLimiter.get(provider);
+    const now = Date.now();
+    
+    if (!limiter || now > limiter.resetTime) {
+      this.rateLimiter.set(provider, { count: 1, resetTime: now + this.RATE_LIMIT_WINDOW });
+      return;
+    }
+    
+    if (limiter.count >= this.MAX_REQUESTS_PER_MINUTE) {
+      const waitTime = limiter.resetTime - now;
+      console.log(`⏳ Rate limit reached for ${provider}, waiting ${waitTime}ms`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      this.rateLimiter.set(provider, { count: 1, resetTime: Date.now() + this.RATE_LIMIT_WINDOW });
+    } else {
+      limiter.count++;
+    }
+  }
+
+  // Fetch fresh data from providers with proper fallback chain
   private async fetchFreshData(symbol: string): Promise<MarketDataResponse> {
-    const providers: Array<() => Promise<MarketDataResponse>> = [
-      () => this.fetchFromAlpaca(symbol),
-      () => this.fetchFromPolygon(symbol),
-      () => this.fetchFromAlphaVantage(symbol),
-      () => this.fetchFromYahooFinance(symbol),
+    const providers: Array<{ name: string; fetcher: () => Promise<MarketDataResponse> }> = [
+      { name: 'alpaca', fetcher: () => this.fetchFromAlpaca(symbol) },
+      { name: 'polygon', fetcher: () => this.fetchFromPolygon(symbol) },
+      { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) },
+      { name: 'yahoo', fetcher: () => this.fetchFromYahooFinance(symbol) },
     ];
 
-    for (const provider of providers) {
+    let lastError: Error | null = null;
+
+    for (let i = 0; i < providers.length; i++) {
+      const provider = providers[i];
+      
       try {
-        // Add 5-second timeout per provider
+        // Wait for rate limit before making request
+        await this.waitForRateLimit(provider.name);
+        
+        console.log(`🔄 Trying ${provider.name} for ${symbol}...`);
+        
+        // Add timeout per provider with exponential backoff
+        const timeout = 5000 * Math.pow(2, i); // 5s, 10s, 20s, 40s
         const data = await Promise.race([
-          provider(),
+          provider.fetcher(),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Provider timeout')), 5000)
+            setTimeout(() => reject(new Error('Provider timeout')), timeout)
           )
         ]);
         
-        if (data.quote && data.quote.price > 0) {
+        // Validate data
+        if (data.quote && data.quote.price > 0 && data.historical.length > 0) {
+          console.log(`✅ Successfully fetched ${symbol} from ${provider.name}`);
           this.setCachedData(symbol, data);
           return data;
+        } else {
+          console.warn(`⚠️ Invalid data from ${provider.name} for ${symbol}`);
+          continue;
         }
-      } catch (error) {
-        console.warn(`Provider failed for ${symbol}, trying next...`);
-        continue;
+      } catch (error: any) {
+        lastError = error;
+        const errorMsg = error.message || String(error);
+        
+        // Check for rate limit error
+        if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
+          console.warn(`⚠️ Rate limited by ${provider.name} for ${symbol}, trying next provider...`);
+          
+          // If not the last provider, try the next one immediately
+          if (i < providers.length - 1) {
+            continue;
+          }
+        } else {
+          console.warn(`⚠️ ${provider.name} failed for ${symbol}: ${errorMsg}`);
+        }
+        
+        // If this is the last provider, wait before giving up
+        if (i === providers.length - 1) {
+          console.error(`❌ All providers failed for ${symbol}`);
+        } else {
+          // Small delay before trying next provider
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
     }
 
-    throw new Error(`Failed to fetch market data for ${symbol} from all providers`);
+    throw lastError || new Error(`Failed to fetch market data for ${symbol} from all providers`);
   }
 
   // Main method with instant loading (stale-while-revalidate)
@@ -418,10 +477,10 @@ class MarketDataService {
     }
   }
 
-  // Optimized batch fetch with instant loading and maximum concurrency
+  // Optimized batch fetch with intelligent rate limiting
   async getBatchMarketData(
     symbols: string[], 
-    _concurrency: number = 50, // Underscore prefix to indicate intentionally unused (for API compatibility)
+    concurrency: number = 3, // Reduced to avoid rate limits
     onProgress?: (symbol: string, data: MarketDataResponse) => void,
     instant: boolean = true // Enable instant loading by default
   ): Promise<Record<string, MarketDataResponse>> {
@@ -447,25 +506,38 @@ class MarketDataService {
       return results;
     }
     
-    // Fetch fresh data with maximum concurrency
-    const fetchPromises = symbolsToFetch.map(async (symbol) => {
-      try {
-        const data = await this.getMarketData(symbol, instant);
-        if (data) {
-          results[symbol] = data;
-          if (onProgress) {
-            onProgress(symbol, data);
-          }
-        }
-        return { symbol, data };
-      } catch (error) {
-        console.error(`Failed to fetch ${symbol}:`, error);
-        return { symbol, data: null };
-      }
-    });
+    console.log(`🔄 Fetching fresh data for ${symbolsToFetch.length} symbols with concurrency ${concurrency}...`);
     
-    // Process all at once with maximum parallelism
-    await Promise.allSettled(fetchPromises);
+    // Fetch with controlled concurrency to avoid rate limits
+    for (let i = 0; i < symbolsToFetch.length; i += concurrency) {
+      const batch = symbolsToFetch.slice(i, i + concurrency);
+      
+      const fetchPromises = batch.map(async (symbol) => {
+        try {
+          const data = await this.getMarketData(symbol, instant);
+          if (data) {
+            results[symbol] = data;
+            if (onProgress) {
+              onProgress(symbol, data);
+            }
+          }
+          return { symbol, data };
+        } catch (error) {
+          console.error(`Failed to fetch ${symbol}:`, error);
+          return { symbol, data: null };
+        }
+      });
+      
+      // Process batch and wait for completion
+      await Promise.allSettled(fetchPromises);
+      
+      // Small delay between batches to respect rate limits
+      if (i + concurrency < symbolsToFetch.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    console.log(`✅ Batch fetch complete: ${Object.keys(results).length}/${symbols.length} symbols`);
     
     return results;
   }
