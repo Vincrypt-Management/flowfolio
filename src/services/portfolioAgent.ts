@@ -267,36 +267,55 @@ Return ONLY valid JSON with comprehensive strategy and reasoning.`
   }
 
   private async enrichWithMarketDataFast(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('📈 Fast parallel data fetching from backend...');
+    console.log('📈 CRITICAL: Waiting for ALL market data before proceeding...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
+    console.log(`📊 Fetching complete data for ${symbols.length} symbols:`, symbols);
     
     try {
-      // Single parallel call to backend for all data
-      const [pricesMap, quantMetricsArray] = await Promise.all([
-        marketDataService.getCurrentPricesBatch(symbols),
-        marketDataService.getQuantMetricsBatch(symbols)
-      ]);
+      // WAIT for all data to complete
+      console.log('⏳ Fetching prices...');
+      const pricesMap = await marketDataService.getCurrentPricesBatch(symbols);
+      console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
+      
+      console.log('⏳ Fetching quantitative metrics...');
+      const quantMetricsArray = await marketDataService.getQuantMetricsBatch(symbols);
+      console.log(`✅ Metrics received: ${quantMetricsArray.length}/${symbols.length}`);
+      
+      // Verify data completeness
+      const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined).length;
+      const validMetrics = quantMetricsArray.filter(m => m.signal !== 'INSUFFICIENT DATA').length;
+      
+      console.log(`📊 Data quality: ${validPrices} valid prices, ${validMetrics} valid metrics`);
+      
+      if (validPrices === 0) {
+        throw new Error('CRITICAL: No price data received. Check API limits and connection.');
+      }
       
       const metricsMap = new Map(quantMetricsArray.map(m => [m.symbol, m]));
 
-      // Enrich assets with data
+      // Enrich assets with COMPLETE data
       const enrichedAssets = portfolio.assets.map((asset) => {
         const price = pricesMap[asset.symbol];
         const metrics = metricsMap.get(asset.symbol);
         
+        if (!price) {
+          console.warn(`⚠️ Missing price for ${asset.symbol}`);
+        }
+        
         if (!metrics || metrics.signal === 'INSUFFICIENT DATA') {
+          console.warn(`⚠️ Insufficient metrics for ${asset.symbol}`);
           return {
             ...asset,
             currentPrice: price,
-            technicalSignal: 'Insufficient data',
+            technicalSignal: 'Data pending',
             quantMetrics: {
               sharpeRatio: 0,
               volatility: 0,
               expectedReturn: 0,
               maxDrawdown: 0,
               rsi: 50,
-              recommendation: 'Insufficient data',
+              recommendation: 'Data pending',
               confidence: 0
             }
           };
@@ -318,11 +337,17 @@ Return ONLY valid JSON with comprehensive strategy and reasoning.`
         };
       });
 
-      console.log(`✅ Enriched ${enrichedAssets.filter(a => a.currentPrice).length}/${symbols.length} assets`);
+      const fullyEnriched = enrichedAssets.filter(a => a.currentPrice && a.quantMetrics?.recommendation !== 'Data pending').length;
+      console.log(`✅ COMPLETE: ${fullyEnriched}/${symbols.length} assets fully enriched with real data`);
+      
+      if (fullyEnriched < symbols.length * 0.5) {
+        console.warn(`⚠️ WARNING: Only ${fullyEnriched}/${symbols.length} assets have complete data`);
+      }
+      
       return { ...portfolio, assets: enrichedAssets };
     } catch (error) {
-      console.error('❌ Backend enrichment failed:', error);
-      return portfolio;
+      console.error('❌ CRITICAL: Market data enrichment failed:', error);
+      throw new Error(`Failed to fetch market data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

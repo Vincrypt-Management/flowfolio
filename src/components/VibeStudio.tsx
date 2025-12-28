@@ -104,8 +104,8 @@ export default function VibeStudio() {
     const steps: ProgressStep[] = [
       { id: 'analyzing', label: 'Analyzing your investment goals', status: 'pending' },
       { id: 'generating', label: 'Generating portfolio structure', status: 'pending' },
-      { id: 'fetching', label: 'Fetching real-time market data', status: 'pending' },
-      { id: 'analyzing', label: 'Running quantitative analysis', status: 'pending' },
+      { id: 'fetching', label: 'Fetching all market data (prices, metrics)', status: 'pending' },
+      { id: 'quantitative', label: 'Running quantitative analysis', status: 'pending' },
       { id: 'complete', label: 'Finalizing portfolio', status: 'pending' },
     ];
     setProgressSteps(steps);
