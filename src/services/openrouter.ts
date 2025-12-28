@@ -12,6 +12,7 @@ export interface OpenRouterRequest {
   max_tokens?: number;
   top_p?: number;
   stream?: boolean;
+  response_format?: { type: 'json_object' };
 }
 
 export interface OpenRouterResponse {
@@ -49,6 +50,7 @@ class OpenRouterService {
       temperature?: number;
       max_tokens?: number;
       top_p?: number;
+      response_format?: { type: 'json_object' };
     }
   ): Promise<string> {
     if (!this.apiKey) {
@@ -63,15 +65,22 @@ class OpenRouterService {
         options
       });
 
+      const requestBody: OpenRouterRequest = {
+        model: model || this.defaultModel,
+        messages,
+        max_tokens: options?.max_tokens || 8000,
+        temperature: options?.temperature || 0.7,
+        top_p: options?.top_p || 1,
+      };
+      
+      // Add response_format if specified (for models that support it)
+      if (options?.response_format) {
+        requestBody.response_format = options.response_format;
+      }
+
       const response = await axios.post(
         `${this.apiUrl}/chat/completions`,
-        {
-          model: model || this.defaultModel,
-          messages,
-          max_tokens: options?.max_tokens || 8000,
-          temperature: options?.temperature || 0.7,
-          top_p: options?.top_p || 1,
-        } as OpenRouterRequest,
+        requestBody,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,

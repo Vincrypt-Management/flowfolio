@@ -32,23 +32,10 @@ export function JournalTab() {
   const [filterType, setFilterType] = useState<string>("all");
 
   useEffect(() => {
-    loadDemoJournal();
-  }, []);
-
-  useEffect(() => {
     if (entries.length > 0) {
       calculateStats();
     }
   }, [entries]);
-
-  async function loadDemoJournal() {
-    try {
-      const demo = await invoke<JournalEntry[]>("create_demo_journal");
-      setEntries(demo);
-    } catch (error) {
-      console.error("Error loading demo journal:", error);
-    }
-  }
 
   async function calculateStats() {
     try {
@@ -153,9 +140,6 @@ export function JournalTab() {
         <h2>Investment Journal</h2>
         <p className="subtitle">Track decisions, learnings, and strategy evolution</p>
         <div className="header-actions">
-          <button className="btn-secondary" onClick={loadDemoJournal}>
-            Load Demo
-          </button>
           <button className="btn-secondary" onClick={exportToMarkdown}>
             Export to Markdown
           </button>

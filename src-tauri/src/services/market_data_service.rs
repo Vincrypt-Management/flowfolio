@@ -32,6 +32,7 @@ impl MarketDataService {
         }
 
         // Try Yahoo Finance with retries
+        let mut last_error = String::new();
         for attempt in 1..=3 {
             match self.fetch_from_yahoo(symbol).await {
                 Ok(data) => {
@@ -40,17 +41,20 @@ impl MarketDataService {
                     return Ok(data);
                 }
                 Err(e) => {
+                    last_error = e.clone();
                     eprintln!("Attempt {} failed for {}: {}", attempt, symbol, e);
                     if attempt < 3 {
-                        tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                        // Exponential backoff: 1s, 2s, 4s
+                        let delay_ms = 1000 * (1 << (attempt - 1));
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                     }
                 }
             }
         }
 
-        // After all retries failed, use demo data
-        eprintln!("All fetch attempts failed for {}, using demo data", symbol);
-        Ok(self.generate_demo_data(symbol))
+        // After all retries failed, return error
+        eprintln!("All fetch attempts failed for {}", symbol);
+        Err(format!("Failed to fetch data for {}: {}", symbol, last_error))
     }
 
     /// Fetch from Yahoo Finance API with robust error handling
@@ -168,43 +172,6 @@ impl MarketDataService {
         }
     }
 
-    /// Generate realistic demo data for testing
-    fn generate_demo_data(&self, symbol: &str) -> Vec<HistoricalPrice> {
-        let mut prices = Vec::new();
-        let base_price = match symbol {
-            "NVDA" => 190.0,
-            "MSFT" => 487.0,
-            "TSLA" => 475.0,
-            "AMZN" => 232.0,
-            "ICLN" => 20.0,
-            "VTI" => 280.0,
-            "VWO" => 42.0,
-            "ABT" => 118.0,
-            "ENPH" => 33.0,
-            "XLF" => 48.0,
-            "PBD" => 5.5,
-            _ => 100.0,
-        };
-
-        // Generate 252 trading days (1 year)
-        for i in 0..252 {
-            let date = chrono::Local::now()
-                .checked_sub_signed(chrono::Duration::days(252 - i))
-                .unwrap()
-                .format("%Y-%m-%d")
-                .to_string();
-
-            // Simulate realistic price movement
-            let trend = (i as f64 / 252.0) * 0.15; // 15% upward trend
-            let noise = (((i * 17 + 13) % 100) as f64 - 50.0) / 1000.0; // -5% to +5% noise
-            let close = base_price * (1.0 + trend + noise);
-
-            prices.push(HistoricalPrice { date, close });
-        }
-
-        prices
-    }
-
     /// Calculate quantitative metrics for a symbol
     pub async fn get_quant_metrics(&self, symbol: &str) -> Result<QuantMetrics, String> {
         let prices = self.fetch_historical_data(symbol).await?;
@@ -231,7 +198,7 @@ impl MarketDataService {
                     },
                 }
             })
-            .buffer_unordered(10) // Process 10 symbols concurrently
+            .buffer_unordered(2) // Reduced from 10 to 2 to avoid rate limits
             .collect()
             .await;
 
@@ -307,14 +274,15 @@ impl MarketDataService {
                         Err(e) => {
                             eprintln!("Price fetch attempt {} failed for {}: {}", attempt, symbol, e);
                             if attempt < 3 {
-                                tokio::time::sleep(std::time::Duration::from_millis(300 * attempt as u64)).await;
+                                // Exponential backoff: 1s, 2s
+                                tokio::time::sleep(std::time::Duration::from_millis(1000 * attempt as u64)).await;
                             }
                         }
                     }
                 }
                 None
             })
-            .buffer_unordered(5) // Reduce concurrency to avoid rate limits
+            .buffer_unordered(2) // Reduced from 5 to 2 to avoid rate limits
             .collect()
             .await;
 

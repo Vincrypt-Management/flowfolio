@@ -374,7 +374,7 @@ class MarketDataService {
   // Rate limiter with exponential backoff
   private rateLimiter: Map<string, { count: number; resetTime: number }> = new Map();
   private readonly RATE_LIMIT_WINDOW = 60000; // 1 minute
-  private readonly MAX_REQUESTS_PER_MINUTE = 5;
+  private readonly MAX_REQUESTS_PER_MINUTE = 2; // Reduced to avoid 429 errors
   
   private async waitForRateLimit(provider: string): Promise<void> {
     const limiter = this.rateLimiter.get(provider);
@@ -441,8 +441,9 @@ class MarketDataService {
         if (errorMsg.includes('429') || errorMsg.includes('Too Many Requests')) {
           console.warn(`⚠️ Rate limited by ${provider.name} for ${symbol}, trying next provider...`);
           
-          // If not the last provider, try the next one immediately
+          // Wait longer after rate limit error
           if (i < providers.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second wait
             continue;
           }
         } else {
@@ -453,8 +454,8 @@ class MarketDataService {
         if (i === providers.length - 1) {
           console.error(`❌ All providers failed for ${symbol}`);
         } else {
-          // Small delay before trying next provider
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Longer delay before trying next provider
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     }
@@ -490,7 +491,7 @@ class MarketDataService {
   // Optimized batch fetch with intelligent rate limiting and Yahoo Finance priority
   async getBatchMarketData(
     symbols: string[], 
-    concurrency: number = 10, // Higher concurrency for Yahoo Finance
+    concurrency: number = 3, // Reduced to avoid rate limits
     onProgress?: (symbol: string, data: MarketDataResponse) => void,
     instant: boolean = true // Enable instant loading by default
   ): Promise<Record<string, MarketDataResponse>> {
@@ -541,9 +542,9 @@ class MarketDataService {
       // Process batch and wait for completion
       await Promise.allSettled(fetchPromises);
       
-      // Minimal delay between batches (Yahoo Finance is very tolerant)
+      // Longer delay between batches to avoid rate limits
       if (i + concurrency < symbolsToFetch.length) {
-        await new Promise(resolve => setTimeout(resolve, 200)); // Just 200ms delay
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay between batches
       }
     }
     
@@ -564,7 +565,7 @@ class MarketDataService {
   // Preload symbols for instant access
   async preloadSymbols(symbols: string[]): Promise<void> {
     console.log(`🚀 Preloading ${symbols.length} symbols...`);
-    await this.getBatchMarketData(symbols, 50, undefined, false);
+    await this.getBatchMarketData(symbols, 3, undefined, false); // Reduced from 50 to 3
     console.log(`✅ Preloaded ${symbols.length} symbols`);
   }
 

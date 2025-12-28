@@ -149,72 +149,197 @@ class PortfolioAgentService {
         role: 'system',
         content: `You are a CFA charterholder and portfolio manager with 20+ years of experience.
 
-CRITICAL: Respond ONLY with valid JSON. No markdown, no explanations.
+CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Your ENTIRE response must be ONLY a JSON object
+2. Do NOT include ANY text before the opening {
+3. Do NOT include ANY text after the closing }
+4. Do NOT wrap in markdown code blocks (\`\`\`json)
+5. Do NOT add explanations or comments
+6. First character must be {
+7. Last character must be }
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Required JSON structure:
+EXACT JSON FORMAT REQUIRED:
 {
-  "title": "Portfolio Name",
-  "description": "1-2 sentence description",
-  "strategy": "Detailed strategy (200-300 words)",
-  "riskLevel": "Low|Medium|High",
-  "timeHorizon": "Specific timeframe",
-  "rebalanceFrequency": "Frequency",
+  "title": "Portfolio name here",
+  "description": "Brief 1-2 sentence description",
+  "strategy": "Detailed 200-300 word strategy explanation",
+  "riskLevel": "Low",
+  "timeHorizon": "5-10 years",
+  "rebalanceFrequency": "Quarterly",
   "assets": [
     {
-      "symbol": "TICKER",
-      "name": "Full Name",
-      "allocation": 12.5,
-      "rationale": "Detailed rationale",
-      "sector": "Sector"
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "allocation": 15.0,
+      "rationale": "Detailed investment rationale",
+      "sector": "Technology"
     }
   ],
-  "expectedReturn": "Range with assumptions",
-  "volatility": "Expected range",
-  "reasoning": "Comprehensive reasoning (300+ words)"
+  "expectedReturn": "8-12% annually",
+  "volatility": "12-18%",
+  "reasoning": "Comprehensive 300+ word reasoning"
 }
 
-Guidelines:
-- Use real, liquid US tickers (stocks, ETFs)
-- 8-15 assets for diversification
-- Allocations sum to exactly 100%
-- Current market context: Dec 2025, elevated rates, AI/tech growth, energy transition
-- Consider correlation for true diversification
-- Balance growth/value, cyclical/defensive, domestic/international`
+JSON FORMATTING RULES:
+- All field names in "double quotes"
+- String values in "double quotes"
+- Numbers without quotes (15.0 not "15.0")
+- allocation must be a number between 0 and 100
+- Use escape sequences for quotes in strings (\")
+- No trailing commas
+- riskLevel must be exactly: "Low", "Medium", or "High"
+
+PORTFOLIO REQUIREMENTS:
+- 8-15 different assets
+- Real, liquid US tickers only
+- Allocations must sum to approximately 100%
+- Diverse sectors and asset types
+- Current market: December 2025, elevated rates, AI boom, energy transition
+
+START YOUR RESPONSE WITH { AND END WITH } - NOTHING ELSE!`
       },
       {
         role: 'user',
-        content: `Create an institutional-quality portfolio for: ${userPrompt}
+        content: `Create a professional portfolio for: ${userPrompt}
 
-Return ONLY valid JSON with comprehensive strategy and reasoning.`
+Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure JSON starting with { and ending with }.`
       }
     ];
 
-    const response = await openRouterService.chat(messages, this.vibeModel, {
-      temperature: 0.7,
-      max_tokens: 4000
-    });
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Failed to parse portfolio structure');
-    }
-
-    const portfolio = JSON.parse(jsonMatch[0]);
+    let attempts = 0;
+    const maxAttempts = 3;
     
-    if (!portfolio.assets || !Array.isArray(portfolio.assets)) {
-      throw new Error('Invalid portfolio structure');
-    }
+    while (attempts < maxAttempts) {
+      attempts++;
+      
+      try {
+        console.log(`📝 Attempt ${attempts}/${maxAttempts} to generate portfolio...`);
+        
+        // Try with JSON mode first, fall back to regular mode if not supported
+        let response: string;
+        try {
+          response = await openRouterService.chat(messages, this.vibeModel, {
+            temperature: 0.7,
+            max_tokens: 4000,
+            response_format: { type: 'json_object' } // Enable JSON mode
+          });
+        } catch (error: any) {
+          // If JSON mode fails (not supported by model), retry without it
+          if (error.message?.includes('response_format') || error.message?.includes('json_object')) {
+            console.log('⚠️ Model does not support JSON mode, retrying without it...');
+            response = await openRouterService.chat(messages, this.vibeModel, {
+              temperature: 0.7,
+              max_tokens: 4000
+            });
+          } else {
+            throw error;
+          }
+        }
 
-    // Normalize allocations to 100%
-    const totalAllocation = portfolio.assets.reduce((sum: number, asset: any) => sum + asset.allocation, 0);
-    if (Math.abs(totalAllocation - 100) > 0.5) {
-      portfolio.assets = portfolio.assets.map((asset: any) => ({
-        ...asset,
-        allocation: (asset.allocation / totalAllocation) * 100
-      }));
-    }
+        console.log('📥 Raw response preview:', response.substring(0, 200));
 
-    return portfolio;
+        // Clean the response - remove markdown code blocks and extra text
+        let cleanedResponse = response.trim();
+        
+        // Remove markdown code blocks (all variations)
+        cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '');
+        cleanedResponse = cleanedResponse.replace(/```javascript\s*/gi, '');
+        cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
+        
+        // Remove any "Here is" or explanatory text before JSON
+        cleanedResponse = cleanedResponse.replace(/^[^{]*(Here\s+(is|are)|The\s+portfolio|Below\s+is)[^{]*/i, '');
+        
+        // Find the JSON object boundaries
+        const firstBrace = cleanedResponse.indexOf('{');
+        const lastBrace = cleanedResponse.lastIndexOf('}');
+        
+        if (firstBrace === -1 || lastBrace === -1) {
+          throw new Error('No JSON object found in response');
+        }
+        
+        let jsonStr = cleanedResponse.substring(firstBrace, lastBrace + 1);
+        
+        // Fix common JSON issues
+        // Replace single quotes with double quotes (if not inside strings)
+        // Fix unescaped quotes in strings
+        // Remove trailing commas before ] or }
+        jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+        
+        // Fix NaN or Infinity values
+        jsonStr = jsonStr.replace(/:\s*NaN/g, ': 0');
+        jsonStr = jsonStr.replace(/:\s*Infinity/g, ': 100');
+        jsonStr = jsonStr.replace(/:\s*-Infinity/g, ': 0');
+        
+        console.log('🧹 Cleaned JSON preview:', jsonStr.substring(0, 200));
+
+        // Parse JSON
+        const portfolio = JSON.parse(jsonStr);
+        
+        // Validate structure
+        if (!portfolio.title || typeof portfolio.title !== 'string') {
+          throw new Error('Missing or invalid title field');
+        }
+        
+        if (!portfolio.assets || !Array.isArray(portfolio.assets)) {
+          throw new Error('Missing or invalid assets array');
+        }
+        
+        if (portfolio.assets.length === 0) {
+          throw new Error('Assets array is empty');
+        }
+
+        // Validate each asset
+        for (const asset of portfolio.assets) {
+          if (!asset.symbol || typeof asset.symbol !== 'string') {
+            throw new Error(`Invalid asset symbol: ${JSON.stringify(asset)}`);
+          }
+          if (typeof asset.allocation !== 'number' || isNaN(asset.allocation)) {
+            throw new Error(`Invalid allocation for ${asset.symbol}: ${asset.allocation}`);
+          }
+          if (asset.allocation < 0 || asset.allocation > 100) {
+            throw new Error(`Allocation out of range for ${asset.symbol}: ${asset.allocation}`);
+          }
+        }
+
+        // Normalize allocations to 100%
+        const totalAllocation = portfolio.assets.reduce((sum: number, asset: any) => sum + (asset.allocation || 0), 0);
+        
+        if (totalAllocation === 0) {
+          throw new Error('Total allocation is zero');
+        }
+        
+        if (Math.abs(totalAllocation - 100) > 1) {
+          console.log(`⚠️ Normalizing allocations from ${totalAllocation}% to 100%`);
+          portfolio.assets = portfolio.assets.map((asset: any) => ({
+            ...asset,
+            allocation: parseFloat(((asset.allocation / totalAllocation) * 100).toFixed(2))
+          }));
+        }
+
+        console.log(`✅ Successfully parsed portfolio with ${portfolio.assets.length} assets`);
+        return portfolio;
+        
+      } catch (error) {
+        console.error(`❌ Attempt ${attempts} failed:`, error);
+        
+        if (attempts >= maxAttempts) {
+          throw new Error(
+            `Failed to generate valid portfolio after ${maxAttempts} attempts. ` +
+            `Last error: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+            `Please try again or rephrase your request.`
+          );
+        }
+        
+        // Wait before retry with exponential backoff
+        const delayMs = 1000 * attempts;
+        console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    throw new Error('Failed to generate portfolio');
   }
 
 

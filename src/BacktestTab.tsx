@@ -61,23 +61,23 @@ interface TradeRecord {
 }
 
 export function BacktestTab() {
-  const [config, setConfig] = useState<BacktestConfig | null>(null);
+  const [config, setConfig] = useState<BacktestConfig>({
+    start_date: "2020-01-01",
+    end_date: "2024-01-01",
+    initial_cash: 10000.0,
+    monthly_contribution: 1000.0,
+    rebalance_frequency: "quarterly",
+    rebalance_threshold: 5.0,
+    symbols: [],
+    allocation_method: "equal_weight",
+  });
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [selectedView, setSelectedView] = useState<"metrics" | "timeline" | "trades">("metrics");
 
-  async function loadDemoConfig() {
-    try {
-      const demoConfig = await invoke<BacktestConfig>("create_demo_backtest_config");
-      setConfig(demoConfig);
-    } catch (error) {
-      alert("Error loading demo config: " + error);
-    }
-  }
-
   async function runBacktest() {
-    if (!config) {
-      alert("Please load a configuration first");
+    if (!config || config.symbols.length === 0) {
+      alert("Please add symbols to backtest");
       return;
     }
 
@@ -93,7 +93,6 @@ export function BacktestTab() {
   }
 
   const updateConfig = (field: keyof BacktestConfig, value: any) => {
-    if (!config) return;
     setConfig({ ...config, [field]: value });
   };
 
@@ -101,16 +100,6 @@ export function BacktestTab() {
     <div className="backtest-tab">
       <h2>Backtest Lab</h2>
       <p className="subtitle">Simulate your strategy with historical data</p>
-
-      {!config && (
-        <div className="card">
-          <h3>Get Started</h3>
-          <p>Load a demo configuration to start backtesting your strategy.</p>
-          <button className="btn-primary" onClick={loadDemoConfig}>
-            Load Demo Configuration
-          </button>
-        </div>
-      )}
 
       {config && (
         <div className="card">

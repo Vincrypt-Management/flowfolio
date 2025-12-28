@@ -69,24 +69,19 @@ interface RebalanceAction {
 }
 
 export function PortfolioTab() {
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  // @ts-ignore - setPortfolio will be used for future functionality
+  const [portfolio, setPortfolio] = useState<Portfolio>({
+    name: "My Portfolio",
+    holdings: [],
+    cash: 0.0,
+    total_value: 0.0,
+    last_updated: new Date().toISOString(),
+  });
   const [allocationPlan, setAllocationPlan] = useState<AllocationPlan | null>(null);
   const [buyList, setBuyList] = useState<BuyList | null>(null);
   const [rebalanceReport, setRebalanceReport] = useState<RebalanceReport | null>(null);
   const [contribution, setContribution] = useState<string>("1000");
   const [isLoading, setIsLoading] = useState(false);
-
-  async function loadDemoPortfolio() {
-    setIsLoading(true);
-    try {
-      const demo = await invoke<Portfolio>("create_demo_portfolio");
-      setPortfolio(demo);
-    } catch (error) {
-      alert("Error loading demo portfolio: " + error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   async function generateBuyList() {
     if (!portfolio || !allocationPlan) {
@@ -167,16 +162,6 @@ export function PortfolioTab() {
   return (
     <div className="portfolio-tab">
       <h2>Portfolio Management</h2>
-
-      {!portfolio && (
-        <div className="card">
-          <h3>Get Started</h3>
-          <p>Create a demo portfolio to test the portfolio management features.</p>
-          <button className="btn-primary" onClick={loadDemoPortfolio} disabled={isLoading}>
-            {isLoading ? "Loading..." : "Create Demo Portfolio"}
-          </button>
-        </div>
-      )}
 
       {portfolio && (
         <>

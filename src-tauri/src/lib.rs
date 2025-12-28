@@ -80,61 +80,6 @@ fn get_provider_status() -> String {
     }).to_string()
 }
 
-/// Test Alpha Vantage connection (using demo key)
-#[tauri::command]
-async fn test_data_connection() -> Result<String, String> {
-    let client = AlphaVantageClient::new("demo".to_string());
-    
-    // Try to fetch IBM data with demo key
-    match client.get_time_series_daily("IBM", "compact").await {
-        Ok(data) => {
-            if data.is_empty() {
-                Ok("Connected, but no data returned. You may need a valid API key.".to_string())
-            } else {
-                Ok(format!("Connected successfully! Retrieved {} days of data for IBM.", data.len()))
-            }
-        }
-        Err(e) => Err(format!("Connection failed: {}", e))
-    }
-}
-
-/// Score a symbol with demo data
-#[tauri::command]
-fn score_demo_symbol(symbol: String) -> Result<SymbolScore, String> {
-    // Create demo financial metrics
-    let financial = FinancialMetrics {
-        roe: Some(0.18),
-        roic: Some(0.14),
-        pe_ratio: Some(16.5),
-        pb_ratio: Some(2.2),
-        ps_ratio: Some(1.8),
-        operating_margin: Some(0.22),
-        debt_to_equity: Some(0.6),
-        revenue_growth_yoy: Some(0.12),
-        earnings_growth_yoy: Some(0.15),
-        dividend_yield: Some(0.025),
-        ..Default::default()
-    };
-    
-    // Create demo momentum metrics
-    let momentum = MomentumMetrics {
-        return_1m: Some(0.03),
-        return_3m: Some(0.08),
-        return_6m: Some(0.15),
-        return_12m: Some(0.22),
-        volatility_30d: Some(0.018),
-        avg_volume_30d: Some(5_000_000.0),
-    };
-    
-    // Create scoring engine with default config
-    let engine = ScoringEngine::with_default_config();
-    
-    // Calculate score
-    let score = engine.calculate_score(&symbol, &financial, &momentum);
-    
-    Ok(score)
-}
-
 /// Get scoring configuration for a plan
 #[tauri::command]
 fn get_scoring_config(plan: VibePlanScript) -> Result<ScoringConfig, String> {
@@ -156,51 +101,12 @@ fn score_symbols_batch(
     symbols: Vec<String>,
     config: ScoringConfig,
 ) -> Result<Vec<SymbolScore>, String> {
-    let engine = ScoringEngine::new(config);
-    
-    // For demo, generate dummy data for each symbol
-    let scores: Vec<SymbolScore> = symbols
-        .into_iter()
-        .enumerate()
-        .map(|(i, symbol)| {
-            let financial = generate_demo_financials(i);
-            let momentum = generate_demo_momentum(i);
-            engine.calculate_score(&symbol, &financial, &momentum)
-        })
-        .collect();
-    
-    // Rank by total score
-    let ranked = engine.rank_symbols(scores);
-    
-    Ok(ranked)
+    // Note: This requires real financial and momentum data
+    // In production, integrate with a data provider
+    Err("Real financial data integration required".to_string())
 }
 
-// Helper functions for demo data
-fn generate_demo_financials(seed: usize) -> FinancialMetrics {
-    let offset = seed as f64 * 0.02;
-    FinancialMetrics {
-        roe: Some(0.15 + offset),
-        roic: Some(0.12 + offset),
-        pe_ratio: Some(18.0 - offset * 10.0),
-        pb_ratio: Some(2.0 + offset),
-        revenue_growth_yoy: Some(0.10 + offset),
-        operating_margin: Some(0.20 + offset * 0.5),
-        debt_to_equity: Some(0.8 - offset * 2.0),
-        ..Default::default()
-    }
-}
-
-fn generate_demo_momentum(seed: usize) -> MomentumMetrics {
-    let offset = seed as f64 * 0.01;
-    MomentumMetrics {
-        return_3m: Some(0.05 + offset),
-        return_6m: Some(0.10 + offset),
-        return_12m: Some(0.18 + offset),
-        ..Default::default()
-    }
-}
-
-/// Create equal-weight allocation plan
+// Create equal-weight allocation plan
 #[tauri::command]
 fn create_equal_weight_allocation(
     symbols: Vec<String>,
@@ -267,30 +173,6 @@ fn check_portfolio_rebalance(
     Ok(PortfolioManager::check_rebalance(&portfolio, threshold_pct))
 }
 
-/// Create demo portfolio for testing
-#[tauri::command]
-fn create_demo_portfolio() -> Result<Portfolio, String> {
-    use modules::portfolio::Holding;
-    
-    let mut portfolio = Portfolio::new("Demo Portfolio".to_string());
-    portfolio.cash = 5000.0;
-
-    // Add some demo holdings
-    let holdings = vec![
-        Holding::new("AAPL".to_string(), 10.0, 150.0, 180.0, 25.0),
-        Holding::new("MSFT".to_string(), 8.0, 300.0, 380.0, 25.0),
-        Holding::new("GOOGL".to_string(), 5.0, 140.0, 150.0, 20.0),
-        Holding::new("AMZN".to_string(), 3.0, 170.0, 180.0, 15.0),
-        Holding::new("META".to_string(), 6.0, 350.0, 500.0, 15.0),
-    ];
-
-    for holding in holdings {
-        portfolio.add_holding(holding);
-    }
-
-    Ok(portfolio)
-}
-
 /// Generate yearly review checklist
 #[tauri::command]
 fn generate_yearly_review(
@@ -304,27 +186,6 @@ fn generate_yearly_review(
 #[tauri::command]
 fn run_backtest_simulation(config: BacktestConfig) -> Result<BacktestResult, String> {
     Ok(BacktestEngine::run_backtest(config))
-}
-
-/// Create a demo backtest configuration
-#[tauri::command]
-fn create_demo_backtest_config() -> Result<BacktestConfig, String> {
-    Ok(BacktestConfig {
-        start_date: "2020-01-01".to_string(),
-        end_date: "2024-01-01".to_string(),
-        initial_cash: 10000.0,
-        monthly_contribution: 1000.0,
-        rebalance_frequency: "quarterly".to_string(),
-        rebalance_threshold: 5.0,
-        symbols: vec![
-            "AAPL".to_string(),
-            "MSFT".to_string(),
-            "GOOGL".to_string(),
-            "AMZN".to_string(),
-            "META".to_string(),
-        ],
-        allocation_method: "equal_weight".to_string(),
-    })
 }
 
 /// Create a journal entry
@@ -420,68 +281,6 @@ fn export_journal_markdown(
     Ok(Journal::export_to_markdown(&entries))
 }
 
-/// Create demo journal entries
-#[tauri::command]
-fn create_demo_journal() -> Result<Vec<JournalEntry>, String> {
-    let mut entries = Vec::new();
-
-    // Initial strategy creation
-    entries.push(Journal::create_entry(
-        "strategy_creation",
-        "Created Investment Strategy",
-        "Started with Quality Factor template. Focus on high ROE (>15%) and low debt companies.",
-        Some("v1.0".to_string()),
-        vec!["strategy".to_string(), "initial".to_string()],
-    ));
-
-    // Trade decision
-    entries.push(Journal::log_trade_decision(
-        "AAPL",
-        "BUY",
-        "Strong fundamentals: ROE 45%, consistent revenue growth, low debt-to-equity.",
-    ));
-
-    entries.push(Journal::log_trade_decision(
-        "MSFT",
-        "BUY",
-        "Excellent quality metrics: Operating margin 42%, ROIC 35%, diversified revenue.",
-    ));
-
-    // Rebalance
-    entries.push(Journal::log_rebalance(
-        "Quarterly drift check - AAPL exceeded 30% allocation",
-        "SELL AAPL: $2,500 (15 shares)\nBUY GOOGL: $1,800 (12 shares)",
-    ));
-
-    // Review
-    entries.push(Journal::log_review(
-        "Quarterly",
-        "Portfolio up 8.5% vs S&P 500 +6.2%. Quality factor outperforming.\nMax drawdown: -12% (within tolerance).",
-        vec![
-            "Consider adding value factor".to_string(),
-            "Review tech concentration".to_string(),
-        ],
-    ));
-
-    // Strategy adjustment
-    entries.push(Journal::log_strategy_change(
-        "Added value factor (P/E < 25) to complement quality screening.",
-        "v1.0",
-        "v1.1",
-    ));
-
-    // Reflection
-    entries.push(Journal::log_reflection(
-        "Learning: Patience Pays Off",
-        "MSFT dropped 15% after earnings but fundamentals remained strong. \
-        Resisted urge to sell. Stock recovered +22% over next 3 months. \
-        Reminder: Focus on long-term thesis, not short-term noise.",
-        vec!["lesson".to_string(), "psychology".to_string()],
-    ));
-
-    Ok(entries)
-}
-
 /// Get quantitative metrics for multiple symbols
 #[tauri::command]
 async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
@@ -522,18 +321,14 @@ pub fn run() {
             compile_plan,
             validate_plan,
             get_provider_status,
-            test_data_connection,
-            score_demo_symbol,
             get_scoring_config,
             score_symbols_batch,
             create_equal_weight_allocation,
             create_score_weighted_allocation,
             generate_monthly_buy_list,
             check_portfolio_rebalance,
-            create_demo_portfolio,
             generate_yearly_review,
             run_backtest_simulation,
-            create_demo_backtest_config,
             create_journal_entry,
             log_strategy_change,
             log_trade_decision,
@@ -543,7 +338,6 @@ pub fn run() {
             filter_journal_entries,
             calculate_journal_stats,
             export_journal_markdown,
-            create_demo_journal,
             get_quant_metrics_batch,
             get_current_prices_batch,
             get_quant_metrics_single,
