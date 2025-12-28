@@ -1,6 +1,8 @@
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import { marketDataService, HistoricalData } from './marketData';
 import { quantAnalyzer } from './quantAnalysis';
+import { toolExecutor } from './toolExecutor';
+import { ToolCall } from './tools';
 
 interface PortfolioAsset {
   symbol: string;
@@ -304,6 +306,43 @@ Return ONLY valid JSON. Be thorough in your strategy and reasoning sections.`
         ...asset,
         allocation: (asset.allocation / totalAllocation) * 100
       }));
+    }
+
+    // Now use tools to enrich the portfolio with real data
+    const symbols = portfolio.assets.map((a: any) => a.symbol);
+    const allocations = portfolio.assets.map((a: any) => a.allocation);
+    
+    console.log('📡 Using tool system to fetch real-time data for symbols:', symbols);
+    
+    // Execute tools to fetch data
+    const toolCalls: ToolCall[] = [
+      {
+        name: 'fetch_multiple_stocks',
+        arguments: { symbols }
+      },
+      {
+        name: 'analyze_portfolio_metrics',
+        arguments: { symbols, allocations }
+      }
+    ];
+    
+    const toolResults = await toolExecutor.executeMultipleTools(toolCalls);
+    console.log('🔧 Tool execution results:', toolResults);
+    
+    // Integrate tool results into portfolio
+    const stockDataResult = toolResults.find(r => r.tool === 'fetch_multiple_stocks');
+    if (stockDataResult && stockDataResult.result) {
+      const stocksData = stockDataResult.result.stocks;
+      portfolio.assets = portfolio.assets.map((asset: any) => {
+        const stockData = stocksData.find((s: any) => s.symbol === asset.symbol);
+        if (stockData && stockData.success) {
+          return {
+            ...asset,
+            currentPrice: stockData.price
+          };
+        }
+        return asset;
+      });
     }
 
     return portfolio;
