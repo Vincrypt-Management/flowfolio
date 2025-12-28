@@ -1,5 +1,7 @@
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import { marketDataService, HistoricalData } from './marketData';
+import { fundamentalDataService } from './fundamentalData';
+// FundamentalMetrics type is used in the PortfolioAsset interface
 
 interface PortfolioAsset {
   symbol: string;
@@ -18,6 +20,19 @@ interface PortfolioAsset {
     rsi: number;
     recommendation: string;
     confidence: number;
+  };
+  fundamentals?: {
+    peRatio: number | null;
+    forwardPE: number | null;
+    priceToBook: number | null;
+    profitMargin: number | null;
+    returnOnEquity: number | null;
+    revenueGrowthYoY: number | null;
+    debtToEquity: number | null;
+    dividendYield: number | null;
+    marketCap: number;
+    eps: number | null;
+    beta: number | null;
   };
 }
 
@@ -398,20 +413,25 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     console.log(`📊 Fetching complete data for ${symbols.length} symbols:`, symbols);
     
     try {
-      // WAIT for all data to complete
-      console.log('⏳ Fetching prices...');
-      const pricesMap = await marketDataService.getCurrentPricesBatch(symbols);
-      console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
+      // WAIT for all data to complete - fetch in parallel
+      console.log('⏳ Fetching prices, metrics, and fundamentals...');
       
-      console.log('⏳ Fetching quantitative metrics...');
-      const quantMetricsArray = await marketDataService.getQuantMetricsBatch(symbols);
+      const [pricesMap, quantMetricsArray, fundamentalsMap] = await Promise.all([
+        marketDataService.getCurrentPricesBatch(symbols),
+        marketDataService.getQuantMetricsBatch(symbols),
+        fundamentalDataService.getBatchFundamentals(symbols)
+      ]);
+      
+      console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
       console.log(`✅ Metrics received: ${quantMetricsArray.length}/${symbols.length}`);
+      console.log(`✅ Fundamentals received: ${Object.keys(fundamentalsMap).length}/${symbols.length}`);
       
       // Verify data completeness
       const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined).length;
       const validMetrics = quantMetricsArray.filter(m => m.signal !== 'INSUFFICIENT DATA').length;
+      const validFundamentals = Object.keys(fundamentalsMap).length;
       
-      console.log(`📊 Data quality: ${validPrices} valid prices, ${validMetrics} valid metrics`);
+      console.log(`📊 Data quality: ${validPrices} prices, ${validMetrics} metrics, ${validFundamentals} fundamentals`);
       
       if (validPrices === 0) {
         throw new Error('CRITICAL: No price data received. Check API limits and connection.');
@@ -423,9 +443,14 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       const enrichedAssets = portfolio.assets.map((asset) => {
         const price = pricesMap[asset.symbol];
         const metrics = metricsMap.get(asset.symbol);
+        const fundamentals = fundamentalsMap[asset.symbol];
         
         if (!price) {
           console.warn(`⚠️ Missing price for ${asset.symbol}`);
+        }
+        
+        if (!fundamentals) {
+          console.warn(`⚠️ Missing fundamentals for ${asset.symbol}`);
         }
         
         if (!metrics || metrics.signal === 'INSUFFICIENT DATA') {
@@ -442,7 +467,20 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
               rsi: 50,
               recommendation: 'Data pending',
               confidence: 0
-            }
+            },
+            fundamentals: fundamentals ? {
+              peRatio: fundamentals.peRatio,
+              forwardPE: fundamentals.forwardPE,
+              priceToBook: fundamentals.priceToBook,
+              profitMargin: fundamentals.profitMargin,
+              returnOnEquity: fundamentals.returnOnEquity,
+              revenueGrowthYoY: fundamentals.revenueGrowthYoY,
+              debtToEquity: fundamentals.debtToEquity,
+              dividendYield: fundamentals.dividendYield,
+              marketCap: fundamentals.marketCap,
+              eps: fundamentals.eps,
+              beta: fundamentals.beta
+            } : undefined
           };
         }
         
@@ -458,12 +496,29 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             rsi: metrics.rsi,
             recommendation: metrics.signal,
             confidence: metrics.confidence
-          }
+          },
+          fundamentals: fundamentals ? {
+            peRatio: fundamentals.peRatio,
+            forwardPE: fundamentals.forwardPE,
+            priceToBook: fundamentals.priceToBook,
+            profitMargin: fundamentals.profitMargin,
+            returnOnEquity: fundamentals.returnOnEquity,
+            revenueGrowthYoY: fundamentals.revenueGrowthYoY,
+            debtToEquity: fundamentals.debtToEquity,
+            dividendYield: fundamentals.dividendYield,
+            marketCap: fundamentals.marketCap,
+            eps: fundamentals.eps,
+            beta: fundamentals.beta
+          } : undefined
         };
       });
 
-      const fullyEnriched = enrichedAssets.filter(a => a.currentPrice && a.quantMetrics?.recommendation !== 'Data pending').length;
-      console.log(`✅ COMPLETE: ${fullyEnriched}/${symbols.length} assets fully enriched with real data`);
+      const fullyEnriched = enrichedAssets.filter(a => 
+        a.currentPrice && 
+        a.quantMetrics?.recommendation !== 'Data pending' &&
+        a.fundamentals
+      ).length;
+      console.log(`✅ COMPLETE: ${fullyEnriched}/${symbols.length} assets fully enriched with all data`);
       
       if (fullyEnriched < symbols.length * 0.5) {
         console.warn(`⚠️ WARNING: Only ${fullyEnriched}/${symbols.length} assets have complete data`);

@@ -560,6 +560,95 @@ export default function VibeStudio() {
               </div>
             </div>
 
+            {/* Fundamental Analysis Table */}
+            <div className="detail-card full-width">
+              <h3><BarChart3 size={20} /> Fundamental Analysis</h3>
+              <div className="detail-content">
+                <div className="fundamentals-table">
+                  <div className="fundamentals-header">
+                    <div className="fth">Symbol</div>
+                    <div className="fth">P/E Ratio</div>
+                    <div className="fth">P/B Ratio</div>
+                    <div className="fth">ROE</div>
+                    <div className="fth">Profit Margin</div>
+                    <div className="fth">Revenue Growth</div>
+                    <div className="fth">Debt/Equity</div>
+                    <div className="fth">Div. Yield</div>
+                    <div className="fth">Market Cap</div>
+                  </div>
+                  {generatedPortfolio.assets.map((asset, i) => (
+                    asset.fundamentals ? (
+                      <div key={i} className="fundamentals-row">
+                        <div className="ftd symbol-cell">{asset.symbol}</div>
+                        <div className="ftd">
+                          {asset.fundamentals.peRatio !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.peRatio < 15 ? 'good' : asset.fundamentals.peRatio < 25 ? 'neutral' : 'bad'}`}>
+                              {asset.fundamentals.peRatio.toFixed(2)}
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          {asset.fundamentals.priceToBook !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.priceToBook < 1 ? 'good' : asset.fundamentals.priceToBook < 3 ? 'neutral' : 'bad'}`}>
+                              {asset.fundamentals.priceToBook.toFixed(2)}
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          {asset.fundamentals.returnOnEquity !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.returnOnEquity > 0.15 ? 'good' : asset.fundamentals.returnOnEquity > 0.10 ? 'neutral' : 'bad'}`}>
+                              {(asset.fundamentals.returnOnEquity * 100).toFixed(1)}%
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          {asset.fundamentals.profitMargin !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.profitMargin > 0.15 ? 'good' : asset.fundamentals.profitMargin > 0.05 ? 'neutral' : 'bad'}`}>
+                              {(asset.fundamentals.profitMargin * 100).toFixed(1)}%
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          {asset.fundamentals.revenueGrowthYoY !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.revenueGrowthYoY > 0.10 ? 'good' : asset.fundamentals.revenueGrowthYoY > 0 ? 'neutral' : 'bad'}`}>
+                              {(asset.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          {asset.fundamentals.debtToEquity !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.debtToEquity < 0.5 ? 'good' : asset.fundamentals.debtToEquity < 1.5 ? 'neutral' : 'bad'}`}>
+                              {asset.fundamentals.debtToEquity.toFixed(2)}
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          {asset.fundamentals.dividendYield !== null ? (
+                            <span className={`metric-value ${asset.fundamentals.dividendYield > 0.03 ? 'good' : asset.fundamentals.dividendYield > 0 ? 'neutral' : 'neutral'}`}>
+                              {(asset.fundamentals.dividendYield * 100).toFixed(2)}%
+                            </span>
+                          ) : 'N/A'}
+                        </div>
+                        <div className="ftd">
+                          <span className="market-cap">
+                            {asset.fundamentals.marketCap > 1e12 ? `$${(asset.fundamentals.marketCap / 1e12).toFixed(2)}T` :
+                             asset.fundamentals.marketCap > 1e9 ? `$${(asset.fundamentals.marketCap / 1e9).toFixed(2)}B` :
+                             asset.fundamentals.marketCap > 1e6 ? `$${(asset.fundamentals.marketCap / 1e6).toFixed(2)}M` :
+                             'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={i} className="fundamentals-row">
+                        <div className="ftd symbol-cell">{asset.symbol}</div>
+                        <div className="ftd loading-colspan"><span className="loading-text">Loading fundamental data...</span></div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Monte Carlo Simulation Results */}
             {generatedPortfolio.monteCarloResult && (
               <div className="detail-card full-width">
