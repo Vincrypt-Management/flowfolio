@@ -49,16 +49,16 @@ class MarketDataService {
   private alpacaSecret = import.meta.env.VITE_ALPACA_API_SECRET;
   private alpacaPaper = import.meta.env.VITE_ALPACA_PAPER_TRADING === 'true';
 
-  // In-memory cache with 60-second TTL for real-time data (instant loading with stale-while-revalidate)
+  // In-memory cache with 5-minute TTL for real-time data (instant loading with stale-while-revalidate)
   private cache: Map<string, CacheEntry> = new Map();
-  private readonly CACHE_TTL = 60 * 1000; // 60 seconds - longer TTL for instant loading
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes - longer TTL to reduce API calls
   
   // Rate limiting and deduplication
   private requestQueue: Map<string, Promise<MarketDataResponse>> = new Map();
   
   // Persistent cache in localStorage for longer-term data
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_market_cache';
-  private readonly PERSISTENT_CACHE_TTL = 15 * 60 * 1000; // 15 minutes - longer for offline resilience
+  private readonly PERSISTENT_CACHE_TTL = 60 * 60 * 1000; // 1 hour - much longer for offline resilience
   
   // Background prefetch system
   private prefetchQueue: Set<string> = new Set();
@@ -317,13 +317,20 @@ class MarketDataService {
     }
   }
 
-  // Yahoo Finance API (Fallback)
+  // Yahoo Finance API (Fallback) - Using direct REST API with no authentication (no rate limits for basic quotes)
   async fetchFromYahooFinance(symbol: string): Promise<MarketDataResponse> {
     try {
+      // Use Yahoo Finance v8 API which has generous rate limits
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        }
+      });
       
-      if (!response.ok) throw new Error('Yahoo Finance API error');
+      if (!response.ok) {
+        throw new Error(`Yahoo Finance API error: ${response.status}`);
+      }
       
       const data = await response.json();
 
@@ -333,26 +340,29 @@ class MarketDataService {
 
       const result = data.chart.result[0];
       const meta = result.meta;
+      
       const quote: StockQuote = {
         symbol,
-        price: meta.regularMarketPrice,
-        change: meta.regularMarketPrice - meta.previousClose,
-        changePercent: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100,
+        price: meta.regularMarketPrice || 0,
+        change: (meta.regularMarketPrice || 0) - (meta.previousClose || 0),
+        changePercent: meta.previousClose ? (((meta.regularMarketPrice || 0) - meta.previousClose) / meta.previousClose) * 100 : 0,
         volume: meta.regularMarketVolume || 0,
-        timestamp: new Date(meta.regularMarketTime * 1000).toISOString(),
+        timestamp: meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString() : new Date().toISOString(),
       };
 
       const timestamps = result.timestamp || [];
-      const quotes = result.indicators.quote[0];
+      const quotes = result.indicators?.quote?.[0] || {};
       
-      const historical: HistoricalData[] = timestamps.map((t: number, i: number) => ({
-        date: new Date(t * 1000).toISOString().split('T')[0],
-        open: quotes.open[i],
-        high: quotes.high[i],
-        low: quotes.low[i],
-        close: quotes.close[i],
-        volume: quotes.volume[i],
-      })).filter((h: any) => h.close !== null && h.open !== null);
+      const historical: HistoricalData[] = timestamps
+        .map((t: number, i: number) => ({
+          date: new Date(t * 1000).toISOString().split('T')[0],
+          open: quotes.open?.[i] || 0,
+          high: quotes.high?.[i] || 0,
+          low: quotes.low?.[i] || 0,
+          close: quotes.close?.[i] || 0,
+          volume: quotes.volume?.[i] || 0,
+        }))
+        .filter((h: any) => h.close > 0 && h.open > 0);
 
       return { quote, historical, source: 'yahoo' };
     } catch (error) {
@@ -385,13 +395,13 @@ class MarketDataService {
     }
   }
 
-  // Fetch fresh data from providers with proper fallback chain
+  // Fetch fresh data from providers with proper fallback chain (Yahoo Finance first!)
   private async fetchFreshData(symbol: string): Promise<MarketDataResponse> {
     const providers: Array<{ name: string; fetcher: () => Promise<MarketDataResponse> }> = [
+      { name: 'yahoo', fetcher: () => this.fetchFromYahooFinance(symbol) }, // Yahoo first - no rate limits!
       { name: 'alpaca', fetcher: () => this.fetchFromAlpaca(symbol) },
       { name: 'polygon', fetcher: () => this.fetchFromPolygon(symbol) },
       { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) },
-      { name: 'yahoo', fetcher: () => this.fetchFromYahooFinance(symbol) },
     ];
 
     let lastError: Error | null = null;
@@ -477,10 +487,10 @@ class MarketDataService {
     }
   }
 
-  // Optimized batch fetch with intelligent rate limiting
+  // Optimized batch fetch with intelligent rate limiting and Yahoo Finance priority
   async getBatchMarketData(
     symbols: string[], 
-    concurrency: number = 3, // Reduced to avoid rate limits
+    concurrency: number = 10, // Higher concurrency for Yahoo Finance
     onProgress?: (symbol: string, data: MarketDataResponse) => void,
     instant: boolean = true // Enable instant loading by default
   ): Promise<Record<string, MarketDataResponse>> {
@@ -506,9 +516,9 @@ class MarketDataService {
       return results;
     }
     
-    console.log(`🔄 Fetching fresh data for ${symbolsToFetch.length} symbols with concurrency ${concurrency}...`);
+    console.log(`🔄 Fetching fresh data for ${symbolsToFetch.length} symbols (concurrency: ${concurrency})...`);
     
-    // Fetch with controlled concurrency to avoid rate limits
+    // Fetch with controlled concurrency - Yahoo Finance is very tolerant
     for (let i = 0; i < symbolsToFetch.length; i += concurrency) {
       const batch = symbolsToFetch.slice(i, i + concurrency);
       
@@ -531,9 +541,9 @@ class MarketDataService {
       // Process batch and wait for completion
       await Promise.allSettled(fetchPromises);
       
-      // Small delay between batches to respect rate limits
+      // Minimal delay between batches (Yahoo Finance is very tolerant)
       if (i + concurrency < symbolsToFetch.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 200)); // Just 200ms delay
       }
     }
     
