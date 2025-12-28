@@ -30,7 +30,7 @@ impl OptimizedDataClient {
         }
     }
 
-    /// Fetch with automatic caching
+    /// Fetch with automatic caching and robust error handling
     pub async fn fetch_cached(&self, url: String) -> Result<Value, String> {
         // Check cache first
         if let Some((data, timestamp)) = self.cache.get(&url) {
@@ -43,17 +43,40 @@ impl OptimizedDataClient {
             }
         }
 
-        // Fetch from API
-        let response = self.client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+        // Fetch from API with detailed error handling
+        let response = match self.client.get(&url).send().await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("Request failed for {}: {}", url, e);
+                return Err(format!("Request failed: {}", e));
+            }
+        };
 
-        let data: Value = response
-            .json()
-            .await
-            .map_err(|e| format!("JSON parse failed: {}", e))?;
+        // Check HTTP status
+        if !response.status().is_success() {
+            let status = response.status();
+            eprintln!("HTTP error for {}: {}", url, status);
+            return Err(format!("HTTP error: {}", status));
+        }
+
+        // Get text first for better error handling
+        let text = match response.text().await {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("Failed to read response for {}: {}", url, e);
+                return Err(format!("Read error: {}", e));
+            }
+        };
+
+        // Parse JSON with detailed error
+        let data: Value = match serde_json::from_str(&text) {
+            Ok(json) => json,
+            Err(e) => {
+                eprintln!("JSON parse failed for {}: {}", url, e);
+                eprintln!("Response (first 500 chars): {}", &text[..text.len().min(500)]);
+                return Err(format!("JSON parse failed: {}", e));
+            }
+        };
 
         // Update cache
         self.cache.insert(url, (data.clone(), SystemTime::now()));
