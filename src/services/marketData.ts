@@ -395,13 +395,13 @@ class MarketDataService {
     }
   }
 
-  // Fetch fresh data from providers with proper fallback chain (Yahoo Finance first!)
+  // Fetch fresh data from providers with proper fallback chain (Alpaca first - unlimited free!)
   private async fetchFreshData(symbol: string): Promise<MarketDataResponse> {
     const providers: Array<{ name: string; fetcher: () => Promise<MarketDataResponse> }> = [
-      { name: 'yahoo', fetcher: () => this.fetchFromYahooFinance(symbol) }, // Yahoo first - no rate limits!
-      { name: 'alpaca', fetcher: () => this.fetchFromAlpaca(symbol) },
+      { name: 'alpaca', fetcher: () => this.fetchFromAlpaca(symbol) }, // Alpaca first - unlimited free!
       { name: 'polygon', fetcher: () => this.fetchFromPolygon(symbol) },
       { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) },
+      { name: 'yahoo', fetcher: () => this.fetchFromYahooFinance(symbol) }, // Yahoo last - has rate limits
     ];
 
     let lastError: Error | null = null;
@@ -654,11 +654,146 @@ class MarketDataService {
 
   async getCurrentPricesBatch(symbols: string[]): Promise<Record<string, number>> {
     try {
-      return await invoke<Record<string, number>>('get_current_prices_batch', { symbols });
+      const result = await invoke<Record<string, number>>('get_current_prices_batch', { symbols });
+      
+      // If backend returned prices, use them
+      if (Object.keys(result).length > 0) {
+        return result;
+      }
+      
+      // Fallback to frontend Yahoo Finance fetching
+      console.warn('Backend returned no prices, falling back to frontend fetching...');
+      return await this.fetchPricesFrontend(symbols);
     } catch (error) {
-      console.error('Failed to fetch current prices batch:', error);
-      return {};
+      console.error('Failed to fetch current prices batch from backend:', error);
+      
+      // Fallback to frontend fetching
+      console.warn('Falling back to frontend Yahoo Finance fetching...');
+      return await this.fetchPricesFrontend(symbols);
     }
+  }
+
+  // Frontend fallback for fetching prices directly
+  private async fetchPricesFrontend(inputSymbols: string[]): Promise<Record<string, number>> {
+    const results: Record<string, number> = {};
+    let symbolsToFetch = [...inputSymbols];
+    
+    // Try Alpaca first (unlimited free), then Yahoo as fallback
+    // Alpaca can fetch multiple symbols in one request!
+    if (this.alpacaKey && this.alpacaSecret) {
+      try {
+        const alpacaPrices = await this.fetchPricesFromAlpaca(symbolsToFetch);
+        if (Object.keys(alpacaPrices).length > 0) {
+          // Cache all fetched prices
+          for (const [symbol, price] of Object.entries(alpacaPrices)) {
+            localStorage.setItem(`price_cache_${symbol}`, JSON.stringify({ price, timestamp: Date.now() }));
+            results[symbol] = price;
+          }
+          
+          // Check if we got all symbols
+          const missing = symbolsToFetch.filter(s => !results[s]);
+          if (missing.length === 0) {
+            console.log(`✅ Alpaca: Got all ${symbolsToFetch.length} prices`);
+            return results;
+          }
+          
+          console.log(`⚠️ Alpaca: Missing ${missing.length} symbols, will try Yahoo for remainder`);
+          symbolsToFetch = missing; // Only fetch missing from Yahoo
+        }
+      } catch (e) {
+        console.warn('Alpaca batch fetch failed:', e);
+      }
+    }
+
+    // Fallback: Fetch from Yahoo Finance in small batches
+    const batchSize = 3;
+    for (let i = 0; i < symbolsToFetch.length; i += batchSize) {
+      const batch = symbolsToFetch.slice(i, i + batchSize);
+      
+      await Promise.all(batch.map(async (symbol) => {
+        try {
+          // Check localStorage cache first
+          const cacheKey = `price_cache_${symbol}`;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const { price, timestamp } = JSON.parse(cached);
+            // Use cache if less than 1 hour old
+            if (Date.now() - timestamp < 60 * 60 * 1000) {
+              results[symbol] = price;
+              console.log(`✅ Frontend cache hit for ${symbol}: $${price}`);
+              return;
+            }
+          }
+
+          // Fetch from Yahoo Finance
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+            if (price) {
+              results[symbol] = price;
+              // Cache the price
+              localStorage.setItem(cacheKey, JSON.stringify({ price, timestamp: Date.now() }));
+              console.log(`✅ Yahoo: Fetched ${symbol}: $${price}`);
+            }
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch price for ${symbol}:`, e);
+        }
+      }));
+
+      // Wait between batches to avoid rate limits
+      if (i + batchSize < symbolsToFetch.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    return results;
+  }
+
+  // Fetch prices from Alpaca (can fetch multiple symbols at once!)
+  private async fetchPricesFromAlpaca(symbols: string[]): Promise<Record<string, number>> {
+    const results: Record<string, number> = {};
+    
+    if (!this.alpacaKey || !this.alpacaSecret) {
+      throw new Error('Alpaca API keys not configured');
+    }
+
+    // Alpaca allows fetching multiple symbols in one request
+    const symbolsParam = symbols.join(',');
+    const url = `https://data.alpaca.markets/v2/stocks/bars/latest?symbols=${symbolsParam}`;
+
+    console.log(`📊 Fetching ${symbols.length} prices from Alpaca...`);
+
+    const response = await fetch(url, {
+      headers: {
+        'APCA-API-KEY-ID': this.alpacaKey,
+        'APCA-API-SECRET-KEY': this.alpacaSecret,
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Alpaca API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const bars = data.bars || {};
+
+    for (const [symbol, bar] of Object.entries(bars)) {
+      const barData = bar as any;
+      if (barData.c) {
+        results[symbol] = barData.c; // Close price
+      }
+    }
+
+    console.log(`✅ Alpaca: Got ${Object.keys(results).length}/${symbols.length} prices`);
+    return results;
   }
 
   async getQuantMetricsSingle(symbol: string): Promise<QuantMetrics> {

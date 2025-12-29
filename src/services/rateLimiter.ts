@@ -6,9 +6,9 @@ class GlobalRateLimiter {
   private requestQueue: Array<() => void> = [];
   private isProcessing: boolean = false;
   
-  // Yahoo Finance informal limit: ~2000 requests/hour = ~33 requests/minute = ~1.8 seconds between requests
-  // Using 3 seconds to be safe
-  private readonly MIN_INTERVAL = 3000; // 3 seconds between requests
+  // Yahoo Finance informal limit: ~2000 requests/hour
+  // Using 5 seconds to be very safe and allow time for backend requests too
+  private readonly MIN_INTERVAL = 5000; // 5 seconds between requests
   
   async waitForSlot(): Promise<void> {
     return new Promise((resolve) => {
@@ -28,6 +28,7 @@ class GlobalRateLimiter {
       
       if (timeSinceLastRequest < this.MIN_INTERVAL) {
         const waitTime = this.MIN_INTERVAL - timeSinceLastRequest;
+        console.log(`⏳ Rate limit: waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
       

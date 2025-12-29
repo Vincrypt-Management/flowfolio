@@ -2,6 +2,7 @@ import { openRouterService, OpenRouterMessage } from './openrouter';
 import { marketDataService, HistoricalData } from './marketData';
 import { fundamentalDataService } from './fundamentalData';
 import { newsService } from './newsService';
+import type { MarketInsight } from './webSearch';
 // FundamentalMetrics type is used in the PortfolioAsset interface
 
 interface PortfolioAsset {
@@ -50,6 +51,7 @@ interface PortfolioAsset {
     upside: number | null; // percentage upside to target
   };
   compositeScore?: number; // 0-100 overall score
+  marketInsights?: MarketInsight[]; // Web search insights
 }
 
 interface MonteCarloResult {
@@ -423,48 +425,92 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private async enrichWithMarketDataFast(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('📈 CRITICAL: Waiting for ALL market data before proceeding...');
+    console.log('📈 Fetching market data...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
-    console.log(`📊 Fetching complete data for ${symbols.length} symbols:`, symbols);
+    console.log(`📊 Processing ${symbols.length} symbols:`, symbols);
     
     try {
-      // WAIT for all data to complete - fetch in parallel
-      console.log('⏳ Fetching prices, metrics, fundamentals, sentiment & analyst ratings...');
-      
-      // Fetch data SEQUENTIALLY to avoid overwhelming Yahoo Finance
-      // Backend (Rust) handles prices and quant metrics
-      console.log('⏳ Step 1/3: Fetching prices and quant metrics from backend...');
+      // STEP 1: Backend fetches prices and quant metrics (uses its own rate limiting)
+      // The backend will fetch historical data once and cache prices
+      console.log('⏳ Step 1/2: Fetching prices and quant metrics from backend...');
       const [pricesMap, quantMetricsArray] = await Promise.all([
         marketDataService.getCurrentPricesBatch(symbols),
         marketDataService.getQuantMetricsBatch(symbols),
       ]);
-      console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
-      console.log(`✅ Metrics received: ${quantMetricsArray.length}/${symbols.length}`);
+      console.log(`✅ Backend data: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} metrics`);
 
-      // Frontend fetches fundamentals (uses global rate limiter)
-      console.log('⏳ Step 2/3: Fetching fundamentals...');
-      const fundamentalsMap = await fundamentalDataService.getBatchFundamentals(symbols);
-      console.log(`✅ Fundamentals received: ${Object.keys(fundamentalsMap).length}/${symbols.length}`);
-
-      // Frontend fetches sentiment and analyst ratings (uses global rate limiter)
-      console.log('⏳ Step 3/3: Fetching sentiment and analyst ratings...');
-      const [sentimentMap, analystMap] = await Promise.all([
-        newsService.getBatchSentiment(symbols),
-        newsService.getBatchAnalystRatings(symbols)
+      // STEP 2: Frontend fetches additional data (fundamentals, sentiment, analyst)
+      // These use the global rate limiter and are fetched in background
+      console.log('⏳ Step 2/2: Fetching fundamentals, sentiment & analyst ratings...');
+      
+      // Fetch all in parallel - they share the global rate limiter so won't conflict
+      const [fundamentalsMap, sentimentMap, analystMap] = await Promise.all([
+        fundamentalDataService.getBatchFundamentals(symbols).catch(e => {
+          console.warn('Fundamentals fetch failed:', e);
+          return {} as Record<string, any>;
+        }),
+        newsService.getBatchSentiment(symbols).catch(e => {
+          console.warn('Sentiment fetch failed:', e);
+          return {} as Record<string, any>;
+        }),
+        newsService.getBatchAnalystRatings(symbols).catch(e => {
+          console.warn('Analyst ratings fetch failed:', e);
+          return {} as Record<string, any>;
+        })
       ]);
-      console.log(`✅ Sentiment received: ${Object.keys(sentimentMap).length}/${symbols.length}`);
-      console.log(`✅ Analyst ratings received: ${Object.keys(analystMap).length}/${symbols.length}`);
       
-      // Verify data completeness
-      const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined).length;
+      console.log(`✅ Additional data: ${Object.keys(fundamentalsMap).length} fundamentals, ${Object.keys(sentimentMap).length} sentiment, ${Object.keys(analystMap).length} analyst`);
+
+      // STEP 3: Skip market insights for now to avoid rate limits
+      // Market insights will be fetched on-demand in a future update
+      console.log('⏳ Step 3/3: Skipping market insights (rate limit protection)...');
+      const insightsMap: Record<string, MarketInsight[]> = {};
+      
+      // Disabled: Fetch insights for top 3 allocations only to save time
+      // This causes too many API calls and triggers rate limits
+      /*
+      const topSymbols = [...portfolio.assets]
+        .sort((a, b) => b.allocation - a.allocation)
+        .slice(0, 3)
+        .map(a => a.symbol);
+      
+      /*
+      for (const sym of topSymbols) {
+        try {
+          const insights = await webSearchService.generateMarketInsights(sym);
+          if (insights.length > 0) {
+            insightsMap[sym] = insights;
+          }
+        } catch (e) {
+          console.warn(`Market insights fetch failed for ${sym}:`, e);
+        }
+      }
+      */
+      console.log(`✅ Market insights: disabled for rate limit protection`);
+      
+      // Verify data completeness - but allow partial data
+      const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined && p > 0).length;
       const validMetrics = quantMetricsArray.filter(m => m.signal !== 'INSUFFICIENT DATA').length;
-      const validFundamentals = Object.keys(fundamentalsMap).length;
       
-      console.log(`📊 Data quality: ${validPrices} prices, ${validMetrics} metrics, ${validFundamentals} fundamentals`);
+      console.log(`📊 Data quality: ${validPrices}/${symbols.length} prices, ${validMetrics}/${symbols.length} metrics`);
       
-      if (validPrices === 0) {
-        throw new Error('CRITICAL: No price data received. Check API limits and connection.');
+      // Only fail if we have ZERO data - otherwise proceed with partial data
+      if (validPrices === 0 && Object.keys(fundamentalsMap).length === 0) {
+        // Try one more time with a longer delay
+        console.warn('⚠️ No data received, retrying with longer delay...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Re-fetch just prices from frontend
+        const retryPrices = await marketDataService.getCurrentPricesBatch(symbols);
+        const retryValidPrices = Object.values(retryPrices).filter(p => p > 0).length;
+        
+        if (retryValidPrices === 0) {
+          throw new Error('Unable to fetch market data. Please try again in a few minutes.');
+        }
+        
+        // Use retry prices
+        Object.assign(pricesMap, retryPrices);
       }
       
       const metricsMap = new Map(quantMetricsArray.map(m => [m.symbol, m]));
@@ -476,6 +522,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         const fundamentals = fundamentalsMap[asset.symbol];
         const sentiment = sentimentMap[asset.symbol];
         const analyst = analystMap[asset.symbol];
+        const insights = insightsMap[asset.symbol];
         
         if (!price) {
           console.warn(`⚠️ Missing price for ${asset.symbol}`);
@@ -511,7 +558,8 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             numberOfAnalysts: analyst.numberOfAnalysts,
             upside
           } : undefined,
-          compositeScore
+          compositeScore,
+          marketInsights: insights || undefined
         };
         
         if (!metrics || metrics.signal === 'INSUFFICIENT DATA') {

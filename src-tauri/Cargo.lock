@@ -1430,6 +1430,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "dotenvy",
  "futures",
  "governor",
  "lazy_static",

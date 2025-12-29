@@ -2,6 +2,7 @@
 // Fetches news articles and sentiment for stocks
 
 import { globalRateLimiter } from './rateLimiter';
+import { localCacheService } from './localCache';
 
 export interface NewsArticle {
   title: string;
@@ -88,12 +89,25 @@ class NewsService {
 
   // Fetch news and sentiment from Yahoo Finance
   async getSentiment(symbol: string): Promise<SentimentAnalysis> {
+    // 1. Check IndexedDB cache first (persistent)
+    try {
+      const indexedDBCached = await localCacheService.getSentiment(symbol);
+      if (indexedDBCached) {
+        console.log(`✅ IndexedDB sentiment cache hit for ${symbol}`);
+        return indexedDBCached as SentimentAnalysis;
+      }
+    } catch (e) {
+      console.warn('IndexedDB read error:', e);
+    }
+
+    // 2. Check in-memory/localStorage cache
     const cached = this.getCachedSentiment(symbol);
     if (cached) {
       console.log(`✅ Sentiment cache hit for ${symbol}`);
       return cached;
     }
 
+    // 3. Fetch from network
     // Use global rate limiter
     await globalRateLimiter.waitForSlot();
     console.log(`📰 Fetching news for ${symbol}...`);
@@ -155,7 +169,14 @@ class NewsService {
         lastUpdated: new Date().toISOString()
       };
 
+      // Cache in memory/localStorage
       this.setCachedSentiment(symbol, result);
+      
+      // Also cache in IndexedDB for persistence
+      localCacheService.setSentiment(symbol, result).catch(e => {
+        console.warn('Failed to cache sentiment in IndexedDB:', e);
+      });
+      
       console.log(`✅ Sentiment analysis complete for ${symbol}: ${overallSentiment}`);
       
       return result;
@@ -212,12 +233,25 @@ class NewsService {
 
   // Fetch analyst ratings from Yahoo Finance
   async getAnalystRatings(symbol: string): Promise<AnalystRating> {
+    // 1. Check IndexedDB cache first (persistent)
+    try {
+      const indexedDBCached = await localCacheService.getAnalyst(symbol);
+      if (indexedDBCached) {
+        console.log(`✅ IndexedDB analyst cache hit for ${symbol}`);
+        return indexedDBCached as AnalystRating;
+      }
+    } catch (e) {
+      console.warn('IndexedDB read error:', e);
+    }
+
+    // 2. Check in-memory cache
     const cached = this.analystCache.get(symbol);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       console.log(`✅ Analyst ratings cache hit for ${symbol}`);
       return cached.data;
     }
 
+    // 3. Fetch from network
     // Use global rate limiter
     await globalRateLimiter.waitForSlot();
     console.log(`📊 Fetching analyst ratings for ${symbol}...`);
@@ -279,8 +313,14 @@ class NewsService {
         lastUpdated: new Date().toISOString()
       };
 
+      // Cache in memory
       const entry: CacheEntry<AnalystRating> = { data: rating, timestamp: Date.now() };
       this.analystCache.set(symbol, entry);
+
+      // Also cache in IndexedDB for persistence
+      localCacheService.setAnalyst(symbol, rating).catch(e => {
+        console.warn('Failed to cache analyst in IndexedDB:', e);
+      });
 
       console.log(`✅ Analyst ratings complete for ${symbol}: ${consensusRating}`);
       return rating;

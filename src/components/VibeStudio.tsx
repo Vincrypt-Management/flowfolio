@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage } from "../services/openrouter";
-import { marketDataService } from "../services/marketData";
 import { 
   Sparkles, 
   RotateCcw, 
@@ -55,21 +54,8 @@ export default function VibeStudio() {
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<string>('');
 
-  // Preload common symbols for instant access
-  useEffect(() => {
-    const commonSymbols = [
-      'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B',
-      'JPM', 'JNJ', 'V', 'PG', 'XOM', 'UNH', 'MA', 'HD',
-      'BAC', 'ABBV', 'PFE', 'COST', 'DIS', 'CSCO', 'ADBE', 'CRM',
-      'VZ', 'NFLX', 'INTC', 'CMCSA', 'PEP', 'T', 'AMD', 'NKE',
-      'QCOM', 'TXN', 'LOW', 'UNP', 'BMY', 'HON', 'ORCL', 'IBM'
-    ];
-    
-    // Preload in background for instant access
-    marketDataService.preloadSymbols(commonSymbols).catch(err => {
-      console.warn('Preload warning:', err);
-    });
-  }, []);
+  // Disabled preloading to avoid rate limit issues
+  // Data is fetched on-demand when portfolio is generated
 
   const CHART_COLORS = ['#00e599', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
@@ -733,6 +719,38 @@ export default function VibeStudio() {
                 </div>
               </div>
             </div>
+
+            {/* Market Insights from Web Search */}
+            {generatedPortfolio.assets.some(a => a.marketInsights && a.marketInsights.length > 0) && (
+              <div className="detail-card full-width">
+                <h3><TrendingUp size={20} /> Market Insights (Web Research)</h3>
+                <div className="detail-content">
+                  <div className="insights-container">
+                    {generatedPortfolio.assets
+                      .filter(a => a.marketInsights && a.marketInsights.length > 0)
+                      .map((asset, i) => (
+                        <div key={i} className="asset-insights">
+                          <div className="insights-symbol">{asset.symbol}</div>
+                          <div className="insights-list">
+                            {asset.marketInsights?.map((insight, j) => (
+                              <div key={j} className="insight-item">
+                                <div className="insight-headline">{insight.headline}</div>
+                                <div className="insight-analysis">{insight.analysis}</div>
+                                <div className="insight-meta">
+                                  <span className="insight-source">{insight.source}</span>
+                                  <span className="insight-confidence">
+                                    Confidence: {insight.confidence}%
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Monte Carlo Simulation Results */}
             {generatedPortfolio.monteCarloResult && (

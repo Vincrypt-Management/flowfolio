@@ -1,6 +1,9 @@
 // Fundamental Analysis Service
 // Fetches company financials, earnings, and fundamental metrics
 
+import { globalRateLimiter } from './rateLimiter';
+import { localCacheService } from './localCache';
+
 export interface FundamentalMetrics {
   symbol: string;
   companyName: string;
@@ -72,8 +75,6 @@ interface CacheEntry<T> {
   data: T;
   timestamp: number;
 }
-
-import { globalRateLimiter } from './rateLimiter';
 
 class FundamentalDataService {
   private alphaVantageKey = import.meta.env.VITE_ALPHAVANTAGE_API_KEY;
@@ -280,11 +281,22 @@ class FundamentalDataService {
 
   // Main method with fallback chain
   async getFundamentals(symbol: string): Promise<FundamentalMetrics> {
-    // Check cache first
+    // 1. Check IndexedDB cache first (persistent across sessions)
+    try {
+      const indexedDBCached = await localCacheService.getFundamentals(symbol);
+      if (indexedDBCached) {
+        console.log(`✅ IndexedDB cache hit for ${symbol} fundamentals`);
+        return indexedDBCached as FundamentalMetrics;
+      }
+    } catch (e) {
+      console.warn('IndexedDB read error:', e);
+    }
+
+    // 2. Check in-memory/localStorage cache
     const cached = this.getCachedData(symbol);
     if (cached) return cached;
     
-    // Try providers in order
+    // 3. Fetch from network
     const providers = [
       { name: 'yahoo', fetcher: () => this.fetchFromYahoo(symbol) },
       { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) }
@@ -297,8 +309,14 @@ class FundamentalDataService {
         console.log(`🔄 Trying ${provider.name} for ${symbol} fundamentals...`);
         const data = await provider.fetcher();
         
-        // Cache successful result
+        // Cache successful result in memory/localStorage
         this.setCachedData(symbol, data);
+        
+        // Also cache in IndexedDB for persistence
+        localCacheService.setFundamentals(symbol, data).catch(e => {
+          console.warn('Failed to cache in IndexedDB:', e);
+        });
+        
         console.log(`✅ Successfully fetched ${symbol} fundamentals from ${provider.name}`);
         
         return data;

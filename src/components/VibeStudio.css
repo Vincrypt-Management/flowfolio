@@ -1037,6 +1037,73 @@
   padding: 2rem;
 }
 
+/* Market Insights Section */
+.insights-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.asset-insights {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.insights-symbol {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 80px;
+  padding-top: 0.25rem;
+}
+
+.insights-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.insight-item {
+  padding: 0.75rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+
+.insight-headline {
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.insight-analysis {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.insight-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+}
+
+.insight-source {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.insight-confidence {
+  color: var(--text-muted);
+}
+
 .recommendation-badge.buy {
   background: rgba(0, 229, 153, 0.15);
   color: var(--success);
