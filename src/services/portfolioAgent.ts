@@ -1,6 +1,7 @@
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import { marketDataService, HistoricalData } from './marketData';
 import { fundamentalDataService } from './fundamentalData';
+import { newsService } from './newsService';
 // FundamentalMetrics type is used in the PortfolioAsset interface
 
 interface PortfolioAsset {
@@ -34,6 +35,21 @@ interface PortfolioAsset {
     eps: number | null;
     beta: number | null;
   };
+  sentiment?: {
+    overallSentiment: 'bullish' | 'bearish' | 'neutral';
+    sentimentScore: number;
+    newsCount: number;
+    buzzScore: number;
+  };
+  analystData?: {
+    consensusRating: string;
+    targetPriceMean: number | null;
+    targetPriceHigh: number | null;
+    targetPriceLow: number | null;
+    numberOfAnalysts: number;
+    upside: number | null; // percentage upside to target
+  };
+  compositeScore?: number; // 0-100 overall score
 }
 
 interface MonteCarloResult {
@@ -414,17 +430,21 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     
     try {
       // WAIT for all data to complete - fetch in parallel
-      console.log('⏳ Fetching prices, metrics, and fundamentals...');
+      console.log('⏳ Fetching prices, metrics, fundamentals, sentiment & analyst ratings...');
       
-      const [pricesMap, quantMetricsArray, fundamentalsMap] = await Promise.all([
+      const [pricesMap, quantMetricsArray, fundamentalsMap, sentimentMap, analystMap] = await Promise.all([
         marketDataService.getCurrentPricesBatch(symbols),
         marketDataService.getQuantMetricsBatch(symbols),
-        fundamentalDataService.getBatchFundamentals(symbols)
+        fundamentalDataService.getBatchFundamentals(symbols),
+        newsService.getBatchSentiment(symbols),
+        newsService.getBatchAnalystRatings(symbols)
       ]);
       
       console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
       console.log(`✅ Metrics received: ${quantMetricsArray.length}/${symbols.length}`);
       console.log(`✅ Fundamentals received: ${Object.keys(fundamentalsMap).length}/${symbols.length}`);
+      console.log(`✅ Sentiment received: ${Object.keys(sentimentMap).length}/${symbols.length}`);
+      console.log(`✅ Analyst ratings received: ${Object.keys(analystMap).length}/${symbols.length}`);
       
       // Verify data completeness
       const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined).length;
@@ -444,6 +464,8 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         const price = pricesMap[asset.symbol];
         const metrics = metricsMap.get(asset.symbol);
         const fundamentals = fundamentalsMap[asset.symbol];
+        const sentiment = sentimentMap[asset.symbol];
+        const analyst = analystMap[asset.symbol];
         
         if (!price) {
           console.warn(`⚠️ Missing price for ${asset.symbol}`);
@@ -453,11 +475,39 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
           console.warn(`⚠️ Missing fundamentals for ${asset.symbol}`);
         }
         
+        // Calculate upside to target price
+        let upside: number | null = null;
+        if (price && analyst?.targetPriceMean) {
+          upside = ((analyst.targetPriceMean - price) / price) * 100;
+        }
+        
+        // Calculate composite score (0-100)
+        const compositeScore = this.calculateCompositeScore(metrics, fundamentals, sentiment, analyst, upside);
+        
+        const baseAsset = {
+          ...asset,
+          currentPrice: price,
+          sentiment: sentiment ? {
+            overallSentiment: sentiment.overallSentiment,
+            sentimentScore: sentiment.sentimentScore,
+            newsCount: sentiment.newsCount,
+            buzzScore: sentiment.buzzScore
+          } : undefined,
+          analystData: analyst ? {
+            consensusRating: analyst.consensusRating,
+            targetPriceMean: analyst.targetPriceMean,
+            targetPriceHigh: analyst.targetPriceHigh,
+            targetPriceLow: analyst.targetPriceLow,
+            numberOfAnalysts: analyst.numberOfAnalysts,
+            upside
+          } : undefined,
+          compositeScore
+        };
+        
         if (!metrics || metrics.signal === 'INSUFFICIENT DATA') {
           console.warn(`⚠️ Insufficient metrics for ${asset.symbol}`);
           return {
-            ...asset,
-            currentPrice: price,
+            ...baseAsset,
             technicalSignal: 'Data pending',
             quantMetrics: {
               sharpeRatio: 0,
@@ -485,8 +535,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         }
         
         return {
-          ...asset,
-          currentPrice: price,
+          ...baseAsset,
           technicalSignal: metrics.signal,
           quantMetrics: {
             sharpeRatio: metrics.sharpe_ratio,
@@ -529,6 +578,114 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       console.error('❌ CRITICAL: Market data enrichment failed:', error);
       throw new Error(`Failed to fetch market data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  // Calculate a composite score (0-100) based on all available data
+  private calculateCompositeScore(
+    metrics: any,
+    fundamentals: any,
+    sentiment: any,
+    analyst: any,
+    upside: number | null
+  ): number {
+    let score = 50; // Start at neutral
+    let factors = 0;
+
+    // Technical/Quant metrics (weight: 25%)
+    if (metrics && metrics.signal !== 'INSUFFICIENT DATA') {
+      factors++;
+      let techScore = 50;
+      
+      // Sharpe ratio contribution
+      if (metrics.sharpe_ratio > 1.5) techScore += 15;
+      else if (metrics.sharpe_ratio > 1) techScore += 10;
+      else if (metrics.sharpe_ratio > 0.5) techScore += 5;
+      else if (metrics.sharpe_ratio < 0) techScore -= 10;
+      
+      // RSI (favor middle ground, penalize extremes)
+      if (metrics.rsi >= 30 && metrics.rsi <= 70) techScore += 5;
+      else if (metrics.rsi < 30) techScore += 10; // Oversold = opportunity
+      else techScore -= 5; // Overbought
+      
+      // Signal
+      if (metrics.signal?.toLowerCase().includes('buy')) techScore += 10;
+      else if (metrics.signal?.toLowerCase().includes('sell')) techScore -= 10;
+      
+      score += (techScore - 50) * 0.25;
+    }
+
+    // Fundamental metrics (weight: 30%)
+    if (fundamentals) {
+      factors++;
+      let fundScore = 50;
+      
+      // ROE
+      if (fundamentals.returnOnEquity !== null) {
+        if (fundamentals.returnOnEquity > 0.20) fundScore += 10;
+        else if (fundamentals.returnOnEquity > 0.15) fundScore += 5;
+        else if (fundamentals.returnOnEquity < 0.05) fundScore -= 10;
+      }
+      
+      // Revenue growth
+      if (fundamentals.revenueGrowthYoY !== null) {
+        if (fundamentals.revenueGrowthYoY > 0.15) fundScore += 10;
+        else if (fundamentals.revenueGrowthYoY > 0.05) fundScore += 5;
+        else if (fundamentals.revenueGrowthYoY < 0) fundScore -= 10;
+      }
+      
+      // Debt/Equity
+      if (fundamentals.debtToEquity !== null) {
+        if (fundamentals.debtToEquity < 0.5) fundScore += 5;
+        else if (fundamentals.debtToEquity > 2) fundScore -= 10;
+      }
+      
+      // Profit margin
+      if (fundamentals.profitMargin !== null) {
+        if (fundamentals.profitMargin > 0.15) fundScore += 5;
+        else if (fundamentals.profitMargin < 0) fundScore -= 10;
+      }
+      
+      score += (fundScore - 50) * 0.30;
+    }
+
+    // Sentiment (weight: 20%)
+    if (sentiment) {
+      factors++;
+      let sentScore = 50;
+      
+      if (sentiment.overallSentiment === 'bullish') sentScore += 15;
+      else if (sentiment.overallSentiment === 'bearish') sentScore -= 15;
+      
+      // News buzz bonus (being talked about is generally good)
+      if (sentiment.buzzScore > 50) sentScore += 5;
+      
+      score += (sentScore - 50) * 0.20;
+    }
+
+    // Analyst ratings (weight: 25%)
+    if (analyst && analyst.numberOfAnalysts > 0) {
+      factors++;
+      let analystScore = 50;
+      
+      // Consensus rating
+      if (analyst.consensusRating === 'Strong Buy') analystScore += 20;
+      else if (analyst.consensusRating === 'Buy') analystScore += 10;
+      else if (analyst.consensusRating === 'Sell') analystScore -= 10;
+      else if (analyst.consensusRating === 'Strong Sell') analystScore -= 20;
+      
+      // Upside to target
+      if (upside !== null) {
+        if (upside > 30) analystScore += 15;
+        else if (upside > 15) analystScore += 10;
+        else if (upside > 5) analystScore += 5;
+        else if (upside < -10) analystScore -= 10;
+      }
+      
+      score += (analystScore - 50) * 0.25;
+    }
+
+    // Normalize to 0-100 range
+    return Math.max(0, Math.min(100, Math.round(score)));
   }
 
   private optimizePortfolioFast(portfolio: GeneratedPortfolio): GeneratedPortfolio {

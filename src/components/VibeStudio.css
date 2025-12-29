@@ -644,8 +644,8 @@
 
 .table-header {
   display: grid;
-  grid-template-columns: 80px 1.5fr 1fr 120px 100px 100px 2fr;
-  gap: 1rem;
+  grid-template-columns: 70px 1.2fr 60px 100px 80px 90px 100px 90px;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   background: var(--bg-app);
   color: var(--text-muted);
@@ -655,12 +655,13 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border: 1px solid var(--border);
+  font-size: 0.7rem;
 }
 
 .table-row {
   display: grid;
-  grid-template-columns: 80px 1.5fr 1fr 120px 100px 100px 2fr;
-  gap: 1rem;
+  grid-template-columns: 70px 1.2fr 60px 100px 80px 90px 100px 90px;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);
   align-items: center;
@@ -752,6 +753,128 @@
   background: var(--bg-hover);
   color: var(--text-muted);
   border: 1px solid var(--border);
+}
+
+/* Composite Score */
+.composite-score-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.composite-score {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+}
+
+.composite-score.excellent {
+  background: linear-gradient(135deg, rgba(0, 229, 153, 0.2), rgba(0, 229, 153, 0.1));
+  color: var(--success);
+  border: 2px solid var(--success);
+}
+
+.composite-score.good {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(99, 102, 241, 0.1));
+  color: var(--accent);
+  border: 2px solid var(--accent);
+}
+
+.composite-score.neutral {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 2px solid var(--border);
+}
+
+.composite-score.poor {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+  color: var(--error);
+  border: 2px solid var(--error);
+}
+
+/* Analyst Badge */
+.analyst-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.analyst-badge.buy {
+  background: rgba(0, 229, 153, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(0, 229, 153, 0.3);
+}
+
+.analyst-badge.sell {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.analyst-badge.hold {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* Target Price */
+.target-price {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.target-price.upside {
+  color: var(--success);
+}
+
+.target-price.downside {
+  color: var(--error);
+}
+
+.target-price.neutral {
+  color: var(--text-main);
+}
+
+.upside-text {
+  font-size: 0.7rem;
+  margin-left: 0.25rem;
+  opacity: 0.8;
+}
+
+/* Sentiment Badge */
+.sentiment-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sentiment-badge.bullish {
+  background: rgba(0, 229, 153, 0.1);
+  color: var(--success);
+}
+
+.sentiment-badge.bearish {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.sentiment-badge.neutral {
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
 /* Quantitative Metrics Table */

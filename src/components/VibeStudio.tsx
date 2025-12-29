@@ -18,7 +18,8 @@ import {
   BarChart3,
   Activity,
   CheckCircle2,
-  Loader2
+  Loader2,
+  FileSpreadsheet
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -209,6 +210,46 @@ export default function VibeStudio() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (!generatedPortfolio) return;
+    
+    const headers = [
+      'Symbol', 'Name', 'Allocation %', 'Price', 'Composite Score',
+      'Analyst Rating', 'Target Price', 'Upside %', 'Sentiment',
+      'P/E Ratio', 'ROE %', 'Revenue Growth %', 'Debt/Equity',
+      'Sharpe Ratio', 'Volatility %', 'RSI', 'Sector'
+    ];
+    
+    const rows = generatedPortfolio.assets.map(asset => [
+      asset.symbol,
+      `"${asset.name}"`,
+      asset.allocation.toFixed(2),
+      asset.currentPrice?.toFixed(2) || '',
+      asset.compositeScore || '',
+      asset.analystData?.consensusRating || '',
+      asset.analystData?.targetPriceMean?.toFixed(2) || '',
+      asset.analystData?.upside?.toFixed(1) || '',
+      asset.sentiment?.overallSentiment || '',
+      asset.fundamentals?.peRatio?.toFixed(2) || '',
+      asset.fundamentals?.returnOnEquity ? (asset.fundamentals.returnOnEquity * 100).toFixed(1) : '',
+      asset.fundamentals?.revenueGrowthYoY ? (asset.fundamentals.revenueGrowthYoY * 100).toFixed(1) : '',
+      asset.fundamentals?.debtToEquity?.toFixed(2) || '',
+      asset.quantMetrics?.sharpeRatio?.toFixed(2) || '',
+      asset.quantMetrics?.volatility?.toFixed(1) || '',
+      asset.quantMetrics?.rsi?.toFixed(0) || '',
+      asset.sector || ''
+    ]);
+    
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
+    const exportFileName = `${generatedPortfolio.title.replace(/\s+/g, '_')}_holdings.csv`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileName);
+    linkElement.click();
+  };
+
   const renderProgressIndicator = () => {
     if (progressSteps.length === 0) return null;
 
@@ -390,6 +431,9 @@ export default function VibeStudio() {
               </div>
             </div>
             <div className="header-actions">
+              <button className="btn-secondary" onClick={handleExportCSV}>
+                <FileSpreadsheet size={16} /> Export CSV
+              </button>
               <button className="btn-save" onClick={handleSavePlan}>
                 <Download size={16} /> Save JSON
               </button>
@@ -444,17 +488,32 @@ export default function VibeStudio() {
                   <div className="table-header">
                     <div className="th">Symbol</div>
                     <div className="th">Name</div>
-                    <div className="th">Sector</div>
+                    <div className="th">Score</div>
                     <div className="th">Allocation</div>
-                    <div className="th">Current Price</div>
-                    <div className="th">Technical</div>
-                    <div className="th">Rationale</div>
+                    <div className="th">Price</div>
+                    <div className="th">Analyst</div>
+                    <div className="th">Target</div>
+                    <div className="th">Sentiment</div>
                   </div>
                   {generatedPortfolio.assets.map((asset, i) => (
                     <div key={i} className="table-row">
                       <div className="td symbol">{asset.symbol}</div>
                       <div className="td name">{asset.name}</div>
-                      <div className="td sector">{asset.sector || 'N/A'}</div>
+                      <div className="td score">
+                        {asset.compositeScore !== undefined ? (
+                          <div className="composite-score-wrapper">
+                            <div 
+                              className={`composite-score ${
+                                asset.compositeScore >= 70 ? 'excellent' : 
+                                asset.compositeScore >= 55 ? 'good' : 
+                                asset.compositeScore >= 45 ? 'neutral' : 'poor'
+                              }`}
+                            >
+                              {asset.compositeScore}
+                            </div>
+                          </div>
+                        ) : '-'}
+                      </div>
                       <div className="td allocation">
                         <div className="allocation-bar-wrapper">
                           <div 
@@ -468,16 +527,42 @@ export default function VibeStudio() {
                         <span className="allocation-text">{asset.allocation.toFixed(1)}%</span>
                       </div>
                       <div className="td price">
-                        {asset.currentPrice ? `$${asset.currentPrice.toFixed(2)}` : 'Loading...'}
+                        {asset.currentPrice ? `$${asset.currentPrice.toFixed(2)}` : '...'}
                       </div>
-                      <div className="td technical">
-                        {asset.technicalSignal ? (
-                          <span className={`technical-badge ${asset.technicalSignal.includes('bullish') ? 'bullish' : asset.technicalSignal.includes('bearish') ? 'bearish' : 'neutral'}`}>
-                            {asset.technicalSignal}
+                      <div className="td analyst">
+                        {asset.analystData?.consensusRating ? (
+                          <span className={`analyst-badge ${
+                            asset.analystData.consensusRating.includes('Buy') ? 'buy' : 
+                            asset.analystData.consensusRating.includes('Sell') ? 'sell' : 'hold'
+                          }`}>
+                            {asset.analystData.consensusRating}
                           </span>
-                        ) : 'N/A'}
+                        ) : '-'}
                       </div>
-                      <div className="td rationale">{asset.rationale}</div>
+                      <div className="td target">
+                        {asset.analystData?.targetPriceMean ? (
+                          <span className={`target-price ${
+                            (asset.analystData.upside || 0) > 10 ? 'upside' : 
+                            (asset.analystData.upside || 0) < -10 ? 'downside' : 'neutral'
+                          }`}>
+                            ${asset.analystData.targetPriceMean.toFixed(0)}
+                            {asset.analystData.upside !== null && (
+                              <span className="upside-text">
+                                ({asset.analystData.upside > 0 ? '+' : ''}{asset.analystData.upside.toFixed(0)}%)
+                              </span>
+                            )}
+                          </span>
+                        ) : '-'}
+                      </div>
+                      <div className="td sentiment">
+                        {asset.sentiment ? (
+                          <span className={`sentiment-badge ${asset.sentiment.overallSentiment}`}>
+                            {asset.sentiment.overallSentiment === 'bullish' ? '🟢' : 
+                             asset.sentiment.overallSentiment === 'bearish' ? '🔴' : '🟡'}
+                            {asset.sentiment.overallSentiment}
+                          </span>
+                        ) : '-'}
+                      </div>
                     </div>
                   ))}
                 </div>
