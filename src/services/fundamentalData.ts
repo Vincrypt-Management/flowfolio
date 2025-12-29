@@ -73,6 +73,8 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
+import { globalRateLimiter } from './rateLimiter';
+
 class FundamentalDataService {
   private alphaVantageKey = import.meta.env.VITE_ALPHAVANTAGE_API_KEY;
   // private polygonKey = import.meta.env.VITE_POLYGON_API_KEY; // Reserved for future use
@@ -81,23 +83,6 @@ class FundamentalDataService {
   private cache: Map<string, CacheEntry<FundamentalMetrics>> = new Map();
   private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours - fundamentals don't change often
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_fundamentals_cache';
-  
-  // Rate limiting
-  private lastRequestTime: number = 0;
-  private readonly MIN_REQUEST_INTERVAL = 12000; // 12 seconds between requests (5 per minute)
-
-  private async waitForRateLimit(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
-      const waitTime = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-      console.log(`⏳ Rate limiting: waiting ${waitTime}ms...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    this.lastRequestTime = Date.now();
-  }
 
   private getCachedData(symbol: string): FundamentalMetrics | null {
     // Check in-memory cache
@@ -140,8 +125,11 @@ class FundamentalDataService {
     }
   }
 
-  // Fetch from Yahoo Finance (free, no rate limits for basic data)
+  // Fetch from Yahoo Finance with global rate limiting
   private async fetchFromYahoo(symbol: string): Promise<FundamentalMetrics> {
+    // Wait for rate limiter slot
+    await globalRateLimiter.waitForSlot();
+    
     console.log(`📊 Fetching fundamentals for ${symbol} from Yahoo Finance...`);
     
     const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=defaultKeyStatistics,financialData,summaryDetail,price`;
@@ -225,7 +213,8 @@ class FundamentalDataService {
     
     console.log(`📊 Fetching fundamentals for ${symbol} from Alpha Vantage...`);
     
-    await this.waitForRateLimit();
+    // Use global rate limiter
+    await globalRateLimiter.waitForSlot();
     
     const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${this.alphaVantageKey}`;
     const response = await fetch(url);

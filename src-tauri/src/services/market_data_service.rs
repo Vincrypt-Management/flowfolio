@@ -44,8 +44,9 @@ impl MarketDataService {
                     last_error = e.clone();
                     eprintln!("Attempt {} failed for {}: {}", attempt, symbol, e);
                     if attempt < 3 {
-                        // Exponential backoff: 1s, 2s, 4s
-                        let delay_ms = 1000 * (1 << (attempt - 1));
+                        // Exponential backoff: 3s, 6s, 12s - much longer delays
+                        let delay_ms = 3000 * (1 << (attempt - 1));
+                        eprintln!("⏳ Waiting {}ms before retry...", delay_ms);
                         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                     }
                 }
@@ -178,35 +179,38 @@ impl MarketDataService {
         Ok(QuantAnalyzer::calculate_metrics(symbol, &prices))
     }
 
-    /// Batch calculate metrics for multiple symbols with parallel processing
+    /// Batch calculate metrics for multiple symbols - SEQUENTIAL to avoid rate limits
     pub async fn batch_get_quant_metrics(&self, symbols: Vec<String>) -> Vec<QuantMetrics> {
-        use futures::stream::{self, StreamExt};
+        let mut results = Vec::new();
         
-        let results: Vec<QuantMetrics> = stream::iter(symbols)
-            .map(|symbol| async move {
-                match self.get_quant_metrics(&symbol).await {
-                    Ok(metrics) => metrics,
-                    Err(_) => QuantMetrics {
-                        symbol: symbol.clone(),
-                        sharpe_ratio: 0.0,
-                        annualized_return: 0.0,
-                        volatility: 0.0,
-                        max_drawdown: 0.0,
-                        rsi: 50.0,
-                        signal: "INSUFFICIENT DATA".to_string(),
-                        confidence: 0.0,
-                    },
-                }
-            })
-            .buffer_unordered(2) // Reduced from 10 to 2 to avoid rate limits
-            .collect()
-            .await;
-
+        for symbol in symbols {
+            // Add delay between each request
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            
+            let metrics = match self.get_quant_metrics(&symbol).await {
+                Ok(m) => m,
+                Err(_) => QuantMetrics {
+                    symbol: symbol.clone(),
+                    sharpe_ratio: 0.0,
+                    annualized_return: 0.0,
+                    volatility: 0.0,
+                    max_drawdown: 0.0,
+                    rsi: 50.0,
+                    signal: "INSUFFICIENT DATA".to_string(),
+                    confidence: 0.0,
+                },
+            };
+            results.push(metrics);
+        }
+        
         results
     }
 
     /// Get current price for a symbol with robust error handling
     pub async fn get_current_price(&self, symbol: &str) -> Result<f64, String> {
+        // Add rate limiting delay
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        
         let url = format!(
             "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=1d",
             symbol
@@ -261,31 +265,30 @@ impl MarketDataService {
         Ok(price)
     }
 
-    /// Batch get current prices with parallel processing and retry
+    /// Batch get current prices - SEQUENTIAL to avoid rate limits
     pub async fn batch_get_current_prices(&self, symbols: Vec<String>) -> HashMap<String, f64> {
-        use futures::stream::{self, StreamExt};
+        let mut results = HashMap::new();
         
-        let results: Vec<_> = stream::iter(symbols)
-            .map(|symbol| async move {
-                // Try up to 3 times
-                for attempt in 1..=3 {
-                    match self.get_current_price(&symbol).await {
-                        Ok(price) => return Some((symbol, price)),
-                        Err(e) => {
-                            eprintln!("Price fetch attempt {} failed for {}: {}", attempt, symbol, e);
-                            if attempt < 3 {
-                                // Exponential backoff: 1s, 2s
-                                tokio::time::sleep(std::time::Duration::from_millis(1000 * attempt as u64)).await;
-                            }
+        for symbol in symbols {
+            // Try up to 3 times with delays
+            for attempt in 1..=3 {
+                match self.get_current_price(&symbol).await {
+                    Ok(price) => {
+                        results.insert(symbol.clone(), price);
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("Price fetch attempt {} failed for {}: {}", attempt, symbol, e);
+                        if attempt < 3 {
+                            // Exponential backoff: 3s, 6s
+                            let delay_ms = 3000 * attempt as u64;
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         }
                     }
                 }
-                None
-            })
-            .buffer_unordered(2) // Reduced from 5 to 2 to avoid rate limits
-            .collect()
-            .await;
-
-        results.into_iter().flatten().collect()
+            }
+        }
+        
+        results
     }
 }

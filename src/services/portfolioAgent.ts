@@ -432,17 +432,27 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       // WAIT for all data to complete - fetch in parallel
       console.log('⏳ Fetching prices, metrics, fundamentals, sentiment & analyst ratings...');
       
-      const [pricesMap, quantMetricsArray, fundamentalsMap, sentimentMap, analystMap] = await Promise.all([
+      // Fetch data SEQUENTIALLY to avoid overwhelming Yahoo Finance
+      // Backend (Rust) handles prices and quant metrics
+      console.log('⏳ Step 1/3: Fetching prices and quant metrics from backend...');
+      const [pricesMap, quantMetricsArray] = await Promise.all([
         marketDataService.getCurrentPricesBatch(symbols),
         marketDataService.getQuantMetricsBatch(symbols),
-        fundamentalDataService.getBatchFundamentals(symbols),
+      ]);
+      console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
+      console.log(`✅ Metrics received: ${quantMetricsArray.length}/${symbols.length}`);
+
+      // Frontend fetches fundamentals (uses global rate limiter)
+      console.log('⏳ Step 2/3: Fetching fundamentals...');
+      const fundamentalsMap = await fundamentalDataService.getBatchFundamentals(symbols);
+      console.log(`✅ Fundamentals received: ${Object.keys(fundamentalsMap).length}/${symbols.length}`);
+
+      // Frontend fetches sentiment and analyst ratings (uses global rate limiter)
+      console.log('⏳ Step 3/3: Fetching sentiment and analyst ratings...');
+      const [sentimentMap, analystMap] = await Promise.all([
         newsService.getBatchSentiment(symbols),
         newsService.getBatchAnalystRatings(symbols)
       ]);
-      
-      console.log(`✅ Prices received: ${Object.keys(pricesMap).length}/${symbols.length}`);
-      console.log(`✅ Metrics received: ${quantMetricsArray.length}/${symbols.length}`);
-      console.log(`✅ Fundamentals received: ${Object.keys(fundamentalsMap).length}/${symbols.length}`);
       console.log(`✅ Sentiment received: ${Object.keys(sentimentMap).length}/${symbols.length}`);
       console.log(`✅ Analyst ratings received: ${Object.keys(analystMap).length}/${symbols.length}`);
       

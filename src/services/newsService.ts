@@ -1,6 +1,8 @@
 // News and Sentiment Analysis Service
 // Fetches news articles and sentiment for stocks
 
+import { globalRateLimiter } from './rateLimiter';
+
 export interface NewsArticle {
   title: string;
   summary: string;
@@ -50,21 +52,6 @@ class NewsService {
   private analystCache: Map<string, CacheEntry<AnalystRating>> = new Map();
   private readonly CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_news_cache';
-  
-  private lastRequestTime: number = 0;
-  private readonly MIN_REQUEST_INTERVAL = 1000; // 1 second between requests
-
-  private async waitForRateLimit(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
-      const waitTime = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    this.lastRequestTime = Date.now();
-  }
 
   private getCachedSentiment(symbol: string): SentimentAnalysis | null {
     const cached = this.cache.get(symbol);
@@ -107,7 +94,8 @@ class NewsService {
       return cached;
     }
 
-    await this.waitForRateLimit();
+    // Use global rate limiter
+    await globalRateLimiter.waitForSlot();
     console.log(`📰 Fetching news for ${symbol}...`);
 
     try {
@@ -230,7 +218,8 @@ class NewsService {
       return cached.data;
     }
 
-    await this.waitForRateLimit();
+    // Use global rate limiter
+    await globalRateLimiter.waitForSlot();
     console.log(`📊 Fetching analyst ratings for ${symbol}...`);
 
     try {
