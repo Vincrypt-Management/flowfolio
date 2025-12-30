@@ -1,6 +1,5 @@
 use reqwest::Client;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -33,7 +32,8 @@ impl OptimizedDataClient {
     /// Fetch with automatic caching and robust error handling
     pub async fn fetch_cached(&self, url: String) -> Result<Value, String> {
         // Check cache first
-        if let Some((data, timestamp)) = self.cache.get(&url) {
+        if let Some(entry) = self.cache.get(&url) {
+            let (ref data, ref timestamp) = *entry;
             let elapsed = SystemTime::now()
                 .duration_since(*timestamp)
                 .unwrap_or(Duration::from_secs(0));

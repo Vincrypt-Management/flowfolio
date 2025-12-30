@@ -123,9 +123,20 @@ This application prioritizes your privacy and security:
 
 **Backend:**
 - Tauri 2 (Rust + WebView)
-- SQLite via SQLx
-- Reqwest for HTTP
+- SQLite via SQLx with intelligent caching
+- Multi-source data aggregation with failover
+- Reqwest for HTTP with connection pooling
 - Governor for rate limiting
+
+**Market Data Sources (8 providers with smart failover):**
+- Alpaca Markets (Free - unlimited basic data)
+- Finnhub (Free - 60 calls/min)
+- Financial Modeling Prep (Free - 250 calls/day)
+- Tiingo (Free - 500 calls/hour)
+- Twelve Data (Free - 800 calls/day)
+- Polygon.io (Free - 5 calls/min)
+- Alpha Vantage (Free - 5 calls/min)
+- Yahoo Finance (No API key required - fallback)
 
 **Security:**
 - Tauri Plugin Stronghold (encrypted storage)
@@ -232,4 +243,63 @@ Contributions welcome! Please:
 ---
 
 **Made with ❤️ for privacy-conscious investors**
+
+---
+
+## 📊 Data Architecture
+
+### Multi-Source Data Fetching
+
+The application uses an intelligent multi-source data fetching system with:
+
+1. **8 Data Providers** - Multiple sources for reliability and redundancy
+2. **Health-Based Failover** - Automatically routes to healthiest providers
+3. **Rate Limiting** - Respects API limits to avoid throttling
+4. **3-Tier Caching**:
+   - In-memory cache (fastest, 1-5 minute TTL)
+   - SQLite database cache (persistent, 1-24 hour TTL)
+   - Backend provider cache (connection pooling)
+
+### Data Flow
+
+```
+Frontend Request
+    ↓
+Backend (Rust)
+    ↓
+┌─────────────────────────────────────────┐
+│           Cache Layer                    │
+│  Memory → SQLite → Provider Cache        │
+└─────────────────────────────────────────┘
+    ↓ (cache miss)
+┌─────────────────────────────────────────┐
+│      Multi-Source Provider               │
+│  (ordered by health score)               │
+│                                          │
+│  1. Alpaca (if healthy)                  │
+│  2. Finnhub                              │
+│  3. FMP                                  │
+│  4. Tiingo                               │
+│  5. Twelve Data                          │
+│  6. Polygon                              │
+│  7. Alpha Vantage                        │
+│  8. Yahoo Finance (fallback)             │
+└─────────────────────────────────────────┘
+    ↓
+Cache Update → Response
+```
+
+### Configuration
+
+Copy `.env.example` to `.env` and configure your API keys:
+
+```bash
+# Required for best performance (at least 2-3 providers recommended)
+VITE_ALPACA_API_KEY=your_key
+VITE_FINNHUB_API_KEY=your_key
+VITE_FMP_API_KEY=your_key
+
+# Yahoo Finance works without any API key as fallback
+```
+
 

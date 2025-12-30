@@ -53,7 +53,7 @@ export class ToolExecutor {
   private async fetchStockData(args: any): Promise<ToolResult> {
     const { symbol, includeHistorical = true } = args;
     
-    const marketData = await marketDataService.getMarketData(symbol, true);
+    const marketData = await marketDataService.getMarketData(symbol);
 
     return {
       tool: 'fetch_stock_data',
@@ -82,7 +82,7 @@ export class ToolExecutor {
     const results = await Promise.all(
       symbols.map(async (symbol: string) => {
         try {
-          const marketData = await marketDataService.getMarketData(symbol, true);
+          const marketData = await marketDataService.getMarketData(symbol);
           return {
             symbol,
             price: marketData.quote?.price || 0,
@@ -113,7 +113,7 @@ export class ToolExecutor {
   private async calculateTechnicalIndicators(args: any): Promise<ToolResult> {
     const { symbol, indicators } = args;
     
-    const marketData = await marketDataService.getMarketData(symbol, true);
+    const marketData = await marketDataService.getMarketData(symbol);
     const prices = marketData.historical.map((d: any) => d.close);
     
     const results: any = { symbol };
@@ -152,7 +152,7 @@ export class ToolExecutor {
     
     // Fetch historical data for all symbols
     const historicalDataArray = await Promise.all(
-      symbols.map((symbol: string) => marketDataService.getMarketData(symbol, true))
+      symbols.map((symbol: string) => marketDataService.getMarketData(symbol))
     );
     
     const returnsData: Record<string, number[]> = {};
@@ -181,7 +181,7 @@ export class ToolExecutor {
     const { symbols, allocations, timeHorizon } = args;
     
     const historicalDataArray = await Promise.all(
-      symbols.map((symbol: string) => marketDataService.getMarketData(symbol, true))
+      symbols.map((symbol: string) => marketDataService.getMarketData(symbol))
     );
     
     // Calculate portfolio expected return and volatility

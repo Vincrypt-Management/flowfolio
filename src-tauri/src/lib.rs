@@ -3,26 +3,26 @@ mod services;
 
 use modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
-    data_provider::AlphaVantageClient,
-    scoring::{ScoringEngine, ScoringConfig, SymbolScore, factors::{FinancialMetrics, MomentumMetrics}},
+    scoring::{ScoringConfig, SymbolScore},
     portfolio::{
         PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
-        BuyList, RebalanceReport, TargetAllocation,
+        BuyList, RebalanceReport,
         review::{ReviewGenerator, YearlyReview},
     },
     backtest::{BacktestEngine, BacktestConfig, BacktestResult},
     journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
     quant_analysis::QuantMetrics,
 };
-use services::market_data_service::MarketDataService;
+use services::{EnhancedMarketDataService, enhanced_market_service::CacheStats};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-// Global market data service instance
+// Global enhanced market data service instance
 lazy_static::lazy_static! {
-    static ref MARKET_DATA_SERVICE: Arc<Mutex<MarketDataService>> = Arc::new(Mutex::new(MarketDataService::new()));
+    static ref ENHANCED_MARKET_SERVICE: Arc<Mutex<EnhancedMarketDataService>> = 
+        Arc::new(Mutex::new(EnhancedMarketDataService::new_without_db()));
 }
 
 #[derive(Serialize, Deserialize)]
@@ -284,29 +284,108 @@ fn export_journal_markdown(
 /// Get quantitative metrics for multiple symbols
 #[tauri::command]
 async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
-    let service = MARKET_DATA_SERVICE.lock().await;
-    Ok(service.batch_get_quant_metrics(symbols).await)
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    Ok(service.get_batch_quant_metrics(symbols).await)
 }
 
 /// Get current prices for multiple symbols
 #[tauri::command]
 async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String, f64>, String> {
-    let service = MARKET_DATA_SERVICE.lock().await;
-    Ok(service.batch_get_current_prices(symbols).await)
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    Ok(service.get_batch_prices(symbols).await)
 }
 
 /// Get single symbol quantitative metrics
 #[tauri::command]
 async fn get_quant_metrics_single(symbol: String) -> Result<QuantMetrics, String> {
-    let service = MARKET_DATA_SERVICE.lock().await;
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
     service.get_quant_metrics(&symbol).await
 }
 
 /// Get single symbol current price
 #[tauri::command]
 async fn get_current_price_single(symbol: String) -> Result<f64, String> {
-    let service = MARKET_DATA_SERVICE.lock().await;
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
     service.get_current_price(&symbol).await
+}
+
+/// Get cache statistics
+#[tauri::command]
+async fn get_cache_stats() -> Result<CacheStats, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    Ok(service.get_cache_stats().await)
+}
+
+/// Clear all caches
+#[tauri::command]
+async fn clear_all_caches() -> Result<(), String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    service.clear_all_caches().await;
+    Ok(())
+}
+
+/// Prefetch symbols for faster access
+#[tauri::command]
+async fn prefetch_symbols(symbols: Vec<String>) -> Result<(), String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    service.prefetch_symbols(symbols).await;
+    Ok(())
+}
+
+/// Test data connection by fetching a sample symbol
+#[tauri::command]
+async fn test_data_connection() -> Result<serde_json::Value, String> {
+    use serde_json::json;
+    
+    eprintln!("🔬 Testing data connection...");
+    
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    // Test with a common symbol
+    let test_symbol = "AAPL";
+    
+    // Try to get price
+    let price_result = service.get_current_price(test_symbol).await;
+    let price = price_result.unwrap_or(0.0);
+    
+    // Try to get metrics
+    let metrics_result = service.get_quant_metrics(test_symbol).await;
+    let metrics_ok = metrics_result.is_ok();
+    let signal = metrics_result.map(|m| m.signal).unwrap_or_else(|_| "FAILED".to_string());
+    
+    // Get cache stats
+    let cache_stats = service.get_cache_stats().await;
+    
+    // Check API keys
+    let alpaca_configured = std::env::var("VITE_ALPACA_API_KEY").is_ok();
+    let finnhub_configured = std::env::var("VITE_FINNHUB_API_KEY").is_ok();
+    let fmp_configured = std::env::var("VITE_FMP_API_KEY").is_ok();
+    let polygon_configured = std::env::var("VITE_POLYGON_API_KEY").is_ok();
+    let alphavantage_configured = std::env::var("VITE_ALPHAVANTAGE_API_KEY").is_ok();
+    
+    let result = json!({
+        "status": if price > 0.0 { "connected" } else { "failed" },
+        "test_symbol": test_symbol,
+        "price": price,
+        "metrics_ok": metrics_ok,
+        "signal": signal,
+        "cache_stats": {
+            "memory_prices": cache_stats.memory_prices,
+            "memory_quant": cache_stats.memory_quant,
+        },
+        "providers": {
+            "alpaca": alpaca_configured,
+            "finnhub": finnhub_configured,
+            "fmp": fmp_configured,
+            "polygon": polygon_configured,
+            "alphavantage": alphavantage_configured,
+            "yahoo": true, // Always available
+        }
+    });
+    
+    eprintln!("🔬 Test result: {:?}", result);
+    
+    Ok(result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -342,6 +421,10 @@ pub fn run() {
             get_current_prices_batch,
             get_quant_metrics_single,
             get_current_price_single,
+            get_cache_stats,
+            clear_all_caches,
+            prefetch_symbols,
+            test_data_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

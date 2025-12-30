@@ -1,4 +1,8 @@
 pub mod sync_service;
+pub mod multi_source_provider;
+pub mod optimized_client;
+
+pub use multi_source_provider::{MultiSourceProvider, MarketDataResult, StockQuote, HistoricalPrice};
 
 use anyhow::Result;
 use reqwest::Client;
