@@ -27,3 +27,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Documentation and reports (keep only README.md)
+*_REPORT.md
+*_COMPLETE.md
+*_SUMMARY.md
+*_STATUS.md
+*_OPTIMIZATION.md
+*_INTEGRATION.md
+*_SETUP.md
+*_CHECKLIST.md
+ARCHITECTURE.md
+DEVELOPMENT.md
+SUMMARY.md
+SESSION*.md
+*.txt
+!LICENSE.txt
