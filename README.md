@@ -107,10 +107,20 @@ This application prioritizes your privacy and security:
 
 ## 📖 Documentation
 
+### Core Documentation
 - **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Current development status and roadmap
 - **[SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md)** - Security requirements and validation
 - **[BUILD_REPRODUCIBILITY.md](BUILD_REPRODUCIBILITY.md)** - Build instructions and signing
 - **[EPIC_H_COMPLETION.md](EPIC_H_COMPLETION.md)** - Security hardening report
+
+### Architecture & Quality
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and data flow diagrams
+- **[CODE_STANDARDS.md](CODE_STANDARDS.md)** - Coding standards and best practices
+- **[SECURITY.md](SECURITY.md)** - Security policy and vulnerability disclosure
+
+### QA Audit (January 2026)
+- **[QA_AUDIT_REPORT.md](QA_AUDIT_REPORT.md)** - Comprehensive code quality audit findings
+- **[AUDIT_FIXES_CHECKLIST.md](AUDIT_FIXES_CHECKLIST.md)** - Actionable fix checklist with progress tracking
 
 ---
 
