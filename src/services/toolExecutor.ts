@@ -5,7 +5,7 @@ import { quantAnalyzer } from './quantAnalysis';
 export class ToolExecutor {
   async executeTool(toolCall: ToolCall): Promise<ToolResult> {
     try {
-      console.log(`🔧 Executing tool: ${toolCall.name}`, toolCall.arguments);
+      console.log(`[INFO] Executing tool: ${toolCall.name}`, toolCall.arguments);
 
       switch (toolCall.name) {
         case 'fetch_stock_data':

@@ -118,11 +118,11 @@ class PortfolioAgentService {
 
     // Single AI call with comprehensive prompt - no separate intent analysis
     const portfolioStructure = await this.generatePortfolioStructureOptimized(userPrompt);
-    console.log('🏗️ Portfolio structure:', portfolioStructure);
+    console.log('[INFO] Portfolio structure:', portfolioStructure);
 
     // Parallel data fetching from backend (optimized)
     const enrichedPortfolio = await this.enrichWithMarketDataFast(portfolioStructure);
-    console.log('💰 Enriched portfolio:', enrichedPortfolio);
+    console.log('[INFO] Enriched portfolio:', enrichedPortfolio);
 
     // Fast optimization (no AI call needed)
     const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
@@ -248,7 +248,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       attempts++;
       
       try {
-        console.log(`📝 Attempt ${attempts}/${maxAttempts} to generate portfolio...`);
+        console.log(`[INFO] Attempt ${attempts}/${maxAttempts} to generate portfolio...`);
         
         // Try with JSON mode first, fall back to regular mode if not supported
         let response: string;
@@ -271,7 +271,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
           }
         }
 
-        console.log('📥 Raw response preview:', response.substring(0, 200));
+        console.log('[DEBUG] Raw response preview:', response.substring(0, 200));
 
         // Clean the response - remove markdown code blocks and extra text
         let cleanedResponse = response.trim();
@@ -305,7 +305,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         jsonStr = jsonStr.replace(/:\s*Infinity/g, ': 100');
         jsonStr = jsonStr.replace(/:\s*-Infinity/g, ': 0');
         
-        console.log('🧹 Cleaned JSON preview:', jsonStr.substring(0, 200));
+        console.log('[DEBUG] Cleaned JSON preview:', jsonStr.substring(0, 200));
 
         // Parse JSON
         const portfolio = JSON.parse(jsonStr);
@@ -367,7 +367,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         
         // Wait before retry with exponential backoff
         const delayMs = 1000 * attempts;
-        console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+        console.log(`[INFO] Waiting ${delayMs}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
@@ -425,7 +425,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private async enrichWithMarketDataFast(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('📈 Fetching market data...');
+    console.log('[INFO] Fetching market data...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
     console.log(`Processing ${symbols.length} symbols:`, symbols);
@@ -433,7 +433,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     try {
       // STEP 1: Backend fetches prices and quant metrics (uses its own rate limiting)
       // The backend will fetch historical data once and cache prices
-      console.log('⏳ Step 1/2: Fetching prices and quant metrics from backend...');
+      console.log('[INFO] Step 1/2: Fetching prices and quant metrics from backend...');
       const [pricesMap, quantMetricsArray] = await Promise.all([
         marketDataService.getCurrentPricesBatch(symbols),
         marketDataService.getQuantMetricsBatch(symbols),
@@ -442,7 +442,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
 
       // STEP 2: Frontend fetches additional data (fundamentals, sentiment, analyst)
       // These use the global rate limiter and are fetched in background
-      console.log('⏳ Step 2/2: Fetching fundamentals, sentiment & analyst ratings...');
+      console.log('[INFO] Step 2/2: Fetching fundamentals, sentiment & analyst ratings...');
       
       // Fetch all in parallel - they share the global rate limiter so won't conflict
       const [fundamentalsMap, sentimentMap, analystMap] = await Promise.all([
@@ -464,7 +464,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
 
       // STEP 3: Skip market insights for now to avoid rate limits
       // Market insights will be fetched on-demand in a future update
-      console.log('⏳ Step 3/3: Skipping market insights (rate limit protection)...');
+      console.log('[INFO] Step 3/3: Skipping market insights (rate limit protection)...');
       const insightsMap: Record<string, MarketInsight[]> = {};
       
       // Disabled: Fetch insights for top 3 allocations only to save time
@@ -747,50 +747,57 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private optimizePortfolioFast(portfolio: GeneratedPortfolio): GeneratedPortfolio {
-    console.log('🔧 Fast portfolio optimization...');
+    console.log('[INFO] Fast portfolio optimization started');
 
-    // Calculate diversification score
-    const allocations = portfolio.assets.map(a => a.allocation / 100);
+    const assets = portfolio.assets;
+    const n = assets.length;
+
+    // Calculate allocations as decimals
+    const allocations = assets.map(a => a.allocation / 100);
+    
+    // Herfindahl-Hirschman Index for concentration (lower = more diversified)
     const herfindahl = allocations.reduce((sum, a) => sum + a * a, 0);
-    const diversificationScore = Math.round((1 - herfindahl) * 100);
-
-    // Calculate portfolio Sharpe ratio from components
-    const totalReturn = portfolio.assets.reduce((sum, asset) => {
-      const ret = asset.quantMetrics?.expectedReturn || 0;
-      return sum + ret * (asset.allocation / 100);
-    }, 0);
     
-    const totalVol = portfolio.assets.reduce((sum, asset) => {
-      const vol = asset.quantMetrics?.volatility || 0;
-      return sum + vol * (asset.allocation / 100);
-    }, 0);
+    // Diversification score: 0 = concentrated, 100 = well diversified
+    // Normalized against theoretical max (1/n for equal weight)
+    const minHHI = 1 / n;
+    const diversificationScore = Math.round(((1 - herfindahl) / (1 - minHHI)) * 100);
+
+    // Calculate weighted portfolio metrics
+    let totalReturn = 0;
+    let totalVolSq = 0;
+    let totalVol = 0;
+    let validMetricsCount = 0;
     
-    const sharpeRatioEstimate = totalVol > 0 ? ((totalReturn - 4.5) / totalVol) : 0;
+    for (const asset of assets) {
+      const weight = asset.allocation / 100;
+      const metrics = asset.quantMetrics;
+      
+      if (metrics && metrics.recommendation !== 'Data pending') {
+        totalReturn += metrics.expectedReturn * weight;
+        totalVol += metrics.volatility * weight;
+        totalVolSq += Math.pow(metrics.volatility * weight, 2);
+        validMetricsCount++;
+      }
+    }
 
-    // Fast Monte Carlo (simplified)
-    const monteCarloResult: MonteCarloResult = {
-      percentiles: {
-        p5: 10000 * (1 + (totalReturn - 2 * totalVol) / 100),
-        p25: 10000 * (1 + (totalReturn - totalVol) / 100),
-        p50: 10000 * (1 + totalReturn / 100),
-        p75: 10000 * (1 + (totalReturn + totalVol) / 100),
-        p95: 10000 * (1 + (totalReturn + 2 * totalVol) / 100),
-      },
-      probabilityOfLoss: totalReturn < 0 ? 50 : Math.max(0, 50 - totalReturn * 2),
-      expectedValue: 10000 * (1 + totalReturn / 100)
-    };
+    // Portfolio volatility (simplified - assumes zero correlation for conservative estimate)
+    // In reality would need correlation matrix for accurate calculation
+    const portfolioVolatility = Math.sqrt(totalVolSq) * 0.7 + totalVol * 0.3; // Blend of methods
+    
+    // Sharpe ratio with risk-free rate of 4.5%
+    const riskFreeRate = 4.5;
+    const sharpeRatioEstimate = portfolioVolatility > 0 
+      ? ((totalReturn - riskFreeRate) / portfolioVolatility) 
+      : 0;
 
-    // Fast backtest (simplified)
-    const backtestResult: BacktestResult = {
-      totalReturn: totalReturn * 0.8, // Discount for realistic expectations
-      annualizedReturn: totalReturn,
-      sharpeRatio: sharpeRatioEstimate,
-      maxDrawdown: totalVol * 0.6,
-      winRate: 55 + Math.min(totalReturn, 20),
-      bestYear: totalReturn * 1.5,
-      worstYear: -totalVol * 0.8,
-      calmarRatio: totalVol > 0 ? totalReturn / (totalVol * 0.6) : 0
-    };
+    // Enhanced Monte Carlo simulation (1000 paths)
+    const monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+
+    // Enhanced backtest estimation
+    const backtestResult = this.estimateBacktest(totalReturn, portfolioVolatility, assets);
+
+    console.log(`[INFO] Portfolio optimization complete: Sharpe=${sharpeRatioEstimate.toFixed(2)}, Diversification=${diversificationScore}%`);
 
     return {
       ...portfolio,
@@ -798,6 +805,94 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       sharpeRatioEstimate: parseFloat(sharpeRatioEstimate.toFixed(2)),
       monteCarloResult,
       backtestResult
+    };
+  }
+
+  // Monte Carlo simulation with Geometric Brownian Motion
+  private runMonteCarlo(
+    initialValue: number, 
+    expectedReturn: number, 
+    volatility: number, 
+    periods: number,
+    simulations: number = 1000
+  ): MonteCarloResult {
+    const annualReturn = expectedReturn / 100;
+    const annualVol = volatility / 100;
+    const dt = 1 / 252; // Daily time step
+    
+    const finalValues: number[] = [];
+    
+    for (let sim = 0; sim < simulations; sim++) {
+      let value = initialValue;
+      
+      for (let day = 0; day < periods; day++) {
+        // Geometric Brownian Motion
+        const drift = (annualReturn - 0.5 * annualVol * annualVol) * dt;
+        const diffusion = annualVol * Math.sqrt(dt) * this.normalRandom();
+        value *= Math.exp(drift + diffusion);
+      }
+      
+      finalValues.push(value);
+    }
+    
+    // Sort for percentile calculation
+    finalValues.sort((a, b) => a - b);
+    
+    const getPercentile = (p: number) => {
+      const index = Math.floor(simulations * p);
+      return finalValues[Math.min(index, simulations - 1)];
+    };
+    
+    return {
+      percentiles: {
+        p5: Math.round(getPercentile(0.05)),
+        p25: Math.round(getPercentile(0.25)),
+        p50: Math.round(getPercentile(0.50)),
+        p75: Math.round(getPercentile(0.75)),
+        p95: Math.round(getPercentile(0.95)),
+      },
+      probabilityOfLoss: finalValues.filter(v => v < initialValue).length / simulations * 100,
+      expectedValue: Math.round(finalValues.reduce((a, b) => a + b, 0) / simulations)
+    };
+  }
+
+  // Box-Muller transform for normal random numbers
+  private normalRandom(): number {
+    const u1 = Math.random();
+    const u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  // Estimate historical backtest metrics
+  private estimateBacktest(
+    totalReturn: number, 
+    totalVol: number, 
+    assets: PortfolioAsset[]
+  ): BacktestResult {
+    // Calculate average max drawdown from components
+    const avgMaxDrawdown = assets.reduce((sum, a) => {
+      return sum + (a.quantMetrics?.maxDrawdown || 15) * (a.allocation / 100);
+    }, 0);
+    
+    // Estimate win rate from signals
+    const bullishAssets = assets.filter(a => 
+      a.quantMetrics?.recommendation?.toLowerCase().includes('buy') ||
+      a.technicalSignal?.toLowerCase().includes('buy')
+    ).length;
+    const winRateEstimate = 50 + (bullishAssets / assets.length) * 20;
+    
+    // Calmar ratio = annualized return / max drawdown
+    const calmarRatio = avgMaxDrawdown > 0.01 ? totalReturn / avgMaxDrawdown : 0;
+    
+    return {
+      totalReturn: totalReturn * 0.85, // Conservative discount
+      annualizedReturn: totalReturn,
+      sharpeRatio: totalVol > 0 ? (totalReturn - 4.5) / totalVol : 0,
+      maxDrawdown: avgMaxDrawdown,
+      winRate: Math.min(70, Math.max(40, winRateEstimate)),
+      bestYear: totalReturn * 1.4,
+      worstYear: -avgMaxDrawdown * 0.9,
+      calmarRatio: parseFloat(calmarRatio.toFixed(2))
     };
   }
 
@@ -887,7 +982,7 @@ Provide specific rebalancing recommendations with:
 
   // Deep market analysis with real data
   async analyzeMarketOpportunity(symbol: string, context?: string): Promise<string> {
-    console.log(`🔍 Performing deep analysis on ${symbol}...`);
+    console.log(`[INFO] Performing deep analysis on ${symbol}...`);
 
     const marketData = await marketDataService.getMarketData(symbol);
     const technical = this.calculateTechnicalIndicators(marketData.historical);

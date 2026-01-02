@@ -87,7 +87,7 @@ class WebSearchService {
     }
 
     await globalRateLimiter.waitForSlot();
-    console.log(`🔍 Searching news for ${symbol}...`);
+    console.log(`[INFO] Searching news for ${symbol}...`);
 
     try {
       // Use Yahoo Finance search API for news
@@ -141,7 +141,7 @@ class WebSearchService {
     }
 
     await globalRateLimiter.waitForSlot();
-    console.log(`🔍 Fetching market news...`);
+    console.log(`[INFO] Fetching market news...`);
 
     try {
       // Use Yahoo Finance trending tickers for market-wide news

@@ -30,7 +30,7 @@ class GlobalRateLimiter {
       
       if (timeSinceLastRequest < this.MIN_INTERVAL) {
         const waitTime = this.MIN_INTERVAL - timeSinceLastRequest;
-        console.log(`⏳ Rate limit (free tier): waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
+        console.log(`[INFO] Rate limit (free tier): waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
       

@@ -1407,3 +1407,63 @@
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 }
+
+/* Advanced Quant Dashboard Toggle */
+.quant-dashboard-toggle {
+  margin: 1.5rem 0;
+  padding: 0 1.5rem;
+}
+
+.btn-quant-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-main);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-quant-toggle:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.2);
+}
+
+.btn-quant-toggle svg:first-child {
+  color: var(--primary);
+}
+
+.btn-quant-toggle svg:last-child {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+/* Quant Dashboard Container */
+.quant-dashboard-container {
+  animation: slideDown 0.3s ease;
+  margin: 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

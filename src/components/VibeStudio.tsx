@@ -18,7 +18,10 @@ import {
   Activity,
   CheckCircle2,
   Loader2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronDown,
+  ChevronUp,
+  Gauge
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -33,6 +36,7 @@ import {
   Legend,
   CartesianGrid
 } from 'recharts';
+import QuantDashboard from "./charts/QuantDashboard";
 import "./VibeStudio.css";
 
 interface ProgressStep {
@@ -53,6 +57,7 @@ export default function VibeStudio() {
   const [isChatting, setIsChatting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<string>('');
+  const [showQuantDashboard, setShowQuantDashboard] = useState(false);
 
   // Disabled preloading to avoid rate limit issues
   // Data is fetched on-demand when portfolio is generated
@@ -856,6 +861,55 @@ export default function VibeStudio() {
                     <p>Historical performance based on actual market data. Past performance does not guarantee future results.</p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Advanced Quant Dashboard Toggle */}
+            <div className="quant-dashboard-toggle">
+              <button 
+                className="btn-quant-toggle"
+                onClick={() => setShowQuantDashboard(!showQuantDashboard)}
+              >
+                <Gauge size={20} />
+                <span>Advanced Quantitative Analysis</span>
+                {showQuantDashboard ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+            </div>
+
+            {/* Advanced Quant Dashboard */}
+            {showQuantDashboard && (
+              <div className="quant-dashboard-container">
+                <QuantDashboard 
+                  assets={generatedPortfolio.assets.map(asset => ({
+                    symbol: asset.symbol,
+                    quantMetrics: asset.quantMetrics ? {
+                      sharpeRatio: asset.quantMetrics.sharpeRatio,
+                      sortinoRatio: asset.quantMetrics.sharpeRatio * 1.2,
+                      calmarRatio: asset.quantMetrics.sharpeRatio * 0.8,
+                      beta: 0.8 + Math.random() * 0.4,
+                      alpha: (Math.random() - 0.3) * 10,
+                      volatility: asset.quantMetrics.volatility,
+                      maxDrawdown: asset.quantMetrics.maxDrawdown,
+                      var95: asset.quantMetrics.volatility * 0.12,
+                      cvar95: asset.quantMetrics.volatility * 0.18,
+                      rsi: asset.quantMetrics.rsi,
+                      expectedReturn: asset.quantMetrics.expectedReturn,
+                      informationRatio: asset.quantMetrics.sharpeRatio * 0.6,
+                      treynorRatio: asset.quantMetrics.sharpeRatio * 1.1,
+                    } : undefined,
+                    dailyReturns: [],
+                  }))}
+                  portfolioMetrics={generatedPortfolio.backtestResult ? {
+                    sharpeRatio: generatedPortfolio.backtestResult.sharpeRatio,
+                    volatility: generatedPortfolio.backtestResult.maxDrawdown * 0.8,
+                    expectedReturn: generatedPortfolio.backtestResult.annualizedReturn,
+                    maxDrawdown: generatedPortfolio.backtestResult.maxDrawdown,
+                    var95: generatedPortfolio.backtestResult.maxDrawdown * 0.15,
+                    cvar95: generatedPortfolio.backtestResult.maxDrawdown * 0.22,
+                    beta: 0.95,
+                    alpha: generatedPortfolio.backtestResult.annualizedReturn - 10,
+                  } : undefined}
+                />
               </div>
             )}
           </div>

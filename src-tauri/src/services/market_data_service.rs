@@ -465,6 +465,11 @@ impl MarketDataService {
                     rsi: 50.0,
                     signal: "INSUFFICIENT DATA".to_string(),
                     confidence: 0.0,
+                    sortino_ratio: None,
+                    calmar_ratio: None,
+                    beta: None,
+                    alpha: None,
+                    var_95: None,
                 },
             };
             results.push(metrics);

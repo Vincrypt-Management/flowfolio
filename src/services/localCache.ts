@@ -260,7 +260,7 @@ class LocalCacheService {
             cursor.continue();
           } else {
             if (deleted > 0) {
-              console.log(`🧹 Cleaned up ${deleted} expired entries from ${storeName}`);
+              console.log(`[INFO] Cleaned up ${deleted} expired entries from ${storeName}`);
             }
             resolve();
           }
@@ -393,7 +393,7 @@ class LocalCacheService {
 
   // Force garbage collection of expired entries
   async gc(): Promise<void> {
-    console.log('🧹 Running cache garbage collection...');
+    console.log('[INFO] Running cache garbage collection...');
     await this.cleanupExpiredEntries();
   }
 }
