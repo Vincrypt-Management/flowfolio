@@ -93,7 +93,7 @@ class NewsService {
     try {
       const indexedDBCached = await localCacheService.getSentiment(symbol);
       if (indexedDBCached) {
-        console.log(`✅ IndexedDB sentiment cache hit for ${symbol}`);
+        console.log(`IndexedDB sentiment cache hit for ${symbol}`);
         return indexedDBCached as SentimentAnalysis;
       }
     } catch (e) {
@@ -103,7 +103,7 @@ class NewsService {
     // 2. Check in-memory/localStorage cache
     const cached = this.getCachedSentiment(symbol);
     if (cached) {
-      console.log(`✅ Sentiment cache hit for ${symbol}`);
+      console.log(`Sentiment cache hit for ${symbol}`);
       return cached;
     }
 
@@ -177,7 +177,7 @@ class NewsService {
         console.warn('Failed to cache sentiment in IndexedDB:', e);
       });
       
-      console.log(`✅ Sentiment analysis complete for ${symbol}: ${overallSentiment}`);
+      console.log(`Sentiment analysis complete for ${symbol}: ${overallSentiment}`);
       
       return result;
     } catch (error) {
@@ -237,7 +237,7 @@ class NewsService {
     try {
       const indexedDBCached = await localCacheService.getAnalyst(symbol);
       if (indexedDBCached) {
-        console.log(`✅ IndexedDB analyst cache hit for ${symbol}`);
+        console.log(`IndexedDB analyst cache hit for ${symbol}`);
         return indexedDBCached as AnalystRating;
       }
     } catch (e) {
@@ -247,14 +247,14 @@ class NewsService {
     // 2. Check in-memory cache
     const cached = this.analystCache.get(symbol);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log(`✅ Analyst ratings cache hit for ${symbol}`);
+      console.log(`Analyst ratings cache hit for ${symbol}`);
       return cached.data;
     }
 
     // 3. Fetch from network
     // Use global rate limiter
     await globalRateLimiter.waitForSlot();
-    console.log(`📊 Fetching analyst ratings for ${symbol}...`);
+    console.log(`Fetching analyst ratings for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`;
@@ -322,7 +322,7 @@ class NewsService {
         console.warn('Failed to cache analyst in IndexedDB:', e);
       });
 
-      console.log(`✅ Analyst ratings complete for ${symbol}: ${consensusRating}`);
+      console.log(`Analyst ratings complete for ${symbol}: ${consensusRating}`);
       return rating;
     } catch (error) {
       console.error(`Failed to fetch analyst ratings for ${symbol}:`, error);
@@ -368,7 +368,7 @@ class NewsService {
   async getBatchAnalystRatings(symbols: string[]): Promise<Record<string, AnalystRating>> {
     const results: Record<string, AnalystRating> = {};
     
-    console.log(`📊 Fetching analyst ratings for ${symbols.length} symbols...`);
+    console.log(`Fetching analyst ratings for ${symbols.length} symbols...`);
     
     for (const symbol of symbols) {
       try {

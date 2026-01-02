@@ -128,15 +128,21 @@ This application prioritizes your privacy and security:
 - Reqwest for HTTP with connection pooling
 - Governor for rate limiting
 
-**Market Data Sources (8 providers with smart failover):**
-- Alpaca Markets (Free - unlimited basic data)
-- Finnhub (Free - 60 calls/min)
-- Financial Modeling Prep (Free - 250 calls/day)
-- Tiingo (Free - 500 calls/hour)
-- Twelve Data (Free - 800 calls/day)
-- Polygon.io (Free - 5 calls/min)
-- Alpha Vantage (Free - 5 calls/min)
+**Market Data Sources (8 providers with smart failover - Optimized for FREE tiers):**
+
+**Priority Tier 1 (Best Free Options):**
+- Alpaca Markets (Free - unlimited basic data, no key limits)
 - Yahoo Finance (No API key required - fallback)
+
+**Priority Tier 2 (Generous Free Limits):**
+- Tiingo (Free - 500 calls/hour, ~7/min)
+- Finnhub (Free - 60 calls/min, optimized to 50/min)
+- Twelve Data (Free - 800 calls/day)
+- Financial Modeling Prep (Free - 250 calls/day)
+
+**Priority Tier 3 (Use Sparingly - Has Paid Tiers):**
+- Alpha Vantage (Free - 5 calls/min, optimized to 4/min) ⚠️
+- Polygon.io (Free - 5 calls/min, optimized to 4/min) ⚠️
 
 **Security:**
 - Tauri Plugin Stronghold (encrypted storage)

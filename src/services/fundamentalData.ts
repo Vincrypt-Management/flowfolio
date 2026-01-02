@@ -77,19 +77,21 @@ interface CacheEntry<T> {
 }
 
 class FundamentalDataService {
+  // NOTE: Using Alpha Vantage cautiously (5/min free limit, has paid tiers)
+  // Consider alternatives: Yahoo Finance (free), FMP (250/day free)
   private alphaVantageKey = import.meta.env.VITE_ALPHAVANTAGE_API_KEY;
   // private polygonKey = import.meta.env.VITE_POLYGON_API_KEY; // Reserved for future use
   // private finnhubKey = import.meta.env.VITE_FINNHUB_API_KEY; // Reserved for future use
   
   private cache: Map<string, CacheEntry<FundamentalMetrics>> = new Map();
-  private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours - fundamentals don't change often
+  private readonly CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours (increased from 24) - fundamentals rarely change
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_fundamentals_cache';
 
   private getCachedData(symbol: string): FundamentalMetrics | null {
     // Check in-memory cache
     const cached = this.cache.get(symbol);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log(`✅ Fundamental cache hit for ${symbol}`);
+      console.log(`Fundamental cache hit for ${symbol}`);
       return cached.data;
     }
     
@@ -99,7 +101,7 @@ class FundamentalDataService {
       if (stored) {
         const parsed: CacheEntry<FundamentalMetrics> = JSON.parse(stored);
         if (Date.now() - parsed.timestamp < this.CACHE_TTL) {
-          console.log(`✅ Persistent fundamental cache hit for ${symbol}`);
+          console.log(`Persistent fundamental cache hit for ${symbol}`);
           this.cache.set(symbol, parsed);
           return parsed.data;
         }
@@ -131,7 +133,7 @@ class FundamentalDataService {
     // Wait for rate limiter slot
     await globalRateLimiter.waitForSlot();
     
-    console.log(`📊 Fetching fundamentals for ${symbol} from Yahoo Finance...`);
+    console.log(`Fetching fundamentals for ${symbol} from Yahoo Finance...`);
     
     const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=defaultKeyStatistics,financialData,summaryDetail,price`;
     
@@ -206,15 +208,16 @@ class FundamentalDataService {
     return fundamentals;
   }
 
-  // Fetch from Alpha Vantage (backup, has rate limits)
+  // Fetch from Alpha Vantage (backup only - 5/min free limit, has paid tiers)
+  // CAUTION: This service has paid tiers - use Yahoo Finance as primary
   private async fetchFromAlphaVantage(symbol: string): Promise<FundamentalMetrics> {
     if (!this.alphaVantageKey) {
       throw new Error('Alpha Vantage API key not configured');
     }
     
-    console.log(`📊 Fetching fundamentals for ${symbol} from Alpha Vantage...`);
+    console.log(`Fetching fundamentals for ${symbol} from Alpha Vantage (rate limited)...`);
     
-    // Use global rate limiter
+    // Use global rate limiter to respect free tier limits
     await globalRateLimiter.waitForSlot();
     
     const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${this.alphaVantageKey}`;
@@ -285,7 +288,7 @@ class FundamentalDataService {
     try {
       const indexedDBCached = await localCacheService.getFundamentals(symbol);
       if (indexedDBCached) {
-        console.log(`✅ IndexedDB cache hit for ${symbol} fundamentals`);
+        console.log(`IndexedDB cache hit for ${symbol} fundamentals`);
         return indexedDBCached as FundamentalMetrics;
       }
     } catch (e) {
@@ -296,10 +299,10 @@ class FundamentalDataService {
     const cached = this.getCachedData(symbol);
     if (cached) return cached;
     
-    // 3. Fetch from network
+    // 3. Fetch from network with prioritized free sources
     const providers = [
-      { name: 'yahoo', fetcher: () => this.fetchFromYahoo(symbol) },
-      { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) }
+      { name: 'yahoo', fetcher: () => this.fetchFromYahoo(symbol) }, // Free, no limits
+      { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) } // 5/min free (use sparingly)
     ];
     
     let lastError: Error | null = null;
@@ -317,12 +320,12 @@ class FundamentalDataService {
           console.warn('Failed to cache in IndexedDB:', e);
         });
         
-        console.log(`✅ Successfully fetched ${symbol} fundamentals from ${provider.name}`);
+        console.log(`Successfully fetched ${symbol} fundamentals from ${provider.name}`);
         
         return data;
       } catch (error: any) {
         lastError = error;
-        console.warn(`⚠️ ${provider.name} failed for ${symbol}:`, error.message);
+        console.warn(`${provider.name} failed for ${symbol}:`, error.message);
         
         // Wait before trying next provider
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -361,7 +364,7 @@ class FundamentalDataService {
       }
     }
     
-    console.log(`✅ Fetched fundamentals for ${Object.keys(results).length}/${symbols.length} symbols`);
+    console.log(`Fetched fundamentals for ${Object.keys(results).length}/${symbols.length} symbols`);
     
     return results;
   }

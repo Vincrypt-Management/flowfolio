@@ -82,7 +82,7 @@ class WebSearchService {
     // Check cache
     const cached = this.newsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.NEWS_CACHE_TTL) {
-      console.log(`✅ News cache hit for ${symbol}`);
+      console.log(`News cache hit for ${symbol}`);
       return cached.data;
     }
 
@@ -121,7 +121,7 @@ class WebSearchService {
       // Cache results
       this.newsCache.set(cacheKey, { data: results, timestamp: Date.now() });
       
-      console.log(`✅ Found ${results.length} news items for ${symbol}`);
+      console.log(`Found ${results.length} news items for ${symbol}`);
       return results;
     } catch (error) {
       console.error(`Failed to search news for ${symbol}:`, error);
@@ -136,7 +136,7 @@ class WebSearchService {
     // Check cache
     const cached = this.newsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.NEWS_CACHE_TTL) {
-      console.log(`✅ Market news cache hit`);
+      console.log(`Market news cache hit`);
       return cached.data;
     }
 
@@ -182,7 +182,7 @@ class WebSearchService {
   // Get earnings calendar/data for a symbol
   async getEarningsData(symbol: string): Promise<EarningsData[]> {
     await globalRateLimiter.waitForSlot();
-    console.log(`📊 Fetching earnings data for ${symbol}...`);
+    console.log(`Fetching earnings data for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=earnings`;

@@ -210,14 +210,14 @@ impl ReviewGenerator {
 
         if needs_action_count > 0 {
             recommendations.push(format!(
-                "⚠️ {} item(s) require immediate action - address these before continuing",
+                "{} item(s) require immediate action - address these before continuing",
                 needs_action_count
             ));
         }
 
         if needs_review_count > 5 {
             recommendations.push(
-                "📋 Schedule dedicated review session for pending items".to_string()
+                "Schedule dedicated review session for pending items".to_string()
             );
         }
 
@@ -228,7 +228,7 @@ impl ReviewGenerator {
 
         if strategy_reviews >= 2 {
             recommendations.push(
-                "🎯 Consider running backtest with updated parameters before making strategy changes".to_string()
+                "Consider running backtest with updated parameters before making strategy changes".to_string()
             );
         }
 
@@ -239,7 +239,7 @@ impl ReviewGenerator {
 
         if performance_issues >= 2 {
             recommendations.push(
-                "📊 Deep dive into factor performance - which factors worked, which didn't?".to_string()
+                "Deep dive into factor performance - analyze which factors contributed positively or negatively".to_string()
             );
         }
 

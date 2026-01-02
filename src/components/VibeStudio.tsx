@@ -98,7 +98,7 @@ export default function VibeStudio() {
     setProgressSteps(steps);
 
     try {
-      console.log('🚀 Streaming portfolio generation for:', prompt);
+      console.log('[INFO] Streaming portfolio generation for:', prompt);
 
       // Use streaming API
       const stream = portfolioAgent.generatePortfolioStream(prompt);
@@ -128,9 +128,9 @@ export default function VibeStudio() {
         }
       }
 
-      console.log('✅ Portfolio generation completed');
+      console.log('[INFO] Portfolio generation completed');
     } catch (err) {
-      console.error('❌ Portfolio generation failed:', err);
+      console.error('[ERROR] Portfolio generation failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate portfolio');
       setProgressSteps(prev => prev.map(s => s.status === 'active' ? { ...s, status: 'error' } : s));
     } finally {

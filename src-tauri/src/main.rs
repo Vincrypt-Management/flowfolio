@@ -6,7 +6,7 @@ fn main() {
     let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join(".env");
     if env_path.exists() {
         dotenvy::from_path(&env_path).ok();
-        eprintln!("✅ Loaded .env from {:?}", env_path);
+        eprintln!("[INFO] [main] Loaded environment configuration from {:?}", env_path);
     } else {
         // Try current directory
         dotenvy::dotenv().ok();

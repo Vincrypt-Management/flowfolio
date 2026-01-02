@@ -1,6 +1,7 @@
-// Integrated Market Data Service - Primarily uses Rust backend
-// With frontend fallback for when backend is unavailable
-import { invoke } from './tauri';
+// Industrial-Grade Integrated Market Data Service
+// Features: Circuit breaker, request deduplication, multi-tier caching, metrics
+import { invokeWithResilience, apiClient } from './apiClient';
+import { localCacheService } from './localCache';
 
 export interface QuantMetrics {
   symbol: string;
@@ -70,40 +71,65 @@ interface DataConnectionTestResult {
 }
 
 class MarketDataService {
-  // Frontend fallback caching
+  // Frontend fallback caching (optimized for reduced API calls)
   private cache: Map<string, CacheEntry> = new Map();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL = 10 * 60 * 1000; // 10 minutes (increased from 5)
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_market_cache';
 
-  // ================== BACKEND API CALLS ==================
+  // ================== BACKEND API CALLS (with circuit breaker) ==================
 
   /**
    * Get current prices for multiple symbols via backend
+   * Uses: Local cache -> Backend (with circuit breaker) -> Frontend fallback
    */
   async getCurrentPricesBatch(symbols: string[]): Promise<Record<string, number>> {
+    // 1. Check local IndexedDB cache first
+    const cached = await localCacheService.getPricesBatch(symbols);
+    const cachedSymbols = Object.keys(cached);
+    const missingSymbols = symbols.filter(s => !cachedSymbols.includes(s));
+    
+    if (missingSymbols.length === 0) {
+      apiClient.recordCacheHit();
+      console.log(`All ${symbols.length} prices from local cache`);
+      return cached;
+    }
+    
+    apiClient.recordCacheMiss();
+    
+    // 2. Fetch missing from backend with resilience
     try {
-      const result = await invoke<Record<string, number>>('get_current_prices_batch', { symbols });
+      const result = await invokeWithResilience<Record<string, number>>(
+        'get_current_prices_batch', 
+        { symbols: missingSymbols }
+      );
       
       if (Object.keys(result).length > 0) {
-        console.log(`✅ Backend: Got ${Object.keys(result).length}/${symbols.length} prices`);
-        return result;
+        // Cache the results
+        for (const [symbol, price] of Object.entries(result)) {
+          localCacheService.setPrice(symbol, price);
+        }
+        console.log(`Backend: Got ${Object.keys(result).length}/${missingSymbols.length} prices`);
+        return { ...cached, ...result };
       }
       
       // Fallback to frontend fetching
       console.warn('Backend returned no prices, falling back to frontend...');
-      return await this.fetchPricesFrontend(symbols);
+      const fallback = await this.fetchPricesFrontend(missingSymbols);
+      return { ...cached, ...fallback };
     } catch (error) {
       console.error('Backend price fetch failed:', error);
-      return await this.fetchPricesFrontend(symbols);
+      const fallback = await this.fetchPricesFrontend(missingSymbols);
+      return { ...cached, ...fallback };
     }
   }
 
   /**
    * Get quantitative metrics for multiple symbols via backend
+   * Uses circuit breaker pattern for resilience
    */
   async getQuantMetricsBatch(symbols: string[]): Promise<QuantMetrics[]> {
     try {
-      return await invoke<QuantMetrics[]>('get_quant_metrics_batch', { symbols });
+      return await invokeWithResilience<QuantMetrics[]>('get_quant_metrics_batch', { symbols });
     } catch (error) {
       console.error('Failed to fetch quant metrics batch:', error);
       return symbols.map(symbol => ({
@@ -121,10 +147,21 @@ class MarketDataService {
 
   /**
    * Get single symbol current price via backend
+   * Uses circuit breaker pattern for resilience
    */
   async getCurrentPriceSingle(symbol: string): Promise<number> {
+    // Check local cache first
+    const cached = await localCacheService.getPrice(symbol);
+    if (cached !== null) {
+      apiClient.recordCacheHit();
+      return cached;
+    }
+    apiClient.recordCacheMiss();
+    
     try {
-      return await invoke<number>('get_current_price_single', { symbol });
+      const price = await invokeWithResilience<number>('get_current_price_single', { symbol });
+      localCacheService.setPrice(symbol, price);
+      return price;
     } catch (error) {
       console.error(`Failed to fetch current price for ${symbol}:`, error);
       const prices = await this.fetchPricesFrontend([symbol]);
@@ -137,7 +174,7 @@ class MarketDataService {
    */
   async getQuantMetricsSingle(symbol: string): Promise<QuantMetrics> {
     try {
-      return await invoke<QuantMetrics>('get_quant_metrics_single', { symbol });
+      return await invokeWithResilience<QuantMetrics>('get_quant_metrics_single', { symbol });
     } catch (error) {
       console.error(`Failed to fetch quant metrics for ${symbol}:`, error);
       return {
@@ -158,8 +195,8 @@ class MarketDataService {
    */
   async prefetchSymbols(symbols: string[]): Promise<void> {
     try {
-      await invoke('prefetch_symbols', { symbols });
-      console.log(`✅ Prefetched ${symbols.length} symbols`);
+      await invokeWithResilience('prefetch_symbols', { symbols });
+      console.log(`Prefetched ${symbols.length} symbols`);
     } catch (error) {
       console.warn('Prefetch failed:', error);
     }
@@ -170,7 +207,7 @@ class MarketDataService {
    */
   async getCacheStats(): Promise<CacheStats | null> {
     try {
-      return await invoke<CacheStats>('get_cache_stats');
+      return await invokeWithResilience<CacheStats>('get_cache_stats');
     } catch (error) {
       console.error('Failed to get cache stats:', error);
       return null;
@@ -182,9 +219,10 @@ class MarketDataService {
    */
   async clearAllCaches(): Promise<void> {
     try {
-      await invoke('clear_all_caches');
+      await invokeWithResilience('clear_all_caches', {});
       this.cache.clear();
-      console.log('✅ All caches cleared');
+      await localCacheService.clearAll();
+      console.log('[INFO] All caches cleared');
     } catch (error) {
       console.error('Failed to clear caches:', error);
     }
@@ -195,11 +233,18 @@ class MarketDataService {
    */
   async testDataConnection(): Promise<DataConnectionTestResult | null> {
     try {
-      return await invoke<DataConnectionTestResult>('test_data_connection');
+      return await invokeWithResilience<DataConnectionTestResult>('test_data_connection', {});
     } catch (error) {
       console.error('Failed to test data connection:', error);
       return null;
     }
+  }
+
+  /**
+   * Get client metrics for observability
+   */
+  getClientMetrics() {
+    return apiClient.getMetrics();
   }
 
   // ================== FRONTEND FALLBACK ==================

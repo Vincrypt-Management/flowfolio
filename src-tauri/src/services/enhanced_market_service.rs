@@ -1,23 +1,32 @@
-// Enhanced Market Data Service
+// Enhanced Market Data Service - Industrial Grade
 // Integrates multi-source provider with SQLite database caching
-// Provides a unified API for all market data needs
+// Features: Circuit breaker, retry logic, health monitoring, structured errors
 
 use crate::modules::data_provider::{MultiSourceProvider, HistoricalPrice};
 use crate::modules::quant_analysis::{QuantAnalyzer, QuantMetrics, HistoricalPrice as QuantHistoricalPrice};
+use crate::modules::circuit_breaker::{CircuitBreakerManager, CircuitBreakerConfig};
+use crate::modules::retry::{RetryExecutor, RetryConfig};
+use crate::modules::health::HEALTH_MONITOR;
 use crate::services::db_cache::DatabaseCacheService;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 use sqlx::{Pool, Sqlite};
+use serde::{Serialize, Deserialize};
 
 /// Enhanced market data service with database caching and multi-source provider
+/// Industrial-grade features: circuit breaker, retry logic, health monitoring
 pub struct EnhancedMarketDataService {
     provider: Arc<MultiSourceProvider>,
     db_cache: Option<Arc<DatabaseCacheService>>,
+    // Industrial-grade components
+    circuit_breaker: Arc<CircuitBreakerManager>,
+    retry_executor: Arc<RetryExecutor>,
     // In-memory cache for quick access
     price_cache: Arc<RwLock<HashMap<String, (f64, std::time::Instant)>>>,
     quant_cache: Arc<RwLock<HashMap<String, (QuantMetrics, std::time::Instant)>>>,
-    // Cache TTL settings
+    // Cache TTL settings (optimized for free tier APIs)
     price_cache_ttl: std::time::Duration,
     quant_cache_ttl: std::time::Duration,
 }
@@ -27,33 +36,53 @@ impl EnhancedMarketDataService {
     pub fn new(db_pool: Option<Pool<Sqlite>>) -> Self {
         let db_cache = db_pool.map(|pool| Arc::new(DatabaseCacheService::new(pool)));
         
+        // Configure circuit breaker for data providers
+        let cb_config = CircuitBreakerConfig {
+            failure_threshold: 5,
+            open_duration: std::time::Duration::from_secs(30),
+            success_threshold: 2,
+            failure_window: std::time::Duration::from_secs(60),
+        };
+        
         Self {
             provider: Arc::new(MultiSourceProvider::new()),
             db_cache,
+            circuit_breaker: Arc::new(CircuitBreakerManager::with_config(cb_config)),
+            retry_executor: Arc::new(RetryExecutor::new(RetryConfig::network())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             quant_cache: Arc::new(RwLock::new(HashMap::new())),
-            price_cache_ttl: std::time::Duration::from_secs(60), // 1 minute
-            quant_cache_ttl: std::time::Duration::from_secs(3600), // 1 hour
+            price_cache_ttl: std::time::Duration::from_secs(120), // 2 minutes (optimized)
+            quant_cache_ttl: std::time::Duration::from_secs(7200), // 2 hours (optimized)
         }
     }
 
     /// Create service without database (in-memory only)
     pub fn new_without_db() -> Self {
+        let cb_config = CircuitBreakerConfig {
+            failure_threshold: 5,
+            open_duration: std::time::Duration::from_secs(30),
+            success_threshold: 2,
+            failure_window: std::time::Duration::from_secs(60),
+        };
+        
         Self {
             provider: Arc::new(MultiSourceProvider::new()),
             db_cache: None,
+            circuit_breaker: Arc::new(CircuitBreakerManager::with_config(cb_config)),
+            retry_executor: Arc::new(RetryExecutor::new(RetryConfig::network())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             quant_cache: Arc::new(RwLock::new(HashMap::new())),
-            price_cache_ttl: std::time::Duration::from_secs(60),
-            quant_cache_ttl: std::time::Duration::from_secs(3600),
+            price_cache_ttl: std::time::Duration::from_secs(120),
+            quant_cache_ttl: std::time::Duration::from_secs(7200),
         }
     }
 
     // ================== PRICE FETCHING ==================
 
     /// Get current price for a single symbol
-    /// Uses: memory cache -> database cache -> multi-source provider
+    /// Uses: memory cache -> database cache -> multi-source provider (with circuit breaker)
     pub async fn get_current_price(&self, symbol: &str) -> Result<f64, String> {
+        let start = Instant::now();
         let symbol = symbol.to_uppercase();
 
         // 1. Check memory cache
@@ -61,11 +90,13 @@ impl EnhancedMarketDataService {
             let cache = self.price_cache.read().await;
             if let Some((price, timestamp)) = cache.get(&symbol) {
                 if timestamp.elapsed() < self.price_cache_ttl {
-                    eprintln!("✅ Memory cache hit for {}: ${:.2}", symbol, price);
+                    HEALTH_MONITOR.record_cache_hit();
+                    eprintln!("[DEBUG] [enhanced_market] Memory cache hit for {}: ${:.2}", symbol, price);
                     return Ok(*price);
                 }
             }
         }
+        HEALTH_MONITOR.record_cache_miss();
 
         // 2. Check database cache
         if let Some(ref db_cache) = self.db_cache {
@@ -73,14 +104,34 @@ impl EnhancedMarketDataService {
                 // Update memory cache
                 let mut cache = self.price_cache.write().await;
                 cache.insert(symbol.clone(), (cached.current_price, std::time::Instant::now()));
-                eprintln!("✅ Database cache hit for {}: ${:.2}", symbol, cached.current_price);
+                eprintln!("[DEBUG] [enhanced_market] Database cache hit for {}: ${:.2}", symbol, cached.current_price);
                 return Ok(cached.current_price);
             }
         }
 
-        // 3. Fetch from multi-source provider
-        eprintln!("📊 Fetching {} from providers...", symbol);
-        let data = self.provider.get_market_data(&symbol).await?;
+        // 3. Fetch from multi-source provider with circuit breaker
+        eprintln!("[DEBUG] [enhanced_market] Fetching {} from providers (with circuit breaker)...", symbol);
+        
+        let provider = self.provider.clone();
+        let symbol_clone = symbol.clone();
+        
+        // Use circuit breaker to protect against cascading failures
+        let result = self.circuit_breaker
+            .execute("market_data", async move {
+                provider.get_market_data(&symbol_clone).await
+            })
+            .await;
+        
+        let data = match result {
+            Ok(data) => {
+                HEALTH_MONITOR.record_provider_request("market_data", true, start.elapsed().as_micros() as u64);
+                data
+            }
+            Err(e) => {
+                HEALTH_MONITOR.record_provider_request("market_data", false, start.elapsed().as_micros() as u64);
+                return Err(format!("Provider error: {}", e));
+            }
+        };
         
         if let Some(quote) = data.quote {
             let price = quote.price;
@@ -96,7 +147,8 @@ impl EnhancedMarketDataService {
                 let _ = db_cache.set_cached_price(&symbol, price).await;
             }
 
-            eprintln!("✅ Fetched {} from {}: ${:.2}", symbol, data.source, price);
+            HEALTH_MONITOR.record_request_success(start.elapsed().as_micros() as u64);
+            eprintln!("[DEBUG] [enhanced_market] Fetched {} from {}: ${:.2}", symbol, data.source, price);
             return Ok(price);
         }
 
@@ -123,7 +175,7 @@ impl EnhancedMarketDataService {
             }
         }
 
-        eprintln!("📊 Prices: {}/{} from memory cache", results.len(), symbols.len());
+        eprintln!("[DEBUG] [enhanced_market] Prices: {}/{} from memory cache", results.len(), symbols.len());
 
         // 2. Check database cache for remaining symbols
         if let Some(ref db_cache) = self.db_cache {
@@ -141,7 +193,7 @@ impl EnhancedMarketDataService {
             symbols_to_fetch = still_needed;
         }
 
-        eprintln!("📊 Prices: {} still need fetching from providers", symbols_to_fetch.len());
+        eprintln!("[DEBUG] [enhanced_market] Prices: {} still need fetching from providers", symbols_to_fetch.len());
 
         // 3. Fetch remaining from providers
         if !symbols_to_fetch.is_empty() {
@@ -166,7 +218,7 @@ impl EnhancedMarketDataService {
             }
         }
 
-        eprintln!("✅ Batch prices complete: {}/{} symbols", results.len(), symbols.len());
+        eprintln!("[DEBUG] [enhanced_market] Batch prices complete: {}/{} symbols", results.len(), symbols.len());
         results
     }
 
@@ -191,14 +243,14 @@ impl EnhancedMarketDataService {
                     .collect();
                 
                 if !historical.is_empty() {
-                    eprintln!("✅ Historical cache hit for {}: {} days", symbol, historical.len());
+                    eprintln!("[DEBUG] [enhanced_market] Historical cache hit for {}: {} days", symbol, historical.len());
                     return Ok(historical);
                 }
             }
         }
 
         // 2. Fetch from provider
-        eprintln!("📊 Fetching historical data for {} from providers...", symbol);
+        eprintln!("[DEBUG] [enhanced_market] Fetching historical data for {} from providers...", symbol);
         let data = self.provider.get_market_data(&symbol).await?;
         
         if data.historical.is_empty() {
@@ -213,7 +265,7 @@ impl EnhancedMarketDataService {
             let _ = db_cache.set_cached_historical_prices(&symbol, &cache_data).await;
         }
 
-        eprintln!("✅ Fetched {} days of historical data for {} from {}", 
+        eprintln!("[DEBUG] [enhanced_market] Fetched {} days of historical data for {} from {}", 
                   data.historical.len(), symbol, data.source);
         Ok(data.historical)
     }
@@ -229,7 +281,7 @@ impl EnhancedMarketDataService {
             let cache = self.quant_cache.read().await;
             if let Some((metrics, timestamp)) = cache.get(&symbol) {
                 if timestamp.elapsed() < self.quant_cache_ttl {
-                    eprintln!("✅ Quant cache hit for {}", symbol);
+                    eprintln!("[DEBUG] [enhanced_market] Quant cache hit for {}", symbol);
                     return Ok(metrics.clone());
                 }
             }
@@ -297,7 +349,7 @@ impl EnhancedMarketDataService {
     pub async fn get_batch_quant_metrics(&self, symbols: Vec<String>) -> Vec<QuantMetrics> {
         use futures::stream::{self, StreamExt};
         
-        eprintln!("📊 Getting quant metrics for {} symbols...", symbols.len());
+        eprintln!("[DEBUG] [enhanced_market] Getting quant metrics for {} symbols...", symbols.len());
         
         // Process symbols in parallel for faster response
         let results: Vec<QuantMetrics> = stream::iter(symbols.clone())
@@ -306,16 +358,16 @@ impl EnhancedMarketDataService {
                 for attempt in 1..=2 {
                     match self.get_quant_metrics(&symbol).await {
                         Ok(metrics) => {
-                            eprintln!("✅ Got metrics for {}", symbol);
+                            eprintln!("[DEBUG] [enhanced_market] Got metrics for {}", symbol);
                             return metrics;
                         },
                         Err(e) => {
                             if attempt == 1 {
-                                eprintln!("⚠️ Retry {}: Failed to get metrics for {}: {}", attempt, symbol, e);
+                                eprintln!("[WARN] [enhanced_market] Retry {}: Failed to get metrics for {}: {}", attempt, symbol, e);
                                 // Small delay before retry
                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                             } else {
-                                eprintln!("❌ Failed to get quant metrics for {} after {} attempts: {}", symbol, attempt, e);
+                                eprintln!("[ERROR] [enhanced_market] Failed to get quant metrics for {} after {} attempts: {}", symbol, attempt, e);
                             }
                         }
                     }
@@ -338,7 +390,7 @@ impl EnhancedMarketDataService {
             .await;
         
         let successful = results.iter().filter(|m| m.signal != "INSUFFICIENT DATA").count();
-        eprintln!("📊 Batch quant metrics complete: {}/{} successful", successful, symbols.len());
+        eprintln!("[DEBUG] [enhanced_market] Batch quant metrics complete: {}/{} successful", successful, symbols.len());
         
         results
     }
@@ -418,12 +470,12 @@ impl EnhancedMarketDataService {
 
     /// Prefetch data for symbols (background loading)
     pub async fn prefetch_symbols(&self, symbols: Vec<String>) {
-        eprintln!("🚀 Prefetching {} symbols...", symbols.len());
+        eprintln!("[INFO] [enhanced_market] Prefetching {} symbols...", symbols.len());
         
         // Fetch all data in background
         let _ = self.get_batch_prices(symbols.clone()).await;
         
-        eprintln!("✅ Prefetch complete for {} symbols", symbols.len());
+        eprintln!("[DEBUG] [enhanced_market] Prefetch complete for {} symbols", symbols.len());
     }
 }
 

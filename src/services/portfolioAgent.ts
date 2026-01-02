@@ -114,7 +114,7 @@ class PortfolioAgentService {
   private vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
 
   async generatePortfolio(userPrompt: string): Promise<GeneratedPortfolio> {
-    console.log('🚀 Starting expert portfolio generation for:', userPrompt);
+    console.log('[INFO] Starting expert portfolio generation for:', userPrompt);
 
     // Single AI call with comprehensive prompt - no separate intent analysis
     const portfolioStructure = await this.generatePortfolioStructureOptimized(userPrompt);
@@ -126,7 +126,7 @@ class PortfolioAgentService {
 
     // Fast optimization (no AI call needed)
     const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
-    console.log('✅ Optimized portfolio:', optimizedPortfolio);
+    console.log('[INFO] Optimized portfolio:', optimizedPortfolio);
 
     return optimizedPortfolio;
   }
@@ -261,7 +261,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         } catch (error: any) {
           // If JSON mode fails (not supported by model), retry without it
           if (error.message?.includes('response_format') || error.message?.includes('json_object')) {
-            console.log('⚠️ Model does not support JSON mode, retrying without it...');
+            console.warn('[WARN] Model does not support JSON mode, retrying without it...');
             response = await openRouterService.chat(messages, this.vibeModel, {
               temperature: 0.7,
               max_tokens: 4000
@@ -344,18 +344,18 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         }
         
         if (Math.abs(totalAllocation - 100) > 1) {
-          console.log(`⚠️ Normalizing allocations from ${totalAllocation}% to 100%`);
+          console.log(`Normalizing allocations from ${totalAllocation}% to 100%`);
           portfolio.assets = portfolio.assets.map((asset: any) => ({
             ...asset,
             allocation: parseFloat(((asset.allocation / totalAllocation) * 100).toFixed(2))
           }));
         }
 
-        console.log(`✅ Successfully parsed portfolio with ${portfolio.assets.length} assets`);
+        console.log(`Successfully parsed portfolio with ${portfolio.assets.length} assets`);
         return portfolio;
         
       } catch (error) {
-        console.error(`❌ Attempt ${attempts} failed:`, error);
+        console.error(`Attempt ${attempts} failed:`, error);
         
         if (attempts >= maxAttempts) {
           throw new Error(
@@ -428,7 +428,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     console.log('📈 Fetching market data...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
-    console.log(`📊 Processing ${symbols.length} symbols:`, symbols);
+    console.log(`Processing ${symbols.length} symbols:`, symbols);
     
     try {
       // STEP 1: Backend fetches prices and quant metrics (uses its own rate limiting)
@@ -438,7 +438,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         marketDataService.getCurrentPricesBatch(symbols),
         marketDataService.getQuantMetricsBatch(symbols),
       ]);
-      console.log(`✅ Backend data: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} metrics`);
+      console.log(`Backend data: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} metrics`);
 
       // STEP 2: Frontend fetches additional data (fundamentals, sentiment, analyst)
       // These use the global rate limiter and are fetched in background
@@ -460,7 +460,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         })
       ]);
       
-      console.log(`✅ Additional data: ${Object.keys(fundamentalsMap).length} fundamentals, ${Object.keys(sentimentMap).length} sentiment, ${Object.keys(analystMap).length} analyst`);
+      console.log(`Additional data: ${Object.keys(fundamentalsMap).length} fundamentals, ${Object.keys(sentimentMap).length} sentiment, ${Object.keys(analystMap).length} analyst`);
 
       // STEP 3: Skip market insights for now to avoid rate limits
       // Market insights will be fetched on-demand in a future update
@@ -487,18 +487,18 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         }
       }
       */
-      console.log(`✅ Market insights: disabled for rate limit protection`);
+      console.log(`Market insights: disabled for rate limit protection`);
       
       // Verify data completeness - but allow partial data
       const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined && p > 0).length;
       const validMetrics = quantMetricsArray.filter(m => m.signal !== 'INSUFFICIENT DATA').length;
       
-      console.log(`📊 Data quality: ${validPrices}/${symbols.length} prices, ${validMetrics}/${symbols.length} metrics`);
+      console.log(`Data quality: ${validPrices}/${symbols.length} prices, ${validMetrics}/${symbols.length} metrics`);
       
       // Only fail if we have ZERO data - otherwise proceed with partial data
       if (validPrices === 0 && Object.keys(fundamentalsMap).length === 0) {
         // Try one more time with a longer delay
-        console.warn('⚠️ No data received, retrying with longer delay...');
+        console.warn('[WARN] No data received, retrying with longer delay...');
         await new Promise(resolve => setTimeout(resolve, 5000));
         
         // Re-fetch just prices from frontend
@@ -525,11 +525,11 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         const insights = insightsMap[asset.symbol];
         
         if (!price) {
-          console.warn(`⚠️ Missing price for ${asset.symbol}`);
+          console.warn(`Missing price for ${asset.symbol}`);
         }
         
         if (!fundamentals) {
-          console.warn(`⚠️ Missing fundamentals for ${asset.symbol}`);
+          console.warn(`Missing fundamentals for ${asset.symbol}`);
         }
         
         // Calculate upside to target price
@@ -563,7 +563,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         };
         
         if (!metrics || metrics.signal === 'INSUFFICIENT DATA') {
-          console.warn(`⚠️ Insufficient metrics for ${asset.symbol}`);
+          console.warn(`Insufficient metrics for ${asset.symbol}`);
           return {
             ...baseAsset,
             technicalSignal: 'Data pending',
@@ -625,15 +625,15 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         a.quantMetrics?.recommendation !== 'Data pending' &&
         a.fundamentals
       ).length;
-      console.log(`✅ COMPLETE: ${fullyEnriched}/${symbols.length} assets fully enriched with all data`);
+      console.log(`COMPLETE: ${fullyEnriched}/${symbols.length} assets fully enriched with all data`);
       
       if (fullyEnriched < symbols.length * 0.5) {
-        console.warn(`⚠️ WARNING: Only ${fullyEnriched}/${symbols.length} assets have complete data`);
+        console.warn(`WARNING: Only ${fullyEnriched}/${symbols.length} assets have complete data`);
       }
       
       return { ...portfolio, assets: enrichedAssets };
     } catch (error) {
-      console.error('❌ CRITICAL: Market data enrichment failed:', error);
+      console.error('[ERROR] CRITICAL: Market data enrichment failed:', error);
       throw new Error(`Failed to fetch market data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

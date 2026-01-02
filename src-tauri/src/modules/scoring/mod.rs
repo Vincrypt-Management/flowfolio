@@ -187,13 +187,13 @@ impl ScoringEngine {
         
         // Interpretation
         if total_score >= 80.0 {
-            parts.push("⭐ Strong candidate across all factors".to_string());
+            parts.push("Strong candidate across all factors".to_string());
         } else if total_score >= 60.0 {
-            parts.push("✓ Solid candidate with good overall profile".to_string());
+            parts.push("Solid candidate with good overall profile".to_string());
         } else if total_score >= 40.0 {
-            parts.push("○ Mixed signals, review specific factors".to_string());
+            parts.push("Mixed signals - review specific factors".to_string());
         } else {
-            parts.push("⚠ Below average on key metrics".to_string());
+            parts.push("Below average on key metrics".to_string());
         }
         
         parts.join("\n")

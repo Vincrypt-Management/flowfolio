@@ -1,5 +1,19 @@
+// FlowFolio - Industrial Grade Investment Management
+// 
+// Architecture:
+// - core/     : Configuration, errors, logging
+// - infrastructure/: HTTP, cache, database, resilience
+// - domain/   : Business logic (market, portfolio, analysis)
+// - api/      : Tauri command handlers
+// - modules/  : Legacy modules (being migrated)
+// - services/ : Service layer
+
 mod modules;
 mod services;
+mod core;
+mod infrastructure;
+mod domain;
+mod api;
 
 use modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
@@ -388,8 +402,37 @@ async fn test_data_connection() -> Result<serde_json::Value, String> {
     Ok(result)
 }
 
+/// Get detailed health report with metrics
+#[tauri::command]
+async fn get_health_report() -> Result<serde_json::Value, String> {
+    use crate::modules::health::HEALTH_MONITOR;
+    
+    let report = HEALTH_MONITOR.get_health_report();
+    serde_json::to_value(report).map_err(|e| e.to_string())
+}
+
+/// Get provider-specific metrics
+#[tauri::command]
+async fn get_provider_metrics() -> Result<serde_json::Value, String> {
+    use crate::modules::health::HEALTH_MONITOR;
+    
+    let metrics = HEALTH_MONITOR.get_provider_metrics();
+    serde_json::to_value(metrics).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging for observability
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[INFO] [app] FlowFolio starting in DEBUG mode");
+        eprintln!("[INFO] [app] Industrial-grade features enabled:");
+        eprintln!("[INFO] [app]   - Circuit breaker pattern");
+        eprintln!("[INFO] [app]   - Retry with exponential backoff");
+        eprintln!("[INFO] [app]   - Health monitoring and metrics");
+        eprintln!("[INFO] [app]   - Multi-tier caching");
+    }
+    
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -425,6 +468,8 @@ pub fn run() {
             clear_all_caches,
             prefetch_symbols,
             test_data_connection,
+            get_health_report,
+            get_provider_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

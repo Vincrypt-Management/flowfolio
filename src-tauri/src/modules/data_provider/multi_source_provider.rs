@@ -57,15 +57,20 @@ pub struct ProviderConfig {
 /// Multi-source data provider with intelligent failover
 pub struct MultiSourceProvider {
     client: Client,
-    // API Keys
-    alpaca_key: Option<String>,
+    // API Keys (prioritizing free tier providers)
+    // Top tier - Unlimited/No key required
+    alpaca_key: Option<String>,      // Unlimited free basic data
     alpaca_secret: Option<String>,
-    polygon_key: Option<String>,
-    alphavantage_key: Option<String>,
-    finnhub_key: Option<String>,
-    fmp_key: Option<String>,
-    tiingo_key: Option<String>,
-    twelve_data_key: Option<String>,
+    
+    // High tier - Generous free limits
+    finnhub_key: Option<String>,     // 60 calls/min free
+    tiingo_key: Option<String>,      // 500 calls/hour free
+    twelve_data_key: Option<String>, // 800 calls/day free
+    fmp_key: Option<String>,         // 250 calls/day free
+    
+    // Lower tier - Has paid tiers (use as fallback only)
+    alphavantage_key: Option<String>, // 5 calls/min free, but has paid plans
+    polygon_key: Option<String>,      // 5 calls/min free, but has paid plans
     
     // In-memory cache with TTL
     quote_cache: Arc<DashMap<String, CacheEntry<StockQuote>>>,
@@ -94,15 +99,16 @@ impl MultiSourceProvider {
         let tiingo_key = std::env::var("VITE_TIINGO_API_KEY").ok();
         let twelve_data_key = std::env::var("VITE_TWELVE_DATA_API_KEY").ok();
         
-        eprintln!("🔑 Multi-Source Provider - API Keys status:");
-        eprintln!("   Alpaca: {}", if alpaca_key.is_some() && alpaca_secret.is_some() { "✅" } else { "❌" });
-        eprintln!("   Polygon: {}", if polygon_key.is_some() { "✅" } else { "❌" });
-        eprintln!("   Alpha Vantage: {}", if alphavantage_key.is_some() { "✅" } else { "❌" });
-        eprintln!("   Finnhub: {}", if finnhub_key.is_some() { "✅" } else { "❌" });
-        eprintln!("   FMP: {}", if fmp_key.is_some() { "✅" } else { "❌" });
-        eprintln!("   Tiingo: {}", if tiingo_key.is_some() { "✅" } else { "❌" });
-        eprintln!("   Twelve Data: {}", if twelve_data_key.is_some() { "✅" } else { "❌" });
-        eprintln!("   Yahoo Finance: ✅ (no key required)");
+        eprintln!("[INFO] [data_provider] Multi-Source Provider initialized");
+        eprintln!("[INFO] [data_provider] API Keys status:");
+        eprintln!("[INFO] [data_provider]   Alpaca: {}", if alpaca_key.is_some() && alpaca_secret.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   Polygon: {}", if polygon_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   Alpha Vantage: {}", if alphavantage_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   Finnhub: {}", if finnhub_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   FMP: {}", if fmp_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   Tiingo: {}", if tiingo_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   Twelve Data: {}", if twelve_data_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [data_provider]   Yahoo Finance: available (no key required)");
 
         Self {
             client: Client::builder()
@@ -123,8 +129,8 @@ impl MultiSourceProvider {
             historical_cache: Arc::new(DashMap::new()),
             rate_limits: Arc::new(DashMap::new()),
             provider_health: Arc::new(DashMap::new()),
-            quote_cache_ttl: Duration::from_secs(60), // 1 minute for quotes
-            historical_cache_ttl: Duration::from_secs(3600), // 1 hour for historical
+            quote_cache_ttl: Duration::from_secs(120), // 2 minutes for quotes (reduced API calls)
+            historical_cache_ttl: Duration::from_secs(7200), // 2 hours for historical (market data doesn't change)
         }
     }
 
@@ -183,22 +189,43 @@ impl MultiSourceProvider {
     }
 
     /// Get ordered list of providers based on health and priority
+    /// Prioritizes free providers with best rate limits
     fn get_provider_order(&self) -> Vec<&'static str> {
-        let mut providers: Vec<(&'static str, u32)> = vec![
-            ("alpaca", self.get_provider_health("alpaca")),
-            ("finnhub", self.get_provider_health("finnhub")),
-            ("fmp", self.get_provider_health("fmp")),
-            ("tiingo", self.get_provider_health("tiingo")),
-            ("twelve_data", self.get_provider_health("twelve_data")),
-            ("polygon", self.get_provider_health("polygon")),
-            ("alphavantage", self.get_provider_health("alphavantage")),
-            ("yahoo", self.get_provider_health("yahoo")),
+        // Priority tiers (higher tier = better free limits)
+        let tier_priority = |name: &str| -> u8 {
+            match name {
+                "alpaca" => 10,      // Unlimited free tier
+                "yahoo" => 9,        // No key required
+                "tiingo" => 8,       // 500/hour free
+                "finnhub" => 7,      // 60/min free
+                "twelve_data" => 6,  // 800/day free
+                "fmp" => 5,          // 250/day free
+                "alphavantage" => 2, // 5/min free (has paid tiers)
+                "polygon" => 1,      // 5/min free (has paid tiers)
+                _ => 0,
+            }
+        };
+        
+        let mut providers: Vec<(&'static str, u32, u8)> = vec![
+            ("alpaca", self.get_provider_health("alpaca"), tier_priority("alpaca")),
+            ("yahoo", self.get_provider_health("yahoo"), tier_priority("yahoo")),
+            ("tiingo", self.get_provider_health("tiingo"), tier_priority("tiingo")),
+            ("finnhub", self.get_provider_health("finnhub"), tier_priority("finnhub")),
+            ("twelve_data", self.get_provider_health("twelve_data"), tier_priority("twelve_data")),
+            ("fmp", self.get_provider_health("fmp"), tier_priority("fmp")),
+            ("alphavantage", self.get_provider_health("alphavantage"), tier_priority("alphavantage")),
+            ("polygon", self.get_provider_health("polygon"), tier_priority("polygon")),
         ];
         
-        // Sort by health score (descending)
-        providers.sort_by(|a, b| b.1.cmp(&a.1));
+        // Sort by tier first, then by health score
+        providers.sort_by(|a, b| {
+            match b.2.cmp(&a.2) {
+                std::cmp::Ordering::Equal => b.1.cmp(&a.1),
+                other => other,
+            }
+        });
         
-        providers.into_iter().map(|(name, _)| name).collect()
+        providers.into_iter().map(|(name, _, _)| name).collect()
     }
 
     // ================== PROVIDER IMPLEMENTATIONS ==================
@@ -292,11 +319,12 @@ impl MultiSourceProvider {
         })
     }
 
-    /// Finnhub API (60 calls/min free tier)
+    /// Finnhub API (60 calls/min free tier - optimize to stay within limits)
     async fn fetch_from_finnhub(&self, symbol: &str) -> Result<MarketDataResult, String> {
         let api_key = self.finnhub_key.as_ref().ok_or("Finnhub API key not configured")?;
 
-        if !self.check_rate_limit("finnhub", 60) {
+        // Conservative rate limit: 50/min to leave buffer
+        if !self.check_rate_limit("finnhub", 50) {
             return Err("Finnhub rate limit exceeded".to_string());
         }
 
@@ -463,11 +491,12 @@ impl MultiSourceProvider {
         })
     }
 
-    /// Tiingo API (500 calls/hour free tier)
+    /// Tiingo API (500 calls/hour free tier - optimize to stay within limits)
     async fn fetch_from_tiingo(&self, symbol: &str) -> Result<MarketDataResult, String> {
         let api_key = self.tiingo_key.as_ref().ok_or("Tiingo API key not configured")?;
 
-        if !self.check_rate_limit("tiingo", 8) { // 500/hour = ~8/min
+        // Conservative rate limit: 7/min (420/hour) to leave buffer
+        if !self.check_rate_limit("tiingo", 7) {
             return Err("Tiingo rate limit exceeded".to_string());
         }
 
@@ -631,11 +660,12 @@ impl MultiSourceProvider {
         })
     }
 
-    /// Polygon.io API (5 calls/min free tier)
+    /// Polygon.io API (5 calls/min free tier - AVOID unless necessary, has paid tiers)
     async fn fetch_from_polygon(&self, symbol: &str) -> Result<MarketDataResult, String> {
         let api_key = self.polygon_key.as_ref().ok_or("Polygon API key not configured")?;
 
-        if !self.check_rate_limit("polygon", 5) {
+        // Very conservative for free tier (4/min to leave buffer)
+        if !self.check_rate_limit("polygon", 4) {
             return Err("Polygon rate limit exceeded".to_string());
         }
 
@@ -715,10 +745,12 @@ impl MultiSourceProvider {
     }
 
     /// Alpha Vantage API (5 calls/min free tier)
+    /// Alpha Vantage API (5 calls/min free tier - AVOID unless necessary, has paid tiers)
     async fn fetch_from_alphavantage(&self, symbol: &str) -> Result<MarketDataResult, String> {
         let api_key = self.alphavantage_key.as_ref().ok_or("Alpha Vantage API key not configured")?;
 
-        if !self.check_rate_limit("alphavantage", 5) {
+        // Very conservative for free tier (4/min to leave buffer)
+        if !self.check_rate_limit("alphavantage", 4) {
             return Err("Alpha Vantage rate limit exceeded".to_string());
         }
 
@@ -815,7 +847,7 @@ impl MultiSourceProvider {
             symbol, start_time, end_time
         );
 
-        eprintln!("📊 Yahoo: Fetching {}...", symbol);
+        eprintln!("[DEBUG] [yahoo] Fetching data for symbol: {}", symbol);
 
         let response = self.client
             .get(&url)
@@ -960,7 +992,7 @@ impl MultiSourceProvider {
                 Err(e) => {
                     self.track_failure(provider);
                     last_error = format!("{}: {}", provider, e);
-                    eprintln!("⚠️ {} failed for {}: {}", provider, symbol, e);
+                    eprintln!("[WARN] [data_provider] Provider {} failed for {}: {}", provider, symbol, e);
                     continue;
                 }
             }

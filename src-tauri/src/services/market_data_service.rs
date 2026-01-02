@@ -23,10 +23,10 @@ impl MarketDataService {
         let polygon_key = std::env::var("VITE_POLYGON_API_KEY").ok();
         let alphavantage_key = std::env::var("VITE_ALPHAVANTAGE_API_KEY").ok();
         
-        eprintln!("🔑 API Keys status:");
-        eprintln!("   Polygon: {}", if polygon_key.is_some() { "✅ configured" } else { "❌ not found" });
-        eprintln!("   Alpha Vantage: {}", if alphavantage_key.is_some() { "✅ configured" } else { "❌ not found" });
-        eprintln!("   Alpaca: {}", if alpaca_key.is_some() && alpaca_secret.is_some() { "✅ configured" } else { "❌ not found" });
+        eprintln!("[INFO] [market_data] API Keys status:");
+        eprintln!("[INFO] [market_data]   Polygon: {}", if polygon_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [market_data]   Alpha Vantage: {}", if alphavantage_key.is_some() { "configured" } else { "not configured" });
+        eprintln!("[INFO] [market_data]   Alpaca: {}", if alpaca_key.is_some() && alpaca_secret.is_some() { "configured" } else { "not configured" });
         
         Self {
             client: Client::builder()
@@ -48,7 +48,7 @@ impl MarketDataService {
         {
             let cache = self.cache.read().await;
             if let Some(data) = cache.get(symbol) {
-                eprintln!("✅ Cache hit for {}", symbol);
+                eprintln!("[DEBUG] [market_data] Cache hit for symbol: {}", symbol);
                 return Ok(data.clone());
             }
         }
@@ -80,7 +80,7 @@ impl MarketDataService {
             match self.fetch_from_polygon(symbol).await {
                 Ok(data) => return Ok(data),
                 Err(e) => {
-                    eprintln!("⚠️ Polygon failed for {}: {}", symbol, e);
+                    eprintln!("[WARN] [market_data] Polygon provider failed for {}: {}", symbol, e);
                     errors.push(format!("Polygon: {}", e));
                 }
             }
@@ -91,7 +91,7 @@ impl MarketDataService {
             match self.fetch_from_alphavantage(symbol).await {
                 Ok(data) => return Ok(data),
                 Err(e) => {
-                    eprintln!("⚠️ Alpha Vantage failed for {}: {}", symbol, e);
+                    eprintln!("[WARN] [market_data] Alpha Vantage provider failed for {}: {}", symbol, e);
                     errors.push(format!("AlphaVantage: {}", e));
                 }
             }
@@ -102,7 +102,7 @@ impl MarketDataService {
             match self.fetch_from_alpaca(symbol).await {
                 Ok(data) => return Ok(data),
                 Err(e) => {
-                    eprintln!("⚠️ Alpaca failed for {}: {}", symbol, e);
+                    eprintln!("[WARN] [market_data] Alpaca provider failed for {}: {}", symbol, e);
                     errors.push(format!("Alpaca: {}", e));
                 }
             }
@@ -131,7 +131,7 @@ impl MarketDataService {
             symbol, start_date, end_date, api_key.trim()
         );
 
-        eprintln!("📊 Fetching {} from Polygon...", symbol);
+        eprintln!("[DEBUG] [market_data] Fetching {} from Polygon", symbol);
 
         let response = self.client
             .get(&url)
@@ -176,7 +176,7 @@ impl MarketDataService {
             return Err("Failed to parse Polygon data".to_string());
         }
 
-        eprintln!("✅ Polygon: Got {} days for {}", prices.len(), symbol);
+        eprintln!("[DEBUG] [market_data] Polygon returned {} days for {}", prices.len(), symbol);
         Ok(prices)
     }
 
@@ -189,7 +189,7 @@ impl MarketDataService {
             symbol, api_key.trim()
         );
 
-        eprintln!("📊 Fetching {} from Alpha Vantage...", symbol);
+        eprintln!("[DEBUG] [market_data] Fetching {} from Alpha Vantage", symbol);
 
         let response = self.client
             .get(&url)
@@ -238,7 +238,7 @@ impl MarketDataService {
             return Err("Failed to parse Alpha Vantage data".to_string());
         }
 
-        eprintln!("✅ Alpha Vantage: Got {} days for {}", prices.len(), symbol);
+        eprintln!("[DEBUG] [market_data] Alpha Vantage returned {} days for {}", prices.len(), symbol);
         Ok(prices)
     }
 
@@ -256,7 +256,7 @@ impl MarketDataService {
             symbol, start_date, end_date
         );
 
-        eprintln!("📊 Fetching {} from Alpaca (key: {}...)...", symbol, &api_key[..6.min(api_key.len())]);
+        eprintln!("[DEBUG] [market_data] Fetching {} from Alpaca", symbol);
 
         let response = self.client
             .get(&url)
@@ -300,7 +300,7 @@ impl MarketDataService {
             return Err("Failed to parse Alpaca bars data".to_string());
         }
 
-        eprintln!("✅ Alpaca: Got {} days of data for {}", prices.len(), symbol);
+        eprintln!("[DEBUG] [market_data] Alpaca returned {} days for {}", prices.len(), symbol);
         Ok(prices)
     }
 
@@ -312,7 +312,7 @@ impl MarketDataService {
             // Add delay between retries (exponential backoff)
             if attempt > 1 {
                 let delay_ms = 2000 * (1 << (attempt - 1)); // 4s, 8s
-                eprintln!("⏳ Yahoo retry {}/3, waiting {}ms...", attempt, delay_ms);
+                eprintln!("[DEBUG] [market_data] Yahoo retry {}/3, waiting {}ms", attempt, delay_ms);
                 tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             }
 
@@ -320,7 +320,7 @@ impl MarketDataService {
                 Ok(data) => return Ok(data),
                 Err(e) => {
                     last_error = e.clone();
-                    eprintln!("⚠️ Yahoo attempt {} failed for {}: {}", attempt, symbol, e);
+                    eprintln!("[WARN] [market_data] Yahoo attempt {} failed for {}: {}", attempt, symbol, e);
                 }
             }
         }
@@ -479,7 +479,7 @@ impl MarketDataService {
         {
             let price_cache = self.price_cache.read().await;
             if let Some(&price) = price_cache.get(symbol) {
-                eprintln!("✅ Price cache hit for {} = ${:.2}", symbol, price);
+                eprintln!("[DEBUG] [market_data] Price cache hit for {} = ${:.2}", symbol, price);
                 return Ok(price);
             }
         }
@@ -507,7 +507,7 @@ impl MarketDataService {
             }
         }
         
-        eprintln!("📊 Price cache: {}/{} symbols already cached", results.len(), symbols.len());
+        eprintln!("[DEBUG] [market_data] Price cache: {}/{} symbols cached", results.len(), symbols.len());
         
         // Second pass: fetch only missing symbols (will populate cache via historical data)
         let missing: Vec<_> = symbols.iter()

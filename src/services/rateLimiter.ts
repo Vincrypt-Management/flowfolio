@@ -1,14 +1,16 @@
-// Global Rate Limiter for Yahoo Finance API
-// Ensures all services share the same rate limit
+// Global Rate Limiter for Free-Tier API providers
+// Ensures all services share the same rate limit for APIs with strict limits
+// OPTIMIZED: Conservative limits to stay within free tiers
 
 class GlobalRateLimiter {
   private lastRequestTime: number = 0;
   private requestQueue: Array<() => void> = [];
   private isProcessing: boolean = false;
   
-  // Yahoo Finance informal limit: ~2000 requests/hour
-  // Using 5 seconds to be very safe and allow time for backend requests too
-  private readonly MIN_INTERVAL = 5000; // 5 seconds between requests
+  // Optimized for free tier APIs (especially Alpha Vantage @ 5/min)
+  // Using 12 seconds between requests = max 5/min (conservative)
+  // Yahoo Finance informal limit: ~2000 requests/hour (very generous)
+  private readonly MIN_INTERVAL = 12000; // 12 seconds between requests (reduced API load)
   
   async waitForSlot(): Promise<void> {
     return new Promise((resolve) => {
@@ -28,7 +30,7 @@ class GlobalRateLimiter {
       
       if (timeSinceLastRequest < this.MIN_INTERVAL) {
         const waitTime = this.MIN_INTERVAL - timeSinceLastRequest;
-        console.log(`⏳ Rate limit: waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
+        console.log(`⏳ Rate limit (free tier): waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
       

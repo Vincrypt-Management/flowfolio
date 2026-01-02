@@ -11,3 +11,9 @@ pub mod security;
 pub mod cache;
 pub mod worker_pool;
 pub mod quant_analysis;
+
+// Industrial-Grade Modules
+pub mod error;
+pub mod circuit_breaker;
+pub mod retry;
+pub mod health;
