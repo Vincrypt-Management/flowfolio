@@ -135,16 +135,37 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
     const symbols = assets.map(a => a.symbol);
     const matrix: number[][] = [];
     
+    // Check if we have enough data for correlation calculation
+    const assetsWithReturns = assets.filter(a => a.dailyReturns && a.dailyReturns.length >= 10);
+    const hasRealData = assetsWithReturns.length >= 2;
+    
     for (let i = 0; i < assets.length; i++) {
       matrix[i] = [];
       for (let j = 0; j < assets.length; j++) {
         if (i === j) {
           matrix[i][j] = 1;
-        } else if (assets[i].dailyReturns && assets[j].dailyReturns) {
-          matrix[i][j] = calculateCorrelation(assets[i].dailyReturns!, assets[j].dailyReturns!);
         } else {
-          // Generate realistic correlations if no data
-          matrix[i][j] = 0.3 + Math.random() * 0.4;
+          const iReturns = assets[i].dailyReturns;
+          const jReturns = assets[j].dailyReturns;
+          
+          if (
+            iReturns && 
+            jReturns && 
+            iReturns.length >= 10 && 
+            jReturns.length >= 10
+          ) {
+            const corr = calculateCorrelation(iReturns, jReturns);
+            // Only use correlation if it's valid
+            matrix[i][j] = isNaN(corr) || !isFinite(corr) ? 0.5 : corr;
+          } else if (!hasRealData) {
+            // Generate sector-based correlations for display purposes when no real data
+            // Same sector = higher correlation, different sector = lower
+            const sameSector = getSectorSimilarity(assets[i].symbol, assets[j].symbol);
+            matrix[i][j] = sameSector ? 0.6 + Math.random() * 0.2 : 0.2 + Math.random() * 0.3;
+          } else {
+            // Mixed: some have data, some don't - use moderate correlation
+            matrix[i][j] = 0.4;
+          }
         }
       }
     }
@@ -156,13 +177,13 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
   const returnsDistribution = useMemo<ReturnsDistribution[]>(() => {
     const allReturns: number[] = [];
     assets.forEach(a => {
-      if (a.dailyReturns) {
+      if (a.dailyReturns && a.dailyReturns.length > 0) {
         allReturns.push(...a.dailyReturns);
       }
     });
     
-    if (allReturns.length === 0) {
-      // Generate sample distribution
+    if (allReturns.length < 10) {
+      // Generate sample distribution when insufficient data
       return generateSampleDistribution();
     }
     
@@ -312,7 +333,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card distribution-chart">
           <h3><BarChart3 size={18} /> Returns Distribution</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={returnsDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="bin" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
@@ -348,7 +369,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card drawdown-chart">
           <h3><TrendingDown size={18} /> Underwater (Drawdown) Chart</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={320}>
               <AreaChart data={drawdownData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
@@ -393,7 +414,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card scatter-chart">
           <h3><Target size={18} /> Risk-Return Profile</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={320}>
               <ScatterChart>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
@@ -456,10 +477,10 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card radar-chart">
           <h3><Gauge size={18} /> Multi-Factor Comparison</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <ResponsiveContainer width="100%" height={400}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="var(--border)" />
-                <PolarAngleAxis dataKey="metric" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
+                <PolarAngleAxis dataKey="metric" stroke="var(--text-muted)" tick={{ fontSize: 12 }} />
                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
                 {assetMetrics.slice(0, 5).map((asset, index) => (
                   <Radar
@@ -647,25 +668,65 @@ function CorrelationHeatmap({ data }: { data: CorrelationData }) {
 // Helper Functions
 function calculateCorrelation(x: number[], y: number[]): number {
   const n = Math.min(x.length, y.length);
-  if (n === 0) return 0;
+  if (n < 5) return 0; // Need at least 5 data points for meaningful correlation
   
-  const xMean = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
-  const yMean = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
+  // Filter out invalid values
+  const validPairs: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    if (isFinite(x[i]) && isFinite(y[i]) && !isNaN(x[i]) && !isNaN(y[i])) {
+      validPairs.push([x[i], y[i]]);
+    }
+  }
+  
+  if (validPairs.length < 5) return 0;
+  
+  const validX = validPairs.map(p => p[0]);
+  const validY = validPairs.map(p => p[1]);
+  const validN = validPairs.length;
+  
+  const xMean = validX.reduce((a, b) => a + b, 0) / validN;
+  const yMean = validY.reduce((a, b) => a + b, 0) / validN;
   
   let numerator = 0;
   let xSumSq = 0;
   let ySumSq = 0;
   
-  for (let i = 0; i < n; i++) {
-    const xDiff = x[i] - xMean;
-    const yDiff = y[i] - yMean;
+  for (let i = 0; i < validN; i++) {
+    const xDiff = validX[i] - xMean;
+    const yDiff = validY[i] - yMean;
     numerator += xDiff * yDiff;
     xSumSq += xDiff * xDiff;
     ySumSq += yDiff * yDiff;
   }
   
+  // Check for zero variance (all values are the same)
+  if (xSumSq < 1e-10 || ySumSq < 1e-10) return 0;
+  
   const denominator = Math.sqrt(xSumSq * ySumSq);
-  return denominator === 0 ? 0 : numerator / denominator;
+  if (denominator < 1e-10) return 0;
+  
+  const corr = numerator / denominator;
+  
+  // Clamp to [-1, 1] range
+  return Math.max(-1, Math.min(1, corr));
+}
+
+// Helper to estimate sector similarity for fallback correlations
+function getSectorSimilarity(symbol1: string, symbol2: string): boolean {
+  // Tech stocks tend to correlate
+  const techStocks = ['AAPL', 'MSFT', 'GOOGL', 'GOOG', 'META', 'AMZN', 'NVDA', 'AMD', 'INTC', 'CRM', 'ADBE', 'ORCL'];
+  const financeStocks = ['JPM', 'BAC', 'GS', 'MS', 'WFC', 'C', 'V', 'MA', 'AXP', 'BLK'];
+  const healthStocks = ['JNJ', 'UNH', 'PFE', 'MRK', 'ABBV', 'LLY', 'BMY', 'TMO', 'ABT'];
+  const energyStocks = ['XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'PSX', 'VLO'];
+  
+  const sectors = [techStocks, financeStocks, healthStocks, energyStocks];
+  
+  for (const sector of sectors) {
+    if (sector.includes(symbol1) && sector.includes(symbol2)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function generateSampleDistribution(): ReturnsDistribution[] {
@@ -681,22 +742,38 @@ function generateSampleDistribution(): ReturnsDistribution[] {
 }
 
 function calculateDistribution(returns: number[]): ReturnsDistribution[] {
-  const min = Math.min(...returns);
-  const max = Math.max(...returns);
+  // Filter out invalid values
+  const validReturns = returns.filter(r => isFinite(r) && !isNaN(r));
+  if (validReturns.length < 10) return generateSampleDistribution();
+  
+  const min = Math.min(...validReturns);
+  const max = Math.max(...validReturns);
+  
+  // Prevent division by zero if all returns are the same
+  if (Math.abs(max - min) < 1e-10) {
+    return generateSampleDistribution();
+  }
+  
   const binCount = 15;
   const binSize = (max - min) / binCount;
   
   const bins: ReturnsDistribution[] = [];
-  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-  const stdDev = Math.sqrt(returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length);
+  const mean = validReturns.reduce((a, b) => a + b, 0) / validReturns.length;
+  const variance = validReturns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / validReturns.length;
+  const stdDev = Math.sqrt(variance);
+  
+  // Handle zero standard deviation
+  if (stdDev < 1e-10) {
+    return generateSampleDistribution();
+  }
   
   for (let i = 0; i < binCount; i++) {
     const binStart = min + i * binSize;
     const binEnd = binStart + binSize;
     const binMid = (binStart + binEnd) / 2;
     
-    const frequency = returns.filter(r => r >= binStart && r < binEnd).length;
-    const normalCurve = (returns.length * binSize / (stdDev * Math.sqrt(2 * Math.PI))) *
+    const frequency = validReturns.filter(r => r >= binStart && r < binEnd).length;
+    const normalCurve = (validReturns.length * binSize / (stdDev * Math.sqrt(2 * Math.PI))) *
       Math.exp(-Math.pow(binMid - mean, 2) / (2 * stdDev * stdDev));
     
     bins.push({

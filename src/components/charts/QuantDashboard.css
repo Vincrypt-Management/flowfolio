@@ -4,8 +4,10 @@
  */
 
 .quant-dashboard {
-  padding: 1.5rem;
+  padding: 2rem;
   background: var(--bg-main);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -31,17 +33,17 @@
 .metrics-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1400px) {
   .metrics-summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .metrics-summary-grid {
     grid-template-columns: 1fr;
   }
@@ -52,11 +54,12 @@
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  padding: 1.25rem;
+  padding: 1.5rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   transition: all 0.2s ease;
+  min-width: 0;
 }
 
 .metric-card:hover {
@@ -118,13 +121,15 @@
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  gap: 2rem;
+  margin-bottom: 2.5rem;
+  width: 100%;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   .charts-grid {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 }
 
@@ -134,22 +139,24 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  min-width: 0;
 }
 
 .chart-card h3 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-main);
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-main);
 }
 
 .chart-content {
-  padding: 1rem;
+  padding: 1.5rem;
+  min-height: 300px;
 }
 
 .chart-insight {
@@ -177,24 +184,28 @@
 
 /* Correlation Heatmap */
 .correlation-heatmap {
-  padding: 0.5rem;
+  padding: 1rem;
+  overflow-x: auto;
 }
 
 .heatmap-header,
 .heatmap-row {
   display: flex;
+  min-width: fit-content;
 }
 
 .heatmap-cell {
-  width: 60px;
-  height: 40px;
+  min-width: 70px;
+  width: 70px;
+  height: 45px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 500;
   border-radius: 4px;
   margin: 2px;
+  flex-shrink: 0;
 }
 
 .heatmap-cell.empty {
@@ -274,24 +285,19 @@
 
 /* Risk Metrics Table */
 .metrics-table-card {
-  grid-column: span 2;
-}
-
-@media (max-width: 1024px) {
-  .metrics-table-card {
-    grid-column: span 1;
-  }
+  grid-column: 1 / -1;
 }
 
 .metrics-table-container {
   overflow-x: auto;
-  padding: 1rem;
+  padding: 1.5rem;
 }
 
 .risk-metrics-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 
 .risk-metrics-table th,
@@ -341,13 +347,11 @@
 
 /* Radar Chart Card */
 .radar-chart {
-  grid-column: span 2;
+  grid-column: 1 / -1;
 }
 
-@media (max-width: 1024px) {
-  .radar-chart {
-    grid-column: span 1;
-  }
+.radar-chart .chart-content {
+  min-height: 400px;
 }
 
 /* Methodology Section */
@@ -355,39 +359,39 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
+  padding: 2rem;
 }
 
 .methodology-section h4 {
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-main);
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .methodology-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   .methodology-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .methodology-grid {
     grid-template-columns: 1fr;
   }
 }
 
 .methodology-item {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
-  line-height: 1.5;
-  padding: 0.75rem;
+  line-height: 1.6;
+  padding: 1rem;
   background: var(--bg-main);
   border-radius: var(--radius-md);
 }

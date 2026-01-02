@@ -69,7 +69,6 @@ interface RebalanceAction {
 }
 
 export function PortfolioTab() {
-  // @ts-ignore - setPortfolio will be used for future functionality
   const [portfolio, setPortfolio] = useState<Portfolio>({
     name: "My Portfolio",
     holdings: [],
@@ -82,22 +81,152 @@ export function PortfolioTab() {
   const [rebalanceReport, setRebalanceReport] = useState<RebalanceReport | null>(null);
   const [contribution, setContribution] = useState<string>("1000");
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Add holding form state
+  const [newSymbol, setNewSymbol] = useState("");
+  const [newShares, setNewShares] = useState("");
+  const [newCostBasis, setNewCostBasis] = useState("");
+  const [newTargetPct, setNewTargetPct] = useState("");
+  const [cashAmount, setCashAmount] = useState("");
 
-  async function generateBuyList() {
-    if (!portfolio || !allocationPlan) {
-      alert("Please create a portfolio and allocation plan first");
+  async function addHolding() {
+    if (!newSymbol || !newShares) {
+      alert("Please enter symbol and shares");
       return;
     }
 
     setIsLoading(true);
     try {
-      const prices: Record<string, number> = {
-        "AAPL": 180.0,
-        "MSFT": 380.0,
-        "GOOGL": 150.0,
-        "AMZN": 180.0,
-        "META": 500.0,
+      // Fetch current price
+      const price = await invoke<number>("get_current_price_single", { symbol: newSymbol.toUpperCase() });
+      
+      const shares = parseFloat(newShares);
+      const costBasis = newCostBasis ? parseFloat(newCostBasis) : price;
+      const targetPct = newTargetPct ? parseFloat(newTargetPct) : 0;
+      
+      const newHolding: Holding = {
+        symbol: newSymbol.toUpperCase(),
+        shares,
+        cost_basis: costBasis,
+        current_price: price,
+        market_value: shares * price,
+        target_pct: targetPct,
+        current_pct: 0,
+        drift_pct: 0,
       };
+
+      const updatedHoldings = [...portfolio.holdings, newHolding];
+      const totalValue = updatedHoldings.reduce((sum, h) => sum + h.market_value, 0) + portfolio.cash;
+      
+      // Recalculate percentages
+      const holdingsWithPct = updatedHoldings.map(h => ({
+        ...h,
+        current_pct: (h.market_value / totalValue) * 100,
+        drift_pct: ((h.market_value / totalValue) * 100) - h.target_pct,
+      }));
+
+      setPortfolio({
+        ...portfolio,
+        holdings: holdingsWithPct,
+        total_value: totalValue,
+        last_updated: new Date().toISOString(),
+      });
+
+      // Clear form
+      setNewSymbol("");
+      setNewShares("");
+      setNewCostBasis("");
+      setNewTargetPct("");
+    } catch (error) {
+      alert("Error adding holding: " + error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function updatePrices() {
+    if (portfolio.holdings.length === 0) return;
+
+    setIsLoading(true);
+    try {
+      const symbols = portfolio.holdings.map(h => h.symbol);
+      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
+      
+      const updatedHoldings = portfolio.holdings.map(h => ({
+        ...h,
+        current_price: prices[h.symbol] || h.current_price,
+        market_value: h.shares * (prices[h.symbol] || h.current_price),
+      }));
+
+      const totalValue = updatedHoldings.reduce((sum, h) => sum + h.market_value, 0) + portfolio.cash;
+      
+      const holdingsWithPct = updatedHoldings.map(h => ({
+        ...h,
+        current_pct: (h.market_value / totalValue) * 100,
+        drift_pct: ((h.market_value / totalValue) * 100) - h.target_pct,
+      }));
+
+      setPortfolio({
+        ...portfolio,
+        holdings: holdingsWithPct,
+        total_value: totalValue,
+        last_updated: new Date().toISOString(),
+      });
+    } catch (error) {
+      alert("Error updating prices: " + error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function removeHolding(symbol: string) {
+    const updatedHoldings = portfolio.holdings.filter(h => h.symbol !== symbol);
+    const totalValue = updatedHoldings.reduce((sum, h) => sum + h.market_value, 0) + portfolio.cash;
+    
+    const holdingsWithPct = updatedHoldings.map(h => ({
+      ...h,
+      current_pct: totalValue > 0 ? (h.market_value / totalValue) * 100 : 0,
+      drift_pct: totalValue > 0 ? ((h.market_value / totalValue) * 100) - h.target_pct : 0,
+    }));
+
+    setPortfolio({
+      ...portfolio,
+      holdings: holdingsWithPct,
+      total_value: totalValue,
+      last_updated: new Date().toISOString(),
+    });
+  }
+
+  function updateCash() {
+    const cash = parseFloat(cashAmount) || 0;
+    const totalValue = portfolio.holdings.reduce((sum, h) => sum + h.market_value, 0) + cash;
+    
+    const holdingsWithPct = portfolio.holdings.map(h => ({
+      ...h,
+      current_pct: totalValue > 0 ? (h.market_value / totalValue) * 100 : 0,
+      drift_pct: totalValue > 0 ? ((h.market_value / totalValue) * 100) - h.target_pct : 0,
+    }));
+
+    setPortfolio({
+      ...portfolio,
+      holdings: holdingsWithPct,
+      cash,
+      total_value: totalValue,
+      last_updated: new Date().toISOString(),
+    });
+    setCashAmount("");
+  }
+
+  async function generateBuyList() {
+    if (!portfolio || portfolio.holdings.length === 0 || !allocationPlan) {
+      alert("Please add holdings and create an allocation plan first");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const symbols = portfolio.holdings.map(h => h.symbol);
+      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
 
       const list = await invoke<BuyList>("generate_monthly_buy_list", {
         contribution: parseFloat(contribution),
@@ -115,8 +244,8 @@ export function PortfolioTab() {
   }
 
   async function checkRebalance() {
-    if (!portfolio) {
-      alert("Please create a portfolio first");
+    if (!portfolio || portfolio.holdings.length === 0) {
+      alert("Please add holdings first");
       return;
     }
 
@@ -136,8 +265,8 @@ export function PortfolioTab() {
   }
 
   async function createAllocation() {
-    if (!portfolio) {
-      alert("Please create a portfolio first");
+    if (!portfolio || portfolio.holdings.length === 0) {
+      alert("Please add holdings first");
       return;
     }
 
@@ -162,6 +291,72 @@ export function PortfolioTab() {
   return (
     <div className="portfolio-tab">
       <h2>Portfolio Management</h2>
+      <p className="subtitle">Track your holdings, generate buy lists, and manage rebalancing</p>
+
+      {/* Add Holding Form */}
+      <div className="card">
+        <h3>Add New Holding</h3>
+        <div className="add-holding-form">
+          <div className="form-row">
+            <div className="form-group">
+              <label>Symbol</label>
+              <input
+                type="text"
+                value={newSymbol}
+                onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+                placeholder="e.g., AAPL"
+              />
+            </div>
+            <div className="form-group">
+              <label>Shares</label>
+              <input
+                type="number"
+                value={newShares}
+                onChange={(e) => setNewShares(e.target.value)}
+                placeholder="10"
+              />
+            </div>
+            <div className="form-group">
+              <label>Cost Basis (optional)</label>
+              <input
+                type="number"
+                value={newCostBasis}
+                onChange={(e) => setNewCostBasis(e.target.value)}
+                placeholder="Current price"
+              />
+            </div>
+            <div className="form-group">
+              <label>Target % (optional)</label>
+              <input
+                type="number"
+                value={newTargetPct}
+                onChange={(e) => setNewTargetPct(e.target.value)}
+                placeholder="20"
+              />
+            </div>
+            <button className="btn-primary" onClick={addHolding} disabled={isLoading}>
+              {isLoading ? "Adding..." : "Add Holding"}
+            </button>
+          </div>
+          <div className="form-row" style={{ marginTop: '1rem' }}>
+            <div className="form-group">
+              <label>Cash Balance</label>
+              <input
+                type="number"
+                value={cashAmount}
+                onChange={(e) => setCashAmount(e.target.value)}
+                placeholder="Enter cash amount"
+              />
+            </div>
+            <button className="btn-secondary" onClick={updateCash}>
+              Update Cash
+            </button>
+            <button className="btn-secondary" onClick={updatePrices} disabled={isLoading || portfolio.holdings.length === 0}>
+              Refresh Prices
+            </button>
+          </div>
+        </div>
+      </div>
 
       {portfolio && (
         <>
@@ -180,48 +375,70 @@ export function PortfolioTab() {
                 <span className="label">Holdings:</span>
                 <span className="value">{portfolio.holdings.length} positions</span>
               </div>
+              <div className="summary-row">
+                <span className="label">Last Updated:</span>
+                <span className="value">{new Date(portfolio.last_updated).toLocaleString()}</span>
+              </div>
             </div>
 
-            <h4>Holdings</h4>
-            <div className="holdings-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Symbol</th>
-                    <th>Shares</th>
-                    <th>Price</th>
-                    <th>Value</th>
-                    <th>Target %</th>
-                    <th>Current %</th>
-                    <th>Drift</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {portfolio.holdings.map((holding) => (
-                    <tr key={holding.symbol}>
-                      <td><strong>{holding.symbol}</strong></td>
-                      <td>{holding.shares.toFixed(2)}</td>
-                      <td>${holding.current_price.toFixed(2)}</td>
-                      <td>${holding.market_value.toLocaleString()}</td>
-                      <td>{holding.target_pct.toFixed(1)}%</td>
-                      <td>{holding.current_pct.toFixed(1)}%</td>
-                      <td className={holding.drift_pct > 0 ? "drift-positive" : "drift-negative"}>
-                        {holding.drift_pct > 0 ? "+" : ""}{holding.drift_pct.toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {portfolio.holdings.length > 0 ? (
+              <>
+                <h4>Holdings</h4>
+                <div className="holdings-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Symbol</th>
+                        <th>Shares</th>
+                        <th>Price</th>
+                        <th>Value</th>
+                        <th>Target %</th>
+                        <th>Current %</th>
+                        <th>Drift</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {portfolio.holdings.map((holding) => (
+                        <tr key={holding.symbol}>
+                          <td><strong>{holding.symbol}</strong></td>
+                          <td>{holding.shares.toFixed(2)}</td>
+                          <td>${holding.current_price.toFixed(2)}</td>
+                          <td>${holding.market_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                          <td>{holding.target_pct.toFixed(1)}%</td>
+                          <td>{holding.current_pct.toFixed(1)}%</td>
+                          <td className={holding.drift_pct > 0 ? "drift-positive" : "drift-negative"}>
+                            {holding.drift_pct > 0 ? "+" : ""}{holding.drift_pct.toFixed(1)}%
+                          </td>
+                          <td>
+                            <button 
+                              className="btn-small btn-danger" 
+                              onClick={() => removeHolding(holding.symbol)}
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-            <div className="actions">
-              <button className="btn-secondary" onClick={createAllocation} disabled={isLoading}>
-                Create Allocation Plan
-              </button>
-              <button className="btn-secondary" onClick={checkRebalance} disabled={isLoading}>
-                Check Rebalance
-              </button>
-            </div>
+                <div className="actions">
+                  <button className="btn-secondary" onClick={createAllocation} disabled={isLoading}>
+                    Create Allocation Plan
+                  </button>
+                  <button className="btn-secondary" onClick={checkRebalance} disabled={isLoading}>
+                    Check Rebalance
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
+                No holdings yet. Add your first holding above to get started.
+              </p>
+            )}
           </div>
 
           {allocationPlan && (

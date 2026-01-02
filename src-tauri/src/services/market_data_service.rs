@@ -470,6 +470,7 @@ impl MarketDataService {
                     beta: None,
                     alpha: None,
                     var_95: None,
+                    daily_returns: None,
                 },
             };
             results.push(metrics);

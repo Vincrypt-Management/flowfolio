@@ -79,6 +79,9 @@ impl PlanCompiler {
             "Quality Compounders" => Some(Self::quality_compounders_template()),
             "Dividend Calm" => Some(Self::dividend_calm_template()),
             "AI Picks & Shovels" => Some(Self::ai_infrastructure_template()),
+            "Value Deep Dive" => Some(Self::value_template()),
+            "Small Cap Growth" => Some(Self::small_cap_growth_template()),
+            "Global Diversified" => Some(Self::global_diversified_template()),
             _ => None,
         }
     }
@@ -89,6 +92,9 @@ impl PlanCompiler {
             "Quality Compounders".to_string(),
             "Dividend Calm".to_string(),
             "AI Picks & Shovels".to_string(),
+            "Value Deep Dive".to_string(),
+            "Small Cap Growth".to_string(),
+            "Global Diversified".to_string(),
         ]
     }
 
@@ -265,6 +271,183 @@ impl PlanCompiler {
             risk: RiskPolicy {
                 max_drawdown_pct: Some(30.0),
                 max_concentration_pct: 40.0,
+            },
+        }
+    }
+
+    /// Value Deep Dive template
+    fn value_template() -> VibePlanScript {
+        VibePlanScript {
+            name: "Value Deep Dive".to_string(),
+            universe: UniverseDefinition {
+                exchanges: vec!["NYSE".to_string(), "NASDAQ".to_string()],
+                regions: vec!["US".to_string()],
+                sectors: vec![],
+                exclude_list: vec![],
+            },
+            filters: vec![
+                FilterRule {
+                    name: "P/E Ratio".to_string(),
+                    field: "pe_ratio".to_string(),
+                    operator: "less_than".to_string(),
+                    value: serde_json::json!(20.0),
+                },
+                FilterRule {
+                    name: "P/B Ratio".to_string(),
+                    field: "pb_ratio".to_string(),
+                    operator: "less_than".to_string(),
+                    value: serde_json::json!(3.0),
+                },
+            ],
+            ranking: RankingConfig {
+                factors: vec![
+                    FactorWeight {
+                        name: "value".to_string(),
+                        weight: 0.5,
+                    },
+                    FactorWeight {
+                        name: "quality".to_string(),
+                        weight: 0.3,
+                    },
+                    FactorWeight {
+                        name: "momentum".to_string(),
+                        weight: 0.2,
+                    },
+                ],
+            },
+            portfolio: PortfolioConfig {
+                allocation_method: "value_weighted".to_string(),
+                max_position_pct: 12.0,
+                sector_caps: None,
+                cash_buffer_pct: 10.0,
+            },
+            cadence: CadencePolicy {
+                monthly_contributions: true,
+                quarterly_rebalance: true,
+                yearly_review: true,
+                rebalance_threshold_pct: 7.0,
+            },
+            risk: RiskPolicy {
+                max_drawdown_pct: Some(25.0),
+                max_concentration_pct: 35.0,
+            },
+        }
+    }
+
+    /// Small Cap Growth template
+    fn small_cap_growth_template() -> VibePlanScript {
+        VibePlanScript {
+            name: "Small Cap Growth".to_string(),
+            universe: UniverseDefinition {
+                exchanges: vec!["NYSE".to_string(), "NASDAQ".to_string()],
+                regions: vec!["US".to_string()],
+                sectors: vec!["Technology".to_string(), "Healthcare".to_string(), "Consumer Discretionary".to_string()],
+                exclude_list: vec![],
+            },
+            filters: vec![
+                FilterRule {
+                    name: "Market Cap".to_string(),
+                    field: "market_cap".to_string(),
+                    operator: "between".to_string(),
+                    value: serde_json::json!([300_000_000i64, 2_000_000_000i64]),
+                },
+                FilterRule {
+                    name: "Revenue Growth".to_string(),
+                    field: "revenue_growth_yoy".to_string(),
+                    operator: "greater_than".to_string(),
+                    value: serde_json::json!(20.0),
+                },
+            ],
+            ranking: RankingConfig {
+                factors: vec![
+                    FactorWeight {
+                        name: "growth".to_string(),
+                        weight: 0.5,
+                    },
+                    FactorWeight {
+                        name: "momentum".to_string(),
+                        weight: 0.35,
+                    },
+                    FactorWeight {
+                        name: "quality".to_string(),
+                        weight: 0.15,
+                    },
+                ],
+            },
+            portfolio: PortfolioConfig {
+                allocation_method: "score_weighted".to_string(),
+                max_position_pct: 8.0,
+                sector_caps: Some(serde_json::json!({"max_sector_pct": 40.0})),
+                cash_buffer_pct: 5.0,
+            },
+            cadence: CadencePolicy {
+                monthly_contributions: true,
+                quarterly_rebalance: true,
+                yearly_review: true,
+                rebalance_threshold_pct: 8.0,
+            },
+            risk: RiskPolicy {
+                max_drawdown_pct: Some(35.0),
+                max_concentration_pct: 30.0,
+            },
+        }
+    }
+
+    /// Global Diversified template
+    fn global_diversified_template() -> VibePlanScript {
+        VibePlanScript {
+            name: "Global Diversified".to_string(),
+            universe: UniverseDefinition {
+                exchanges: vec!["NYSE".to_string(), "NASDAQ".to_string(), "LSE".to_string(), "TSX".to_string()],
+                regions: vec!["US".to_string(), "UK".to_string(), "CA".to_string(), "EU".to_string()],
+                sectors: vec![],
+                exclude_list: vec![],
+            },
+            filters: vec![
+                FilterRule {
+                    name: "Market Cap".to_string(),
+                    field: "market_cap".to_string(),
+                    operator: "greater_than".to_string(),
+                    value: serde_json::json!(10_000_000_000i64),
+                },
+                FilterRule {
+                    name: "Liquidity".to_string(),
+                    field: "avg_volume".to_string(),
+                    operator: "greater_than".to_string(),
+                    value: serde_json::json!(1_000_000i64),
+                },
+            ],
+            ranking: RankingConfig {
+                factors: vec![
+                    FactorWeight {
+                        name: "quality".to_string(),
+                        weight: 0.35,
+                    },
+                    FactorWeight {
+                        name: "value".to_string(),
+                        weight: 0.35,
+                    },
+                    FactorWeight {
+                        name: "momentum".to_string(),
+                        weight: 0.30,
+                    },
+                ],
+            },
+            portfolio: PortfolioConfig {
+                allocation_method: "equal_weight".to_string(),
+                max_position_pct: 5.0,
+                sector_caps: Some(serde_json::json!({"max_sector_pct": 25.0, "max_region_pct": 50.0})),
+                cash_buffer_pct: 10.0,
+            },
+            cadence: CadencePolicy {
+                monthly_contributions: true,
+                quarterly_rebalance: true,
+                yearly_review: true,
+                rebalance_threshold_pct: 5.0,
+            },
+            risk: RiskPolicy {
+                max_drawdown_pct: Some(20.0),
+                max_concentration_pct: 20.0,
             },
         }
     }

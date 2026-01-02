@@ -12,6 +12,14 @@ export interface QuantMetrics {
   rsi: number;
   signal: string;
   confidence: number;
+  // Extended metrics
+  sortino_ratio?: number;
+  calmar_ratio?: number;
+  beta?: number;
+  alpha?: number;
+  var_95?: number;
+  // Daily returns for correlation analysis
+  daily_returns?: number[];
 }
 
 interface StockQuote {

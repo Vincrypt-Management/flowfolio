@@ -23,6 +23,9 @@ pub struct QuantMetrics {
     pub alpha: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub var_95: Option<f64>,
+    // Daily returns for correlation analysis (last 60 days to limit payload size)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub daily_returns: Option<Vec<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +138,13 @@ impl QuantAnalyzer {
             sharpe_ratio, sortino_ratio, rsi, volatility, mean_return, &returns, max_drawdown
         );
 
+        // Limit daily returns to last 60 days to reduce payload size
+        let daily_returns = if returns.len() >= 10 {
+            Some(returns.iter().take(60).cloned().collect())
+        } else {
+            None
+        };
+
         QuantMetrics {
             symbol: symbol.to_string(),
             sharpe_ratio,
@@ -149,6 +159,7 @@ impl QuantAnalyzer {
             beta: None, // Calculated separately with market data
             alpha: None,
             var_95: Some(var_95),
+            daily_returns,
         }
     }
 
@@ -176,6 +187,7 @@ impl QuantAnalyzer {
             beta: None,
             alpha: None,
             var_95: None,
+            daily_returns: None,
         }
     }
 

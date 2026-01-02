@@ -304,6 +304,7 @@ impl EnhancedMarketDataService {
                     beta: None,
                     alpha: None,
                     var_95: None,
+                    daily_returns: None,
                 };
                 
                 // Update memory cache
@@ -393,6 +394,7 @@ impl EnhancedMarketDataService {
                     beta: None,
                     alpha: None,
                     var_95: None,
+                    daily_returns: None,
                 }
             })
             .buffer_unordered(5) // Process 5 symbols concurrently

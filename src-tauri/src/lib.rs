@@ -111,13 +111,201 @@ fn get_scoring_config(plan: VibePlanScript) -> Result<ScoringConfig, String> {
 
 /// Score multiple symbols with custom config
 #[tauri::command]
-fn score_symbols_batch(
+async fn score_symbols_batch(
     symbols: Vec<String>,
     config: ScoringConfig,
 ) -> Result<Vec<SymbolScore>, String> {
-    // Note: This requires real financial and momentum data
-    // In production, integrate with a data provider
-    Err("Real financial data integration required".to_string())
+    use modules::scoring::FactorScore;
+    
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    let mut scores = Vec::new();
+    
+    for symbol in symbols {
+        // Get quant metrics for this symbol
+        let metrics_result = service.get_quant_metrics(&symbol).await;
+        
+        match metrics_result {
+            Ok(metrics) => {
+                let mut factors = Vec::new();
+                let mut total_contribution = 0.0;
+                let mut total_weight = 0.0;
+                
+                // Momentum factor (based on RSI and signal)
+                if let Some(weight) = config.factor_weights.get("momentum") {
+                    let normalized = momentum_score_from_rsi(metrics.rsi, &metrics.signal);
+                    let contribution = normalized * weight;
+                    factors.push(FactorScore {
+                        name: "momentum".to_string(),
+                        raw_value: Some(metrics.rsi),
+                        normalized_value: normalized,
+                        weight: *weight,
+                        contribution,
+                    });
+                    total_contribution += contribution;
+                    total_weight += weight;
+                }
+                
+                // Quality factor (based on Sharpe ratio and volatility)
+                if let Some(weight) = config.factor_weights.get("quality") {
+                    let normalized = quality_score_from_sharpe(metrics.sharpe_ratio, metrics.volatility);
+                    let contribution = normalized * weight;
+                    factors.push(FactorScore {
+                        name: "quality".to_string(),
+                        raw_value: Some(metrics.sharpe_ratio),
+                        normalized_value: normalized,
+                        weight: *weight,
+                        contribution,
+                    });
+                    total_contribution += contribution;
+                    total_weight += weight;
+                }
+                
+                // Value factor (inverse of volatility - lower vol = better value)
+                if let Some(weight) = config.factor_weights.get("value") {
+                    let normalized = value_score_from_vol(metrics.volatility, metrics.max_drawdown);
+                    let contribution = normalized * weight;
+                    factors.push(FactorScore {
+                        name: "value".to_string(),
+                        raw_value: Some(metrics.volatility),
+                        normalized_value: normalized,
+                        weight: *weight,
+                        contribution,
+                    });
+                    total_contribution += contribution;
+                    total_weight += weight;
+                }
+                
+                // Growth factor (based on annualized return)
+                if let Some(weight) = config.factor_weights.get("growth") {
+                    let normalized = growth_score_from_return(metrics.annualized_return);
+                    let contribution = normalized * weight;
+                    factors.push(FactorScore {
+                        name: "growth".to_string(),
+                        raw_value: Some(metrics.annualized_return),
+                        normalized_value: normalized,
+                        weight: *weight,
+                        contribution,
+                    });
+                    total_contribution += contribution;
+                    total_weight += weight;
+                }
+                
+                let total_score = if total_weight > 0.0 {
+                    total_contribution / total_weight
+                } else {
+                    50.0
+                };
+                
+                let explanation = format!(
+                    "{}: Score {:.1}/100\n\
+                    RSI: {:.1} | Sharpe: {:.2} | Vol: {:.1}% | Return: {:.1}%\n\
+                    Signal: {} (Confidence: {:.0}%)",
+                    symbol, total_score,
+                    metrics.rsi, metrics.sharpe_ratio, metrics.volatility, metrics.annualized_return,
+                    metrics.signal, metrics.confidence
+                );
+                
+                scores.push(SymbolScore {
+                    symbol,
+                    total_score,
+                    factors,
+                    explanation,
+                });
+            }
+            Err(e) => {
+                // Still add the symbol with zero score and error
+                scores.push(SymbolScore {
+                    symbol: symbol.clone(),
+                    total_score: 0.0,
+                    factors: vec![],
+                    explanation: format!("Error fetching data for {}: {}", symbol, e),
+                });
+            }
+        }
+    }
+    
+    // Sort by total score descending
+    scores.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap_or(std::cmp::Ordering::Equal));
+    
+    Ok(scores)
+}
+
+// Helper functions for score normalization
+fn momentum_score_from_rsi(rsi: f64, signal: &str) -> f64 {
+    // RSI 30-70 is neutral, below 30 is oversold (good buy), above 70 is overbought
+    let rsi_score = match rsi {
+        r if r < 30.0 => 80.0 + (30.0 - r), // Oversold = high score
+        r if r > 70.0 => 50.0 - (r - 70.0), // Overbought = lower score
+        r => 50.0 + (50.0 - r).abs() * 0.5, // Neutral range
+    };
+    
+    // Adjust based on signal
+    let signal_adj = match signal {
+        "STRONG BUY" => 15.0,
+        "BUY" => 10.0,
+        "HOLD" => 0.0,
+        "SELL" => -10.0,
+        "STRONG SELL" => -15.0,
+        _ => 0.0,
+    };
+    
+    (rsi_score + signal_adj).max(0.0).min(100.0)
+}
+
+fn quality_score_from_sharpe(sharpe: f64, volatility: f64) -> f64 {
+    // Sharpe > 1 is good, > 2 is excellent
+    let sharpe_score = match sharpe {
+        s if s > 2.0 => 90.0,
+        s if s > 1.5 => 80.0,
+        s if s > 1.0 => 70.0,
+        s if s > 0.5 => 60.0,
+        s if s > 0.0 => 50.0,
+        s => (50.0 + s * 10.0).max(0.0),
+    };
+    
+    // Lower volatility is better
+    let vol_adj = match volatility {
+        v if v < 15.0 => 10.0,
+        v if v < 25.0 => 5.0,
+        v if v < 40.0 => 0.0,
+        _ => -10.0,
+    };
+    
+    (sharpe_score + vol_adj).max(0.0).min(100.0)
+}
+
+fn value_score_from_vol(volatility: f64, max_drawdown: f64) -> f64 {
+    // Lower volatility and drawdown = better value
+    let vol_score: f64 = match volatility {
+        v if v < 15.0 => 85.0,
+        v if v < 25.0 => 70.0,
+        v if v < 35.0 => 55.0,
+        v if v < 50.0 => 40.0,
+        _ => 25.0,
+    };
+    
+    // Penalize high drawdowns
+    let dd_adj: f64 = match max_drawdown {
+        d if d < 10.0 => 10.0,
+        d if d < 20.0 => 0.0,
+        d if d < 30.0 => -10.0,
+        _ => -20.0,
+    };
+    
+    (vol_score + dd_adj).max(0.0_f64).min(100.0_f64)
+}
+
+fn growth_score_from_return(annualized_return: f64) -> f64 {
+    // Higher return = better growth
+    match annualized_return {
+        r if r > 30.0 => 95.0,
+        r if r > 20.0 => 85.0,
+        r if r > 10.0 => 70.0,
+        r if r > 5.0 => 60.0,
+        r if r > 0.0 => 50.0,
+        r if r > -10.0 => 35.0,
+        _ => 20.0,
+    }
 }
 
 // Create equal-weight allocation plan
@@ -420,6 +608,231 @@ async fn get_provider_metrics() -> Result<serde_json::Value, String> {
     serde_json::to_value(metrics).map_err(|e| e.to_string())
 }
 
+// ==================== UNIVERSE & WATCHLIST ====================
+
+/// Universe definition for symbol filtering
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Universe {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub symbols: Vec<String>,
+    pub tags: HashMap<String, Vec<String>>,
+    pub exclude_list: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// In-memory universe storage (would be database in production)
+lazy_static::lazy_static! {
+    static ref UNIVERSES: Arc<Mutex<HashMap<String, Universe>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+/// Create a new universe/watchlist
+#[tauri::command]
+async fn create_universe(name: String, description: String, symbols: Vec<String>) -> Result<Universe, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    
+    let universe = Universe {
+        id: id.clone(),
+        name,
+        description,
+        symbols,
+        tags: HashMap::new(),
+        exclude_list: Vec::new(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    
+    let mut universes = UNIVERSES.lock().await;
+    universes.insert(id, universe.clone());
+    
+    Ok(universe)
+}
+
+/// Get all universes
+#[tauri::command]
+async fn list_universes() -> Result<Vec<Universe>, String> {
+    let universes = UNIVERSES.lock().await;
+    Ok(universes.values().cloned().collect())
+}
+
+/// Get a specific universe
+#[tauri::command]
+async fn get_universe(id: String) -> Result<Universe, String> {
+    let universes = UNIVERSES.lock().await;
+    universes.get(&id)
+        .cloned()
+        .ok_or_else(|| format!("Universe '{}' not found", id))
+}
+
+/// Update universe symbols
+#[tauri::command]
+async fn update_universe_symbols(id: String, symbols: Vec<String>) -> Result<Universe, String> {
+    let mut universes = UNIVERSES.lock().await;
+    
+    if let Some(universe) = universes.get_mut(&id) {
+        universe.symbols = symbols;
+        universe.updated_at = chrono::Utc::now().to_rfc3339();
+        Ok(universe.clone())
+    } else {
+        Err(format!("Universe '{}' not found", id))
+    }
+}
+
+/// Add symbols to universe exclude list
+#[tauri::command]
+async fn add_to_exclude_list(id: String, symbols: Vec<String>) -> Result<Universe, String> {
+    let mut universes = UNIVERSES.lock().await;
+    
+    if let Some(universe) = universes.get_mut(&id) {
+        for symbol in symbols {
+            if !universe.exclude_list.contains(&symbol) {
+                universe.exclude_list.push(symbol);
+            }
+        }
+        universe.updated_at = chrono::Utc::now().to_rfc3339();
+        Ok(universe.clone())
+    } else {
+        Err(format!("Universe '{}' not found", id))
+    }
+}
+
+/// Delete a universe
+#[tauri::command]
+async fn delete_universe(id: String) -> Result<(), String> {
+    let mut universes = UNIVERSES.lock().await;
+    universes.remove(&id)
+        .map(|_| ())
+        .ok_or_else(|| format!("Universe '{}' not found", id))
+}
+
+// ==================== EXPORT / IMPORT ====================
+
+/// Export data bundle (plan + holdings + journal)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportBundle {
+    pub version: String,
+    pub exported_at: String,
+    pub plan: Option<VibePlanScript>,
+    pub universes: Vec<Universe>,
+    pub journal_entries: Vec<JournalEntry>,
+    pub settings: HashMap<String, String>,
+}
+
+/// Export all data to JSON bundle
+#[tauri::command]
+async fn export_data_bundle(
+    plan: Option<VibePlanScript>,
+    journal_entries: Vec<JournalEntry>,
+) -> Result<String, String> {
+    let universes = UNIVERSES.lock().await;
+    
+    let bundle = ExportBundle {
+        version: "1.0.0".to_string(),
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        plan,
+        universes: universes.values().cloned().collect(),
+        journal_entries,
+        settings: HashMap::new(),
+    };
+    
+    serde_json::to_string_pretty(&bundle)
+        .map_err(|e| format!("Failed to serialize bundle: {}", e))
+}
+
+/// Import data from JSON bundle
+#[tauri::command]
+async fn import_data_bundle(bundle_json: String) -> Result<serde_json::Value, String> {
+    let bundle: ExportBundle = serde_json::from_str(&bundle_json)
+        .map_err(|e| format!("Failed to parse bundle: {}", e))?;
+    
+    // Import universes
+    let mut universes = UNIVERSES.lock().await;
+    for universe in bundle.universes {
+        universes.insert(universe.id.clone(), universe);
+    }
+    
+    Ok(serde_json::json!({
+        "success": true,
+        "imported": {
+            "universes": universes.len(),
+            "journal_entries": bundle.journal_entries.len(),
+            "has_plan": bundle.plan.is_some(),
+        }
+    }))
+}
+
+// ==================== PLAN MANAGEMENT ====================
+
+// In-memory plan storage
+lazy_static::lazy_static! {
+    static ref SAVED_PLANS: Arc<Mutex<HashMap<String, VibePlanScript>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+/// Save a plan
+#[tauri::command]
+async fn save_plan(plan: VibePlanScript) -> Result<String, String> {
+    let mut plans = SAVED_PLANS.lock().await;
+    let id = plan.name.clone();
+    plans.insert(id.clone(), plan);
+    Ok(id)
+}
+
+/// Load a saved plan
+#[tauri::command]
+async fn load_plan(name: String) -> Result<VibePlanScript, String> {
+    let plans = SAVED_PLANS.lock().await;
+    plans.get(&name)
+        .cloned()
+        .ok_or_else(|| format!("Plan '{}' not found", name))
+}
+
+/// List all saved plans
+#[tauri::command]
+async fn list_saved_plans() -> Result<Vec<String>, String> {
+    let plans = SAVED_PLANS.lock().await;
+    Ok(plans.keys().cloned().collect())
+}
+
+/// Delete a saved plan
+#[tauri::command]
+async fn delete_plan(name: String) -> Result<(), String> {
+    let mut plans = SAVED_PLANS.lock().await;
+    plans.remove(&name)
+        .map(|_| ())
+        .ok_or_else(|| format!("Plan '{}' not found", name))
+}
+
+// ==================== HISTORICAL DATA ====================
+
+/// Get historical price data for a symbol
+#[tauri::command]
+async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    let _days = days.unwrap_or(365);
+    
+    // Try to get from provider
+    match service.get_quant_metrics(&symbol).await {
+        Ok(metrics) => {
+            // Return what data we have (simplified for now)
+            Ok(vec![serde_json::json!({
+                "symbol": symbol,
+                "metrics": {
+                    "rsi": metrics.rsi,
+                    "sharpe_ratio": metrics.sharpe_ratio,
+                    "annualized_return": metrics.annualized_return,
+                    "volatility": metrics.volatility,
+                    "max_drawdown": metrics.max_drawdown,
+                    "signal": metrics.signal,
+                }
+            })])
+        }
+        Err(e) => Err(format!("Failed to get historical data: {}", e))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging for observability
@@ -470,6 +883,23 @@ pub fn run() {
             test_data_connection,
             get_health_report,
             get_provider_metrics,
+            // Universe & Watchlist
+            create_universe,
+            list_universes,
+            get_universe,
+            update_universe_symbols,
+            add_to_exclude_list,
+            delete_universe,
+            // Export / Import
+            export_data_bundle,
+            import_data_bundle,
+            // Plan Management
+            save_plan,
+            load_plan,
+            list_saved_plans,
+            delete_plan,
+            // Historical Data
+            get_historical_prices,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

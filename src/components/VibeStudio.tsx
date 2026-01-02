@@ -57,7 +57,7 @@ export default function VibeStudio() {
   const [isChatting, setIsChatting] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<string>('');
-  const [showQuantDashboard, setShowQuantDashboard] = useState(false);
+  const [showQuantDashboard, setShowQuantDashboard] = useState(true);
 
   // Disabled preloading to avoid rate limit issues
   // Data is fetched on-demand when portfolio is generated
@@ -884,20 +884,22 @@ export default function VibeStudio() {
                     symbol: asset.symbol,
                     quantMetrics: asset.quantMetrics ? {
                       sharpeRatio: asset.quantMetrics.sharpeRatio,
-                      sortinoRatio: asset.quantMetrics.sharpeRatio * 1.2,
-                      calmarRatio: asset.quantMetrics.sharpeRatio * 0.8,
-                      beta: 0.8 + Math.random() * 0.4,
-                      alpha: (Math.random() - 0.3) * 10,
+                      sortinoRatio: asset.quantMetrics.sortinoRatio ?? asset.quantMetrics.sharpeRatio * 1.2,
+                      calmarRatio: asset.quantMetrics.calmarRatio ?? asset.quantMetrics.sharpeRatio * 0.8,
+                      beta: asset.quantMetrics.beta ?? (asset.fundamentals?.beta ?? 1.0),
+                      alpha: asset.quantMetrics.alpha ?? 0,
                       volatility: asset.quantMetrics.volatility,
                       maxDrawdown: asset.quantMetrics.maxDrawdown,
-                      var95: asset.quantMetrics.volatility * 0.12,
-                      cvar95: asset.quantMetrics.volatility * 0.18,
+                      var95: asset.quantMetrics.var95 ?? asset.quantMetrics.volatility * 0.12,
+                      cvar95: (asset.quantMetrics.var95 ?? asset.quantMetrics.volatility * 0.12) * 1.5,
                       rsi: asset.quantMetrics.rsi,
                       expectedReturn: asset.quantMetrics.expectedReturn,
                       informationRatio: asset.quantMetrics.sharpeRatio * 0.6,
                       treynorRatio: asset.quantMetrics.sharpeRatio * 1.1,
                     } : undefined,
-                    dailyReturns: [],
+                    dailyReturns: asset.dailyReturns && asset.dailyReturns.length > 0 
+                      ? asset.dailyReturns 
+                      : undefined,
                   }))}
                   portfolioMetrics={generatedPortfolio.backtestResult ? {
                     sharpeRatio: generatedPortfolio.backtestResult.sharpeRatio,

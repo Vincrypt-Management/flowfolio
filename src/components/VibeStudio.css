@@ -1411,7 +1411,9 @@
 /* Advanced Quant Dashboard Toggle */
 .quant-dashboard-toggle {
   margin: 1.5rem 0;
-  padding: 0 1.5rem;
+  padding: 0;
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .btn-quant-toggle {
@@ -1450,11 +1452,13 @@
 /* Quant Dashboard Container */
 .quant-dashboard-container {
   animation: slideDown 0.3s ease;
-  margin: 0 1rem;
+  margin: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: visible;
   background: var(--bg-card);
+  grid-column: 1 / -1;
+  width: 100%;
 }
 
 @keyframes slideDown {

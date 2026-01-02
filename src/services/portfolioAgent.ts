@@ -22,7 +22,13 @@ interface PortfolioAsset {
     rsi: number;
     recommendation: string;
     confidence: number;
+    sortinoRatio?: number;
+    calmarRatio?: number;
+    beta?: number;
+    alpha?: number;
+    var95?: number;
   };
+  dailyReturns?: number[]; // For correlation analysis
   fundamentals?: {
     peRatio: number | null;
     forwardPE: number | null;
@@ -602,8 +608,14 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             maxDrawdown: metrics.max_drawdown,
             rsi: metrics.rsi,
             recommendation: metrics.signal,
-            confidence: metrics.confidence
+            confidence: metrics.confidence,
+            sortinoRatio: metrics.sortino_ratio,
+            calmarRatio: metrics.calmar_ratio,
+            beta: metrics.beta,
+            alpha: metrics.alpha,
+            var95: metrics.var_95,
           },
+          dailyReturns: metrics.daily_returns || [],
           fundamentals: fundamentals ? {
             peRatio: fundamentals.peRatio,
             forwardPE: fundamentals.forwardPE,
