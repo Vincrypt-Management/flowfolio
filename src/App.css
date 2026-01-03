@@ -1923,3 +1923,1221 @@ body {
 .trades-content {
   overflow-x: auto;
 }
+
+/* ========================================
+   YEARLY REVIEW COMPONENT STYLES
+   ======================================== */
+
+.yearly-review {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.yearly-review .review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.yearly-review .header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.yearly-review .header-left svg {
+  color: var(--primary);
+}
+
+.yearly-review .header-left h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.yearly-review .header-left p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.yearly-review .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.yearly-review .year-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-hover);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.yearly-review .year-selector select {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.yearly-review .year-selector svg {
+  color: var(--text-muted);
+}
+
+/* Summary Grid */
+.yearly-review .review-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.yearly-review .summary-card {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.yearly-review .summary-card.health {
+  border-width: 2px;
+  flex-direction: column;
+  text-align: center;
+}
+
+.yearly-review .summary-card.pass svg {
+  color: var(--success);
+}
+
+.yearly-review .summary-card.review svg {
+  color: var(--warning);
+}
+
+.yearly-review .summary-card.action svg {
+  color: var(--error);
+}
+
+.yearly-review .summary-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.yearly-review .summary-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+/* Progress Bar */
+.yearly-review .review-progress {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.yearly-review .progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.yearly-review .progress-label span:last-child {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.yearly-review .progress-bar {
+  height: 12px;
+  background: var(--bg-card);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+}
+
+.yearly-review .progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.yearly-review .progress-fill.pass {
+  background: var(--success);
+}
+
+.yearly-review .progress-fill.review {
+  background: var(--warning);
+}
+
+.yearly-review .progress-fill.action {
+  background: var(--error);
+}
+
+.yearly-review .progress-legend {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.yearly-review .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.yearly-review .legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.yearly-review .legend-item.pass .dot {
+  background: var(--success);
+}
+
+.yearly-review .legend-item.review .dot {
+  background: var(--warning);
+}
+
+.yearly-review .legend-item.action .dot {
+  background: var(--error);
+}
+
+/* Checklist Categories */
+.yearly-review .checklist-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.yearly-review .category-section {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.yearly-review .category-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.yearly-review .category-header:hover {
+  background: var(--bg-active);
+}
+
+.yearly-review .category-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 500;
+}
+
+.yearly-review .category-title svg {
+  color: var(--primary);
+}
+
+.yearly-review .category-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.yearly-review .category-items {
+  border-top: 1px solid var(--border);
+}
+
+.yearly-review .checklist-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+
+.yearly-review .checklist-item:last-child {
+  border-bottom: none;
+}
+
+.yearly-review .checklist-item:hover {
+  background: var(--bg-card);
+}
+
+.yearly-review .checklist-item.pass {
+  border-left: 3px solid var(--success);
+}
+
+.yearly-review .checklist-item.review {
+  border-left: 3px solid var(--warning);
+}
+
+.yearly-review .checklist-item.action_needed {
+  border-left: 3px solid var(--error);
+}
+
+.yearly-review .item-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.yearly-review .status-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.yearly-review .status-icon.pass {
+  color: var(--success);
+}
+
+.yearly-review .status-icon.review {
+  color: var(--warning);
+}
+
+.yearly-review .status-icon.action {
+  color: var(--error);
+}
+
+.yearly-review .item-content {
+  flex: 1;
+}
+
+.yearly-review .item-question {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.yearly-review .item-notes {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.yearly-review .item-actions {
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+
+.yearly-review .status-select {
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.yearly-review .status-select:hover {
+  border-color: var(--border-light);
+}
+
+.yearly-review .status-select.pass {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.yearly-review .status-select.review {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.yearly-review .status-select.action_needed {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* Recommendations */
+.yearly-review .recommendations-section {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.yearly-review .section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.yearly-review .section-header svg {
+  color: var(--warning);
+}
+
+.yearly-review .section-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.yearly-review .recommendations-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style-type: none;
+}
+
+.yearly-review .recommendations-list li {
+  position: relative;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.yearly-review .recommendations-list li::before {
+  content: "→";
+  position: absolute;
+  left: -1.25rem;
+  color: var(--primary);
+}
+
+/* Footer */
+.yearly-review .review-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.yearly-review .review-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Empty State */
+.yearly-review .empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.yearly-review .empty-state svg {
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+
+.yearly-review .empty-state h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+}
+
+.yearly-review .empty-state p {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Spinning animation for loading */
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .yearly-review .review-summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .yearly-review .review-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .yearly-review .review-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .yearly-review .checklist-item {
+    flex-direction: column;
+  }
+  
+  .yearly-review .item-actions {
+    margin-left: 0;
+    margin-top: 0.75rem;
+  }
+}
+
+/* ========================================
+   PORTFOLIO OPTIMIZER COMPONENT STYLES
+   ======================================== */
+
+.portfolio-optimizer {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.portfolio-optimizer .optimizer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.portfolio-optimizer .header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.portfolio-optimizer .header-left svg {
+  color: var(--warning);
+}
+
+.portfolio-optimizer .header-left h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.portfolio-optimizer .header-left p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .header-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+/* Settings Panel */
+.portfolio-optimizer .optimizer-settings {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.portfolio-optimizer .optimizer-settings h4 {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .settings-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.portfolio-optimizer .setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.portfolio-optimizer .setting-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.portfolio-optimizer .setting-item label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .setting-item input {
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 0.875rem;
+}
+
+/* Health Summary */
+.portfolio-optimizer .health-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+}
+
+.portfolio-optimizer .health-card {
+  text-align: center;
+}
+
+.portfolio-optimizer .health-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.portfolio-optimizer .health-score {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.portfolio-optimizer .health-max {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .health-arrow {
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .improvement-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 229, 153, 0.15);
+  color: var(--success);
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+/* Report Summary */
+.portfolio-optimizer .report-summary {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-left: 3px solid var(--primary);
+}
+
+.portfolio-optimizer .report-summary pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+/* Report Sections */
+.portfolio-optimizer .report-section {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.portfolio-optimizer .section-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.portfolio-optimizer .section-header:hover {
+  background: var(--bg-active);
+}
+
+.portfolio-optimizer .section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 500;
+}
+
+.portfolio-optimizer .section-title svg {
+  color: var(--primary);
+}
+
+.portfolio-optimizer .report-section.drops .section-title svg {
+  color: var(--error);
+}
+
+.portfolio-optimizer .report-section.replacements .section-title svg {
+  color: var(--success);
+}
+
+.portfolio-optimizer .section-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.portfolio-optimizer .section-count.urgent {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+
+.portfolio-optimizer .section-content {
+  padding: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Holdings Grid */
+.portfolio-optimizer .holdings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.portfolio-optimizer .holding-eval-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: 1px solid var(--border);
+}
+
+.portfolio-optimizer .holding-eval-card.grade-f {
+  border-color: var(--error);
+  border-left-width: 3px;
+}
+
+.portfolio-optimizer .holding-eval-card.grade-d {
+  border-color: #f97316;
+  border-left-width: 3px;
+}
+
+.portfolio-optimizer .holding-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.portfolio-optimizer .holding-symbol {
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.portfolio-optimizer .holding-grade {
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+}
+
+.portfolio-optimizer .holding-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.portfolio-optimizer .holding-return {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-optimizer .holding-return.positive {
+  color: var(--success);
+}
+
+.portfolio-optimizer .holding-return.negative {
+  color: var(--error);
+}
+
+.portfolio-optimizer .holding-metrics {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-optimizer .holding-metrics .metric {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+}
+
+.portfolio-optimizer .holding-metrics .metric-label {
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .holding-metrics .metric-value {
+  font-weight: 500;
+}
+
+.portfolio-optimizer .signal-strong-buy,
+.portfolio-optimizer .signal-buy {
+  color: var(--success);
+}
+
+.portfolio-optimizer .signal-hold {
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .signal-sell,
+.portfolio-optimizer .signal-strong-sell {
+  color: var(--error);
+}
+
+.portfolio-optimizer .holding-issues {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.portfolio-optimizer .issue-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--warning);
+  margin-bottom: 0.25rem;
+}
+
+/* Drop Cards */
+.portfolio-optimizer .drop-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--error);
+  border-left-width: 4px;
+}
+
+.portfolio-optimizer .drop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-optimizer .drop-symbol-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.portfolio-optimizer .drop-symbol {
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.portfolio-optimizer .drop-grade {
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+}
+
+.portfolio-optimizer .drop-urgency {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.portfolio-optimizer .drop-value {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-optimizer .drop-reason {
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.portfolio-optimizer .drop-all-reasons {
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.portfolio-optimizer .drop-all-reasons ul {
+  margin: 0.25rem 0 0 1rem;
+  padding: 0;
+}
+
+.portfolio-optimizer .drop-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--warning);
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-optimizer .drop-tax-note {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Replacement Cards */
+.portfolio-optimizer .replacements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.portfolio-optimizer .replacement-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: 1px solid var(--success);
+  border-left-width: 4px;
+  position: relative;
+}
+
+.portfolio-optimizer .replacement-rank {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  background: var(--success);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.portfolio-optimizer .replacement-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-optimizer .replacement-symbol {
+  font-weight: 600;
+  font-size: 1.25rem;
+}
+
+.portfolio-optimizer .replacement-score {
+  font-size: 0.875rem;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.portfolio-optimizer .replacement-allocation {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-optimizer .alloc-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .alloc-amount {
+  font-weight: 600;
+}
+
+.portfolio-optimizer .alloc-pct {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .replacement-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-optimizer .replacement-metrics .metric {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.portfolio-optimizer .replacement-metrics .metric span:first-child {
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .replacement-metrics .positive {
+  color: var(--success);
+}
+
+.portfolio-optimizer .why-better {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.portfolio-optimizer .why-better svg {
+  color: var(--warning);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.portfolio-optimizer .reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.portfolio-optimizer .reason-tag {
+  font-size: 0.75rem;
+  background: var(--bg-hover);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+/* Action Plan */
+.portfolio-optimizer .action-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.portfolio-optimizer .summary-item {
+  background: var(--bg-card);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.portfolio-optimizer .summary-item .label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.portfolio-optimizer .summary-item .value {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.portfolio-optimizer .summary-item.sell .value {
+  color: var(--error);
+}
+
+.portfolio-optimizer .summary-item.buy .value {
+  color: var(--success);
+}
+
+.portfolio-optimizer .summary-item.improvement .value {
+  color: var(--primary);
+}
+
+.portfolio-optimizer .action-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.portfolio-optimizer .action-step {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.portfolio-optimizer .action-step.sell {
+  border-left: 3px solid var(--error);
+}
+
+.portfolio-optimizer .action-step.buy {
+  border-left: 3px solid var(--success);
+}
+
+.portfolio-optimizer .step-number {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.portfolio-optimizer .step-content {
+  flex: 1;
+}
+
+.portfolio-optimizer .step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.portfolio-optimizer .step-action {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-optimizer .step-action.sell {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+
+.portfolio-optimizer .step-action.buy {
+  background: rgba(0, 229, 153, 0.15);
+  color: var(--success);
+}
+
+.portfolio-optimizer .step-symbol {
+  font-weight: 600;
+}
+
+.portfolio-optimizer .step-amount {
+  color: var(--text-muted);
+}
+
+.portfolio-optimizer .step-rationale {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Footer */
+.portfolio-optimizer .report-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.portfolio-optimizer .report-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Empty State */
+.portfolio-optimizer .empty-state,
+.portfolio-optimizer .no-drops-message {
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.portfolio-optimizer .empty-state svg,
+.portfolio-optimizer .no-drops-message svg {
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+
+.portfolio-optimizer .no-drops-message svg {
+  color: var(--success);
+}
+
+.portfolio-optimizer .empty-state h4,
+.portfolio-optimizer .no-drops-message h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+}
+
+.portfolio-optimizer .empty-state p,
+.portfolio-optimizer .no-drops-message p {
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .portfolio-optimizer .optimizer-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .portfolio-optimizer .settings-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .portfolio-optimizer .health-summary {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .portfolio-optimizer .health-arrow {
+    transform: rotate(90deg);
+  }
+  
+  .portfolio-optimizer .action-summary {
+    grid-template-columns: 1fr;
+  }
+  
+  .portfolio-optimizer .replacement-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

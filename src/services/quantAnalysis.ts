@@ -1,6 +1,16 @@
 import { HistoricalData } from './marketData';
 
 /**
+ * @deprecated DEPRECATED: Use backend `get_dashboard_data` command instead.
+ * This module performs heavy calculations on the frontend.
+ * All calculations have been moved to the Rust backend for better performance.
+ * 
+ * To use the backend version:
+ * ```typescript
+ * import { invoke } from '../services/tauri';
+ * const dashboardData = await invoke('get_dashboard_data', { symbols: ['AAPL', 'MSFT'] });
+ * ```
+ * 
  * Advanced Quantitative Analysis Module
  * Pure mathematical and statistical analysis without AI/LLM
  * Implements modern portfolio theory, risk metrics, and technical indicators

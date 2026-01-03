@@ -22,21 +22,149 @@ use modules::{
         PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
         BuyList, RebalanceReport,
         review::{ReviewGenerator, YearlyReview},
+        optimizer::{PortfolioOptimizer, PortfolioOptimizationReport, OptimizationThresholds},
     },
     backtest::{BacktestEngine, BacktestConfig, BacktestResult},
     journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
-    quant_analysis::QuantMetrics,
+    quant_analysis::{QuantMetrics, QuantAnalyzer, DashboardData, HistoricalPrice},
+    progress::{ProgressEvent, PROGRESS_MANAGER, generate_operation_id, ProgressDetail},
 };
 use services::{EnhancedMarketDataService, enhanced_market_service::CacheStats};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager};
 
-// Global enhanced market data service instance
+// Global enhanced market data service instance (initialized without DB, upgraded on setup)
 lazy_static::lazy_static! {
     static ref ENHANCED_MARKET_SERVICE: Arc<Mutex<EnhancedMarketDataService>> = 
         Arc::new(Mutex::new(EnhancedMarketDataService::new_without_db()));
+    
+    // Flag to track if database is initialized
+    static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> = 
+        Arc::new(std::sync::atomic::AtomicBool::new(false));
+}
+
+/// Initialize local SQLite database for caching
+async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+    use std::str::FromStr;
+    
+    // Ensure the data directory exists
+    std::fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    
+    let db_path = app_data_dir.join("flowfolio_cache.db");
+    let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
+    
+    eprintln!("[INFO] [db] Initializing local cache database at: {}", db_path.display());
+    
+    let options = SqliteConnectOptions::from_str(&db_url)
+        .map_err(|e| format!("Invalid database URL: {}", e))?
+        .create_if_missing(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .synchronous(sqlx::sqlite::SqliteSynchronous::Normal);
+    
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(options)
+        .await
+        .map_err(|e| format!("Failed to connect to database: {}", e))?;
+    
+    // Create cache tables
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS price_cache (
+            symbol TEXT PRIMARY KEY,
+            current_price REAL NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create price_cache: {}", e))?;
+    
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS quant_metrics_cache (
+            symbol TEXT PRIMARY KEY,
+            sharpe_ratio REAL NOT NULL,
+            annualized_return REAL NOT NULL,
+            volatility REAL NOT NULL,
+            max_drawdown REAL NOT NULL,
+            rsi REAL NOT NULL,
+            signal TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create quant_metrics_cache: {}", e))?;
+    
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS historical_prices_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            date TEXT NOT NULL,
+            open_price REAL NOT NULL,
+            high_price REAL NOT NULL,
+            low_price REAL NOT NULL,
+            close_price REAL NOT NULL,
+            volume INTEGER NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(symbol, date)
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create historical_prices_cache: {}", e))?;
+    
+    // Create index for faster lookups
+    sqlx::query(r#"
+        CREATE INDEX IF NOT EXISTS idx_historical_symbol_date 
+        ON historical_prices_cache(symbol, date)
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create index: {}", e))?;
+    
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS fundamentals_cache (
+            symbol TEXT PRIMARY KEY,
+            market_cap REAL,
+            pe_ratio REAL,
+            pb_ratio REAL,
+            dividend_yield REAL,
+            eps REAL,
+            roe REAL,
+            raw_json TEXT,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create fundamentals_cache: {}", e))?;
+    
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS sentiment_cache (
+            symbol TEXT PRIMARY KEY,
+            overall_sentiment TEXT NOT NULL,
+            sentiment_score REAL NOT NULL,
+            news_count INTEGER NOT NULL,
+            buzz_score REAL NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create sentiment_cache: {}", e))?;
+    
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS analyst_ratings_cache (
+            symbol TEXT PRIMARY KEY,
+            consensus_rating TEXT NOT NULL,
+            target_price_mean REAL,
+            target_price_high REAL,
+            target_price_low REAL,
+            number_of_analysts INTEGER NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create analyst_ratings_cache: {}", e))?;
+    
+    eprintln!("[INFO] [db] Local cache database initialized successfully");
+    
+    Ok(pool)
+}
+
+/// Initialize the enhanced market service with database
+async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
+    let mut service = ENHANCED_MARKET_SERVICE.lock().await;
+    *service = EnhancedMarketDataService::new(Some(pool));
+    DB_INITIALIZED.store(true, std::sync::atomic::Ordering::SeqCst);
+    eprintln!("[INFO] [service] Enhanced market service initialized with database caching");
 }
 
 #[derive(Serialize, Deserialize)]
@@ -384,6 +512,265 @@ fn generate_yearly_review(
     Ok(ReviewGenerator::generate_yearly_review(&portfolio_name, year))
 }
 
+/// Generate portfolio optimization report with drop/replace recommendations
+#[tauri::command]
+async fn generate_optimization_report(
+    portfolio_name: String,
+    holdings: Vec<(String, f64, f64, f64)>, // (symbol, shares, cost_basis, current_price)
+    candidate_symbols: Vec<String>,
+    thresholds: Option<OptimizationThresholds>,
+) -> Result<PortfolioOptimizationReport, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    // Get metrics for current holdings
+    let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
+    let mut holding_metrics: HashMap<String, QuantMetrics> = HashMap::new();
+    
+    for symbol in &holding_symbols {
+        if let Ok(metrics) = service.get_quant_metrics(symbol).await {
+            holding_metrics.insert(symbol.clone(), metrics);
+        }
+    }
+    
+    // Get metrics for candidate replacements
+    let mut candidate_metrics: HashMap<String, QuantMetrics> = HashMap::new();
+    
+    for symbol in &candidate_symbols {
+        if !holding_symbols.contains(symbol) {
+            if let Ok(metrics) = service.get_quant_metrics(symbol).await {
+                candidate_metrics.insert(symbol.clone(), metrics);
+            }
+        }
+    }
+    
+    let thresholds = thresholds.unwrap_or_default();
+    
+    Ok(PortfolioOptimizer::generate_optimization_report(
+        &portfolio_name,
+        holdings,
+        &holding_metrics,
+        &candidate_metrics,
+        thresholds,
+    ))
+}
+
+/// Generate portfolio optimization report with LIVE progress updates
+/// This version emits events during the analysis for real-time UI updates
+#[tauri::command]
+async fn generate_optimization_report_live(
+    app: AppHandle,
+    portfolio_name: String,
+    holdings: Vec<(String, f64, f64, f64)>, // (symbol, shares, cost_basis, current_price)
+    candidate_symbols: Vec<String>,
+    thresholds: Option<OptimizationThresholds>,
+) -> Result<PortfolioOptimizationReport, String> {
+    let operation_id = generate_operation_id();
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
+    let total_symbols = holding_symbols.len() + candidate_symbols.len();
+    
+    // Emit start event
+    let _ = app.emit("optimization_progress", ProgressEvent::Started {
+        operation_id: operation_id.clone(),
+        operation_type: "portfolio_optimization".to_string(),
+        total_steps: Some(total_symbols),
+        message: format!("Starting portfolio optimization for {}", portfolio_name),
+    });
+    
+    let mut holding_metrics: HashMap<String, QuantMetrics> = HashMap::new();
+    let mut current_step = 0;
+    
+    // Analyze current holdings with progress updates
+    for (idx, symbol) in holding_symbols.iter().enumerate() {
+        current_step = idx + 1;
+        
+        let _ = app.emit("optimization_progress", ProgressEvent::Progress {
+            operation_id: operation_id.clone(),
+            current_step,
+            total_steps: Some(total_symbols),
+            percentage: (current_step as f64 / total_symbols as f64) * 100.0,
+            message: format!("Analyzing holding: {}", symbol),
+            detail: Some(ProgressDetail {
+                symbol: Some(symbol.clone()),
+                provider: None,
+                metric: Some("quant_metrics".to_string()),
+                value: None,
+            }),
+        });
+        
+        // Try to get metrics with retry tracking
+        let mut attempts = 0;
+        let max_attempts = 3;
+        
+        loop {
+            attempts += 1;
+            match service.get_quant_metrics(symbol).await {
+                Ok(metrics) => {
+                    // Emit partial result for immediate UI update
+                    let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
+                        operation_id: operation_id.clone(),
+                        result_type: "holding_metrics".to_string(),
+                        data: serde_json::json!({
+                            "symbol": symbol,
+                            "sharpe_ratio": metrics.sharpe_ratio,
+                            "annualized_return": metrics.annualized_return,
+                            "volatility": metrics.volatility,
+                            "signal": metrics.signal,
+                        }),
+                    });
+                    
+                    holding_metrics.insert(symbol.clone(), metrics);
+                    break;
+                }
+                Err(e) => {
+                    if attempts < max_attempts {
+                        // Emit retry event
+                        let _ = app.emit("optimization_progress", ProgressEvent::Retry {
+                            operation_id: operation_id.clone(),
+                            attempt: attempts,
+                            max_attempts,
+                            error: e.clone(),
+                            next_retry_ms: (attempts as u64) * 500,
+                        });
+                        
+                        tokio::time::sleep(tokio::time::Duration::from_millis((attempts as u64) * 500)).await;
+                    } else {
+                        // Emit error for this symbol but continue
+                        let _ = app.emit("optimization_progress", ProgressEvent::Error {
+                            operation_id: operation_id.clone(),
+                            error: format!("Failed to get metrics for {}: {}", symbol, e),
+                            recoverable: true,
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Analyze candidate symbols for replacements
+    let mut candidate_metrics: HashMap<String, QuantMetrics> = HashMap::new();
+    
+    for symbol in &candidate_symbols {
+        if holding_symbols.contains(symbol) {
+            continue;
+        }
+        
+        current_step += 1;
+        
+        let _ = app.emit("optimization_progress", ProgressEvent::Progress {
+            operation_id: operation_id.clone(),
+            current_step,
+            total_steps: Some(total_symbols),
+            percentage: (current_step as f64 / total_symbols as f64) * 100.0,
+            message: format!("Evaluating replacement candidate: {}", symbol),
+            detail: Some(ProgressDetail {
+                symbol: Some(symbol.clone()),
+                provider: None,
+                metric: Some("candidate_analysis".to_string()),
+                value: None,
+            }),
+        });
+        
+        let mut attempts = 0;
+        let max_attempts = 3;
+        
+        loop {
+            attempts += 1;
+            match service.get_quant_metrics(symbol).await {
+                Ok(metrics) => {
+                    // Emit partial result
+                    let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
+                        operation_id: operation_id.clone(),
+                        result_type: "candidate_metrics".to_string(),
+                        data: serde_json::json!({
+                            "symbol": symbol,
+                            "sharpe_ratio": metrics.sharpe_ratio,
+                            "annualized_return": metrics.annualized_return,
+                            "volatility": metrics.volatility,
+                            "signal": metrics.signal,
+                            "score": calculate_quick_score(&metrics),
+                        }),
+                    });
+                    
+                    candidate_metrics.insert(symbol.clone(), metrics);
+                    break;
+                }
+                Err(e) => {
+                    if attempts < max_attempts {
+                        let _ = app.emit("optimization_progress", ProgressEvent::Retry {
+                            operation_id: operation_id.clone(),
+                            attempt: attempts,
+                            max_attempts,
+                            error: e.clone(),
+                            next_retry_ms: (attempts as u64) * 500,
+                        });
+                        
+                        tokio::time::sleep(tokio::time::Duration::from_millis((attempts as u64) * 500)).await;
+                    } else {
+                        let _ = app.emit("optimization_progress", ProgressEvent::Error {
+                            operation_id: operation_id.clone(),
+                            error: format!("Failed to analyze candidate {}: {}", symbol, e),
+                            recoverable: true,
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Generate final report
+    let _ = app.emit("optimization_progress", ProgressEvent::Progress {
+        operation_id: operation_id.clone(),
+        current_step: total_symbols,
+        total_steps: Some(total_symbols),
+        percentage: 100.0,
+        message: "Generating optimization recommendations...".to_string(),
+        detail: None,
+    });
+    
+    let thresholds = thresholds.unwrap_or_default();
+    let report = PortfolioOptimizer::generate_optimization_report(
+        &portfolio_name,
+        holdings,
+        &holding_metrics,
+        &candidate_metrics,
+        thresholds,
+    );
+    
+    // Emit completion
+    let _ = app.emit("optimization_progress", ProgressEvent::Completed {
+        operation_id: operation_id.clone(),
+        success: true,
+        message: format!(
+            "Optimization complete: {} drops recommended, {} replacements found",
+            report.drop_recommendations.len(),
+            report.replacement_options.len()
+        ),
+        duration_ms: 0, // Would need to track this
+    });
+    
+    Ok(report)
+}
+
+// Helper function to calculate a quick score for candidates
+fn calculate_quick_score(metrics: &QuantMetrics) -> f64 {
+    let mut score = 0.0;
+    score += (metrics.sharpe_ratio * 15.0).min(30.0).max(0.0);
+    score += (metrics.annualized_return * 0.5).min(25.0).max(0.0);
+    score += ((50.0 - metrics.volatility) * 0.3).min(15.0).max(0.0);
+    score += ((40.0 - metrics.max_drawdown) * 0.375).min(15.0).max(0.0);
+    score += match metrics.signal.as_str() {
+        "STRONG BUY" => 15.0,
+        "BUY" => 10.0,
+        "HOLD" => 5.0,
+        _ => 0.0,
+    };
+    score
+}
+
 /// Run backtest simulation
 #[tauri::command]
 fn run_backtest_simulation(config: BacktestConfig) -> Result<BacktestResult, String> {
@@ -488,6 +875,41 @@ fn export_journal_markdown(
 async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     Ok(service.get_batch_quant_metrics(symbols).await)
+}
+
+/// Generate comprehensive dashboard data - ALL calculations done on backend
+/// This eliminates heavy frontend calculations for better performance
+#[tauri::command]
+async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, String> {
+    use modules::quant_analysis::HistoricalPrice as QuantHistoricalPrice;
+    
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    // Fetch historical data for all symbols
+    let mut assets_data: Vec<(String, Vec<QuantHistoricalPrice>)> = Vec::new();
+    
+    for symbol in &symbols {
+        match service.get_historical_prices(symbol).await {
+            Ok(prices) => {
+                // Convert from provider's HistoricalPrice to quant_analysis HistoricalPrice
+                let historical: Vec<QuantHistoricalPrice> = prices
+                    .into_iter()
+                    .map(|p| QuantHistoricalPrice { date: p.date, close: p.close })
+                    .collect();
+                assets_data.push((symbol.clone(), historical));
+            }
+            Err(_) => {
+                // Skip symbols without data
+                continue;
+            }
+        }
+    }
+    
+    if assets_data.is_empty() {
+        return Err("No historical data available for any symbol".to_string());
+    }
+    
+    Ok(QuantAnalyzer::generate_dashboard_data(assets_data))
 }
 
 /// Get current prices for multiple symbols
@@ -844,6 +1266,7 @@ pub fn run() {
         eprintln!("[INFO] [app]   - Retry with exponential backoff");
         eprintln!("[INFO] [app]   - Health monitoring and metrics");
         eprintln!("[INFO] [app]   - Multi-tier caching");
+        eprintln!("[INFO] [app]   - Live progress streaming");
     }
     
     tauri::Builder::default()
@@ -863,6 +1286,8 @@ pub fn run() {
             generate_monthly_buy_list,
             check_portfolio_rebalance,
             generate_yearly_review,
+            generate_optimization_report,
+            generate_optimization_report_live,
             run_backtest_simulation,
             create_journal_entry,
             log_strategy_change,
@@ -874,6 +1299,7 @@ pub fn run() {
             calculate_journal_stats,
             export_journal_markdown,
             get_quant_metrics_batch,
+            get_dashboard_data,
             get_current_prices_batch,
             get_quant_metrics_single,
             get_current_price_single,
@@ -900,7 +1326,48 @@ pub fn run() {
             delete_plan,
             // Historical Data
             get_historical_prices,
+            // Database status
+            get_database_status,
         ])
+        .setup(|app| {
+            // Initialize local database for caching
+            let app_handle = app.handle().clone();
+            
+            tauri::async_runtime::spawn(async move {
+                // Get the app data directory (relative local directory)
+                let data_dir = app_handle.path().app_data_dir()
+                    .unwrap_or_else(|_| {
+                        // Fallback to current directory if app data dir not available
+                        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+                    })
+                    .join("data");
+                
+                eprintln!("[INFO] [app] Using data directory: {}", data_dir.display());
+                
+                match init_local_database(data_dir).await {
+                    Ok(pool) => {
+                        init_market_service_with_db(pool).await;
+                        eprintln!("[INFO] [app] ✅ Local database caching enabled");
+                    }
+                    Err(e) => {
+                        eprintln!("[WARN] [app] ⚠️ Failed to initialize database cache: {}", e);
+                        eprintln!("[WARN] [app] Continuing with in-memory cache only");
+                    }
+                }
+            });
+            
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Get database initialization status
+#[tauri::command]
+fn get_database_status() -> serde_json::Value {
+    let initialized = DB_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst);
+    serde_json::json!({
+        "initialized": initialized,
+        "cache_type": if initialized { "sqlite" } else { "memory" }
+    })
 }

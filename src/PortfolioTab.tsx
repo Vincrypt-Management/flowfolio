@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { invoke } from "./services/tauri";
+import { YearlyReviewComponent } from "./components/YearlyReview";
+import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
 
 interface Portfolio {
   name: string;
@@ -550,6 +552,20 @@ export function PortfolioTab() {
               )}
             </div>
           )}
+
+          {/* Portfolio Optimizer Section */}
+          <PortfolioOptimizerComponent 
+            holdings={portfolio.holdings.map(h => ({
+              symbol: h.symbol,
+              shares: h.shares,
+              cost_basis: h.cost_basis,
+              current_price: h.current_price,
+            }))}
+            portfolioName={portfolio.name}
+          />
+
+          {/* Yearly Review Section */}
+          <YearlyReviewComponent portfolioName={portfolio.name} />
         </>
       )}
     </div>

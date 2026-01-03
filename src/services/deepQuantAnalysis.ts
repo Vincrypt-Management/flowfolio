@@ -1,4 +1,8 @@
 /**
+ * @deprecated DEPRECATED: Use backend `get_dashboard_data` command instead.
+ * This module performs heavy calculations on the frontend.
+ * All calculations have been moved to the Rust backend for better performance.
+ * 
  * Enhanced Quantitative Analysis Service
  * Provides deep statistical analysis, risk metrics, and portfolio optimization
  */

@@ -17,3 +17,4 @@ pub mod error;
 pub mod circuit_breaker;
 pub mod retry;
 pub mod health;
+pub mod progress;

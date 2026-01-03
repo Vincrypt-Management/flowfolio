@@ -1,7 +1,14 @@
 pub mod review;
+pub mod optimizer;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+pub use optimizer::{
+    PortfolioOptimizer, PortfolioOptimizationReport, OptimizationThresholds,
+    EvaluatedHolding, DropRecommendation, ReplacementOption, ActionPlan, ActionStep,
+    HoldingMetrics,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Portfolio {

@@ -4,6 +4,7 @@ import VibeStudio from "./components/VibeStudio";
 import { PortfolioTab } from "./PortfolioTab";
 import { BacktestTab } from "./BacktestTab";
 import { JournalTab } from "./JournalTab";
+import { YearlyReviewComponent } from "./components/YearlyReview";
 import { 
   LayoutDashboard, 
   Sparkles, 
@@ -26,9 +27,12 @@ import {
   Upload,
   Save,
   Trash2,
-  Plus
+  Plus,
+  ClipboardCheck
 } from "lucide-react";
 import "./App.css";
+import "./styles/optimizer.css";
+import "./styles/liveProgress.css";
 
 interface VibePlan {
   name: string;
@@ -461,6 +465,14 @@ function App() {
           {!isSidebarCollapsed && <span>Journal</span>}
         </button>
         <button 
+          className={`nav-item ${activeTab === "yearly-review" ? "active" : ""}`}
+          onClick={() => setActiveTab("yearly-review")}
+          title={isSidebarCollapsed ? "Yearly Review" : ""}
+        >
+          <ClipboardCheck className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Yearly Review</span>}
+        </button>
+        <button 
           className={`nav-item ${activeTab === "universe" ? "active" : ""}`}
           onClick={() => setActiveTab("universe")}
           title={isSidebarCollapsed ? "Universe" : ""}
@@ -563,7 +575,7 @@ function App() {
                     <span className="stat-label">Quarterly Rebalance</span>
                     <span className="stat-value action-link">Check →</span>
                   </div>
-                  <div className="stat-row clickable" onClick={() => setActiveTab("journal")}>
+                  <div className="stat-row clickable" onClick={() => setActiveTab("yearly-review")}>
                     <span className="stat-label">Yearly Review</span>
                     <span className="stat-value action-link">Start →</span>
                   </div>
@@ -850,6 +862,16 @@ function App() {
         {activeTab === "journal" && (
           <div className="animate-fade-in">
             <JournalTab />
+          </div>
+        )}
+
+        {activeTab === "yearly-review" && (
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Yearly Review</h1>
+              <p className="page-subtitle">Comprehensive annual strategy and portfolio review checklist</p>
+            </header>
+            <YearlyReviewComponent portfolioName={plan?.name || "My Portfolio"} />
           </div>
         )}
 
