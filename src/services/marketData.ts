@@ -18,6 +18,14 @@ export interface QuantMetrics {
   beta?: number;
   alpha?: number;
   var_95?: number;
+  // Advanced quant metrics
+  omega_ratio?: number;
+  tail_ratio?: number;
+  skewness?: number;
+  kurtosis?: number;
+  ulcer_index?: number;
+  gain_to_loss_ratio?: number;
+  win_rate?: number;
   // Daily returns for correlation analysis
   daily_returns?: number[];
 }

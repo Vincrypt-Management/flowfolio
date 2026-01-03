@@ -32,6 +32,11 @@ export interface OpenRouterResponse {
   };
 }
 
+export interface StreamChunk {
+  content: string;
+  done: boolean;
+}
+
 class OpenRouterService {
   private apiKey: string;
   private apiUrl: string;
@@ -41,6 +46,117 @@ class OpenRouterService {
     this.apiKey = import.meta.env.VITE_OPENROUTER_API_KEY || '';
     this.apiUrl = import.meta.env.VITE_OPENROUTER_API_URL || 'https://openrouter.ai/api/v1';
     this.defaultModel = import.meta.env.VITE_DEFAULT_LLM_MODEL || 'anthropic/claude-3-sonnet-20240229';
+  }
+
+  /**
+   * Stream chat completion - yields chunks as they arrive
+   */
+  async *chatStream(
+    messages: OpenRouterMessage[], 
+    model?: string,
+    options?: {
+      temperature?: number;
+      max_tokens?: number;
+      top_p?: number;
+    }
+  ): AsyncGenerator<StreamChunk> {
+    if (!this.apiKey) {
+      throw new Error('OpenRouter API key not configured');
+    }
+
+    const requestBody = {
+      model: model || this.defaultModel,
+      messages,
+      max_tokens: options?.max_tokens || 4000,
+      temperature: options?.temperature || 0.7,
+      top_p: options?.top_p || 1,
+      stream: true,
+    };
+
+    console.log('[STREAM] Starting streaming request to:', model || this.defaultModel);
+
+    const response = await fetch(`${this.apiUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'Flowfolio',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body reader available');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          yield { content: '', done: true };
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const json = JSON.parse(trimmed.slice(6));
+              const content = json.choices?.[0]?.delta?.content;
+              if (content) {
+                yield { content, done: false };
+              }
+            } catch (e) {
+              // Skip malformed JSON chunks
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  /**
+   * Collect full streamed response with optional progress callback
+   */
+  async chatWithProgress(
+    messages: OpenRouterMessage[], 
+    model?: string,
+    options?: {
+      temperature?: number;
+      max_tokens?: number;
+      top_p?: number;
+      onProgress?: (partial: string) => void;
+    }
+  ): Promise<string> {
+    let fullContent = '';
+    
+    for await (const chunk of this.chatStream(messages, model, options)) {
+      if (!chunk.done) {
+        fullContent += chunk.content;
+        options?.onProgress?.(fullContent);
+      }
+    }
+    
+    return fullContent;
   }
 
   async chat(
@@ -58,17 +174,15 @@ class OpenRouterService {
     }
 
     try {
-      console.log('Sending request to OpenRouter:', {
-        url: `${this.apiUrl}/chat/completions`,
+      console.log('[INFO] Sending request to OpenRouter:', {
         model: model || this.defaultModel,
         messageCount: messages.length,
-        options
       });
 
       const requestBody: OpenRouterRequest = {
         model: model || this.defaultModel,
         messages,
-        max_tokens: options?.max_tokens || 8000,
+        max_tokens: options?.max_tokens || 4000,
         temperature: options?.temperature || 0.7,
         top_p: options?.top_p || 1,
       };
@@ -88,44 +202,18 @@ class OpenRouterService {
             'HTTP-Referer': window.location.origin,
             'X-Title': 'Flowfolio',
           },
+          timeout: 60000, // 60 second timeout
         }
       );
 
-      console.log('Full OpenRouter response:', JSON.stringify(response.data, null, 2));
-
-      if (!response.data) {
-        throw new Error('No response data from OpenRouter API');
+      if (!response.data?.choices?.[0]?.message?.content) {
+        throw new Error('Invalid response structure from OpenRouter');
       }
 
-      if (!response.data.choices) {
-        console.error('Response missing choices:', response.data);
-        throw new Error(`Invalid response structure: ${JSON.stringify(response.data).substring(0, 200)}`);
-      }
-
-      if (!response.data.choices[0]) {
-        throw new Error('No choices in response');
-      }
-
-      if (!response.data.choices[0].message) {
-        console.error('Choice missing message:', response.data.choices[0]);
-        throw new Error('Response choice missing message field');
-      }
-
-      const content = response.data.choices[0].message.content;
-      if (!content) {
-        throw new Error('Empty content in response');
-      }
-
-      return content;
+      return response.data.choices[0].message.content;
     } catch (error) {
       console.error('OpenRouter API error:', error);
       if (axios.isAxiosError(error)) {
-        console.error('Axios error details:', {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          headers: error.response?.headers
-        });
         const errorMsg = error.response?.data?.error?.message || error.message;
         throw new Error(`OpenRouter API error: ${errorMsg}`);
       }
@@ -142,66 +230,6 @@ class OpenRouterService {
       {
         role: 'user',
         content: `Analyze this portfolio and provide insights:\n${JSON.stringify(portfolioData, null, 2)}`
-      }
-    ];
-
-    return this.chat(messages);
-  }
-
-  async generateGoalRecommendation(goal: any, currentPortfolio: any): Promise<string> {
-    const messages: OpenRouterMessage[] = [
-      {
-        role: 'system',
-        content: 'You are a financial planning AI assistant. Provide personalized recommendations for achieving financial goals based on current portfolio status.'
-      },
-      {
-        role: 'user',
-        content: `Goal: ${JSON.stringify(goal)}\nCurrent Portfolio: ${JSON.stringify(currentPortfolio)}\n\nProvide specific recommendations to achieve this goal.`
-      }
-    ];
-
-    return this.chat(messages);
-  }
-
-  async analyzeInvestmentOpportunity(ticker: string, marketData: any, portfolioContext: any): Promise<string> {
-    const messages: OpenRouterMessage[] = [
-      {
-        role: 'system',
-        content: 'You are an investment analysis AI. Analyze potential investments considering market data and portfolio context. Provide risk assessment and fit analysis.'
-      },
-      {
-        role: 'user',
-        content: `Analyze ${ticker}:\nMarket Data: ${JSON.stringify(marketData)}\nPortfolio Context: ${JSON.stringify(portfolioContext)}`
-      }
-    ];
-
-    return this.chat(messages);
-  }
-
-  async generateRiskAssessment(portfolio: any, riskProfile: string): Promise<string> {
-    const messages: OpenRouterMessage[] = [
-      {
-        role: 'system',
-        content: 'You are a risk management AI. Assess portfolio risk levels and provide recommendations for alignment with risk tolerance.'
-      },
-      {
-        role: 'user',
-        content: `Portfolio: ${JSON.stringify(portfolio)}\nRisk Profile: ${riskProfile}\n\nProvide risk assessment and recommendations.`
-      }
-    ];
-
-    return this.chat(messages);
-  }
-
-  async generateTaxOptimizationAdvice(portfolio: any, taxSituation: any): Promise<string> {
-    const messages: OpenRouterMessage[] = [
-      {
-        role: 'system',
-        content: 'You are a tax optimization AI advisor. Provide strategies for tax-efficient investing. Note: This is educational information, not professional tax advice.'
-      },
-      {
-        role: 'user',
-        content: `Portfolio: ${JSON.stringify(portfolio)}\nTax Situation: ${JSON.stringify(taxSituation)}\n\nSuggest tax optimization strategies.`
       }
     ];
 

@@ -354,6 +354,49 @@
   min-height: 400px;
 }
 
+/* Rolling Charts */
+.rolling-chart .chart-content {
+  min-height: 320px;
+}
+
+/* Factor Chart */
+.factor-chart .chart-content {
+  min-height: 320px;
+}
+
+/* Regime Chart */
+.regime-chart .chart-content {
+  min-height: 320px;
+}
+
+/* Frontier Chart */
+.frontier-chart .chart-content {
+  min-height: 320px;
+}
+
+/* Attribution Chart */
+.attribution-chart .chart-content {
+  min-height: 320px;
+}
+
+/* Success/Danger text colors for insights */
+.insight-value.success {
+  color: #10b981;
+}
+
+.insight-value.danger {
+  color: #ef4444;
+}
+
+/* Enhanced table styles for advanced metrics */
+.risk-metrics-table {
+  min-width: 1000px;
+}
+
+.risk-metrics-table td {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Methodology Section */
 .methodology-section {
   background: var(--bg-card);

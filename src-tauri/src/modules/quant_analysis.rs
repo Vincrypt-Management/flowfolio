@@ -23,6 +23,21 @@ pub struct QuantMetrics {
     pub alpha: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub var_95: Option<f64>,
+    // Advanced quant metrics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub omega_ratio: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tail_ratio: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skewness: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kurtosis: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ulcer_index: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain_to_loss_ratio: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub win_rate: Option<f64>,
     // Daily returns for correlation analysis (last 60 days to limit payload size)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub daily_returns: Option<Vec<f64>>,
@@ -200,6 +215,10 @@ impl QuantAnalyzer {
         // RSI with Wilder's smoothing (more accurate)
         let rsi = Self::calculate_rsi_wilder(&closes, 14);
         
+        // Advanced quant metrics
+        let (omega_ratio, tail_ratio, skewness, kurtosis, ulcer_index, gain_to_loss_ratio, win_rate) = 
+            Self::calculate_advanced_metrics(&returns, &closes);
+        
         // Enhanced signal generation with all metrics
         let (signal, confidence) = Self::generate_signal_enhanced(
             sharpe_ratio, sortino_ratio, rsi, volatility, mean_return, &returns, max_drawdown
@@ -226,6 +245,13 @@ impl QuantAnalyzer {
             beta: None, // Calculated separately with market data
             alpha: None,
             var_95: Some(var_95),
+            omega_ratio: Some(omega_ratio),
+            tail_ratio: Some(tail_ratio),
+            skewness: Some(skewness),
+            kurtosis: Some(kurtosis),
+            ulcer_index: Some(ulcer_index),
+            gain_to_loss_ratio: Some(gain_to_loss_ratio),
+            win_rate: Some(win_rate),
             daily_returns,
         }
     }
@@ -254,8 +280,88 @@ impl QuantAnalyzer {
             beta: None,
             alpha: None,
             var_95: None,
+            omega_ratio: None,
+            tail_ratio: None,
+            skewness: None,
+            kurtosis: None,
+            ulcer_index: None,
+            gain_to_loss_ratio: None,
+            win_rate: None,
             daily_returns: None,
         }
+    }
+
+    /// Calculate advanced quant metrics: Omega ratio, tail ratio, skewness, kurtosis, ulcer index
+    fn calculate_advanced_metrics(returns: &[f64], closes: &[f64]) -> (f64, f64, f64, f64, f64, f64, f64) {
+        if returns.len() < 10 {
+            return (1.0, 1.0, 0.0, 0.0, 5.0, 1.0, 50.0);
+        }
+
+        let n = returns.len() as f64;
+        let mean: f64 = returns.iter().sum::<f64>() / n;
+        let variance: f64 = returns.iter().map(|&r| (r - mean).powi(2)).sum::<f64>() / n;
+        let std_dev = variance.sqrt();
+
+        // Skewness (third moment)
+        let skewness = if std_dev > 1e-10 {
+            returns.iter().map(|&r| ((r - mean) / std_dev).powi(3)).sum::<f64>() / n
+        } else {
+            0.0
+        };
+
+        // Excess Kurtosis (fourth moment minus 3)
+        let kurtosis = if std_dev > 1e-10 {
+            returns.iter().map(|&r| ((r - mean) / std_dev).powi(4)).sum::<f64>() / n - 3.0
+        } else {
+            0.0
+        };
+
+        // Omega Ratio (probability-weighted gains over losses)
+        let threshold = 0.0;
+        let gains: f64 = returns.iter().filter(|&&r| r > threshold).map(|&r| r - threshold).sum();
+        let losses: f64 = returns.iter().filter(|&&r| r <= threshold).map(|&r| threshold - r).sum();
+        let omega_ratio = if losses > 1e-10 { gains / losses } else if gains > 0.0 { 3.0 } else { 1.0 };
+
+        // Tail Ratio (95th percentile / |5th percentile|)
+        let mut sorted = returns.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let p5_idx = (returns.len() as f64 * 0.05).floor() as usize;
+        let p95_idx = (returns.len() as f64 * 0.95).floor() as usize;
+        let p5 = sorted.get(p5_idx).copied().unwrap_or(0.0);
+        let p95 = sorted.get(p95_idx).copied().unwrap_or(0.0);
+        let tail_ratio = if p5.abs() > 1e-10 { (p95 / p5).abs() } else { 1.0 };
+
+        // Win Rate
+        let positive_returns = returns.iter().filter(|&&r| r > 0.0).count() as f64;
+        let win_rate = (positive_returns / n) * 100.0;
+
+        // Gain to Loss Ratio
+        let avg_gain = returns.iter().filter(|&&r| r > 0.0).sum::<f64>() / positive_returns.max(1.0);
+        let negative_count = returns.iter().filter(|&&r| r < 0.0).count() as f64;
+        let avg_loss = returns.iter().filter(|&&r| r < 0.0).sum::<f64>().abs() / negative_count.max(1.0);
+        let gain_to_loss_ratio = if avg_loss > 1e-10 { avg_gain / avg_loss } else if avg_gain > 0.0 { 2.0 } else { 1.0 };
+
+        // Ulcer Index (measures depth and duration of drawdowns)
+        let mut peak = closes.first().copied().unwrap_or(100.0);
+        let mut sum_squared_dd = 0.0;
+        for &price in closes.iter() {
+            if price > peak {
+                peak = price;
+            }
+            let dd = if peak > 1e-10 { ((peak - price) / peak) * 100.0 } else { 0.0 };
+            sum_squared_dd += dd * dd;
+        }
+        let ulcer_index = (sum_squared_dd / closes.len() as f64).sqrt();
+
+        (
+            omega_ratio.clamp(0.0, 5.0),
+            tail_ratio.clamp(0.1, 5.0),
+            skewness.clamp(-3.0, 3.0),
+            kurtosis.clamp(-2.0, 10.0),
+            ulcer_index.clamp(0.0, 30.0),
+            gain_to_loss_ratio.clamp(0.0, 5.0),
+            win_rate.clamp(0.0, 100.0),
+        )
     }
 
     /// Welford's online algorithm for numerically stable mean and variance

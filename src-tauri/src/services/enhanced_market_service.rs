@@ -304,6 +304,13 @@ impl EnhancedMarketDataService {
                     beta: None,
                     alpha: None,
                     var_95: None,
+                    omega_ratio: None,
+                    tail_ratio: None,
+                    skewness: None,
+                    kurtosis: None,
+                    ulcer_index: None,
+                    gain_to_loss_ratio: None,
+                    win_rate: None,
                     daily_returns: None,
                 };
                 
@@ -394,6 +401,13 @@ impl EnhancedMarketDataService {
                     beta: None,
                     alpha: None,
                     var_95: None,
+                    omega_ratio: None,
+                    tail_ratio: None,
+                    skewness: None,
+                    kurtosis: None,
+                    ulcer_index: None,
+                    gain_to_loss_ratio: None,
+                    win_rate: None,
                     daily_returns: None,
                 }
             })

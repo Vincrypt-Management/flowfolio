@@ -27,6 +27,14 @@ interface PortfolioAsset {
     beta?: number;
     alpha?: number;
     var95?: number;
+    // Advanced quant metrics
+    omegaRatio?: number;
+    tailRatio?: number;
+    skewness?: number;
+    kurtosis?: number;
+    ulcerIndex?: number;
+    gainToLossRatio?: number;
+    winRate?: number;
   };
   dailyReturns?: number[]; // For correlation analysis
   fundamentals?: {
@@ -139,10 +147,31 @@ class PortfolioAgentService {
 
   async *generatePortfolioStream(userPrompt: string): AsyncGenerator<StreamUpdate> {
     try {
-      yield { type: 'progress', step: 'generating', message: 'Creating portfolio structure...' };
+      yield { type: 'progress', step: 'analyzing', message: 'Analyzing investment goals...' };
 
-      // Single AI call - fast portfolio generation
-      const portfolioStructure = await this.generatePortfolioStructureOptimized(userPrompt);
+      // Use streaming AI for faster perceived response
+      let portfolioStructure: GeneratedPortfolio | null = null;
+      let streamedContent = '';
+      
+      yield { type: 'progress', step: 'generating', message: 'AI generating portfolio...' };
+      
+      // Stream the AI response for faster feedback
+      for await (const chunk of this.streamPortfolioGeneration(userPrompt)) {
+        streamedContent += chunk;
+        // Yield progress updates periodically
+        if (streamedContent.length % 500 === 0) {
+          yield { type: 'progress', step: 'generating', message: `Generating... (${Math.floor(streamedContent.length / 100)}%)` };
+        }
+      }
+      
+      // Parse the streamed content
+      try {
+        portfolioStructure = this.parsePortfolioJSON(streamedContent);
+      } catch (parseError) {
+        console.error('[ERROR] Failed to parse streamed portfolio:', parseError);
+        throw new Error('Failed to parse AI response. Please try again.');
+      }
+      
       yield { 
         type: 'data', 
         step: 'structure', 
@@ -150,10 +179,15 @@ class PortfolioAgentService {
         data: portfolioStructure 
       };
 
-      yield { type: 'progress', step: 'fetching', message: 'Fetching real-time market data...' };
+      yield { type: 'progress', step: 'fetching', message: 'Fetching market data...' };
 
-      // Fast parallel data fetching
-      const enrichedPortfolio = await this.enrichWithMarketDataFast(portfolioStructure);
+      // Fast parallel data fetching with timeout
+      const enrichedPortfolio = await Promise.race([
+        this.enrichWithMarketDataFast(portfolioStructure),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Market data fetch timeout')), 30000)
+        )
+      ]);
       
       yield { 
         type: 'data', 
@@ -162,7 +196,7 @@ class PortfolioAgentService {
         data: enrichedPortfolio 
       };
 
-      yield { type: 'progress', step: 'optimizing', message: 'Optimizing portfolio...' };
+      yield { type: 'progress', step: 'quantitative', message: 'Running quant analysis...' };
 
       // Fast optimization (no AI)
       const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
@@ -180,6 +214,92 @@ class PortfolioAgentService {
         error: error instanceof Error ? error.message : 'Unknown error occurred' 
       };
     }
+  }
+
+  /**
+   * Stream portfolio generation using the OpenRouter streaming API
+   */
+  private async *streamPortfolioGeneration(userPrompt: string): AsyncGenerator<string> {
+    const messages: OpenRouterMessage[] = [
+      {
+        role: 'system',
+        content: `You are a CFA charterholder and portfolio manager. Generate a JSON portfolio.
+
+OUTPUT ONLY VALID JSON - NO OTHER TEXT:
+{
+  "title": "Portfolio Name",
+  "description": "Brief description",
+  "strategy": "Investment strategy explanation",
+  "riskLevel": "Low|Medium|High",
+  "timeHorizon": "X years",
+  "rebalanceFrequency": "Quarterly|Monthly|Annual",
+  "assets": [
+    {"symbol": "AAPL", "name": "Apple Inc.", "allocation": 15.0, "rationale": "Why this stock", "sector": "Technology"}
+  ],
+  "expectedReturn": "X-Y% annually",
+  "volatility": "X-Y%",
+  "reasoning": "Overall reasoning"
+}
+
+RULES:
+- 8-12 liquid US stocks only
+- Allocations must sum to 100
+- Use real ticker symbols
+- Output ONLY the JSON object`
+      },
+      {
+        role: 'user',
+        content: `Create a portfolio for: ${userPrompt}`
+      }
+    ];
+
+    for await (const chunk of openRouterService.chatStream(messages, this.vibeModel, {
+      temperature: 0.7,
+      max_tokens: 3000,
+    })) {
+      if (!chunk.done) {
+        yield chunk.content;
+      }
+    }
+  }
+
+  /**
+   * Parse portfolio JSON with error handling
+   */
+  private parsePortfolioJSON(content: string): GeneratedPortfolio {
+    // Clean the response
+    let cleanedResponse = content.trim();
+    cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '');
+    cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
+    
+    const firstBrace = cleanedResponse.indexOf('{');
+    const lastBrace = cleanedResponse.lastIndexOf('}');
+    
+    if (firstBrace === -1 || lastBrace === -1) {
+      throw new Error('No JSON object found in response');
+    }
+    
+    let jsonStr = cleanedResponse.substring(firstBrace, lastBrace + 1);
+    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
+    jsonStr = jsonStr.replace(/:\s*NaN/g, ': 0');
+    jsonStr = jsonStr.replace(/:\s*Infinity/g, ': 100');
+    
+    const portfolio = JSON.parse(jsonStr);
+    
+    // Validate and normalize
+    if (!portfolio.title || !portfolio.assets || !Array.isArray(portfolio.assets)) {
+      throw new Error('Invalid portfolio structure');
+    }
+    
+    const totalAllocation = portfolio.assets.reduce((sum: number, a: any) => sum + (a.allocation || 0), 0);
+    if (totalAllocation > 0 && Math.abs(totalAllocation - 100) > 1) {
+      portfolio.assets = portfolio.assets.map((a: any) => ({
+        ...a,
+        allocation: parseFloat(((a.allocation / totalAllocation) * 100).toFixed(2))
+      }));
+    }
+    
+    return portfolio;
   }
 
   private async generatePortfolioStructureOptimized(userPrompt: string): Promise<GeneratedPortfolio> {
@@ -431,125 +551,67 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private async enrichWithMarketDataFast(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('[INFO] Fetching market data...');
+    console.log('[INFO] Fast market data enrichment starting...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
-    console.log(`Processing ${symbols.length} symbols:`, symbols);
+    const startTime = Date.now();
     
     try {
-      // STEP 1: Backend fetches prices and quant metrics (uses its own rate limiting)
-      // The backend will fetch historical data once and cache prices
-      console.log('[INFO] Step 1/2: Fetching prices and quant metrics from backend...');
-      const [pricesMap, quantMetricsArray] = await Promise.all([
-        marketDataService.getCurrentPricesBatch(symbols),
-        marketDataService.getQuantMetricsBatch(symbols),
+      // All data fetching in parallel with individual timeouts
+      const [pricesResult, quantResult, fundamentalsResult, sentimentResult, analystResult] = await Promise.allSettled([
+        // Core data with 15s timeout
+        Promise.race([
+          marketDataService.getCurrentPricesBatch(symbols),
+          new Promise<Record<string, number>>((_, reject) => setTimeout(() => reject('timeout'), 15000))
+        ]),
+        Promise.race([
+          marketDataService.getQuantMetricsBatch(symbols),
+          new Promise<any[]>((_, reject) => setTimeout(() => reject('timeout'), 15000))
+        ]),
+        // Optional data with 10s timeout - fail silently
+        Promise.race([
+          fundamentalDataService.getBatchFundamentals(symbols),
+          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 10000))
+        ]),
+        Promise.race([
+          newsService.getBatchSentiment(symbols),
+          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 8000))
+        ]),
+        Promise.race([
+          newsService.getBatchAnalystRatings(symbols),
+          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 8000))
+        ]),
       ]);
-      console.log(`Backend data: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} metrics`);
 
-      // STEP 2: Frontend fetches additional data (fundamentals, sentiment, analyst)
-      // These use the global rate limiter and are fetched in background
-      console.log('[INFO] Step 2/2: Fetching fundamentals, sentiment & analyst ratings...');
-      
-      // Fetch all in parallel - they share the global rate limiter so won't conflict
-      const [fundamentalsMap, sentimentMap, analystMap] = await Promise.all([
-        fundamentalDataService.getBatchFundamentals(symbols).catch(e => {
-          console.warn('Fundamentals fetch failed:', e);
-          return {} as Record<string, any>;
-        }),
-        newsService.getBatchSentiment(symbols).catch(e => {
-          console.warn('Sentiment fetch failed:', e);
-          return {} as Record<string, any>;
-        }),
-        newsService.getBatchAnalystRatings(symbols).catch(e => {
-          console.warn('Analyst ratings fetch failed:', e);
-          return {} as Record<string, any>;
-        })
-      ]);
-      
-      console.log(`Additional data: ${Object.keys(fundamentalsMap).length} fundamentals, ${Object.keys(sentimentMap).length} sentiment, ${Object.keys(analystMap).length} analyst`);
+      // Extract results with fallbacks
+      const pricesMap = pricesResult.status === 'fulfilled' ? pricesResult.value : {};
+      const quantMetricsArray = quantResult.status === 'fulfilled' ? quantResult.value : [];
+      const fundamentalsMap = fundamentalsResult.status === 'fulfilled' ? fundamentalsResult.value : {};
+      const sentimentMap = sentimentResult.status === 'fulfilled' ? sentimentResult.value : {};
+      const analystMap = analystResult.status === 'fulfilled' ? analystResult.value : {};
 
-      // STEP 3: Skip market insights for now to avoid rate limits
-      // Market insights will be fetched on-demand in a future update
-      console.log('[INFO] Step 3/3: Skipping market insights (rate limit protection)...');
-      const insightsMap: Record<string, MarketInsight[]> = {};
+      console.log(`[INFO] Data fetched in ${Date.now() - startTime}ms: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} quant`);
       
-      // Disabled: Fetch insights for top 3 allocations only to save time
-      // This causes too many API calls and triggers rate limits
-      /*
-      const topSymbols = [...portfolio.assets]
-        .sort((a, b) => b.allocation - a.allocation)
-        .slice(0, 3)
-        .map(a => a.symbol);
-      
-      /*
-      for (const sym of topSymbols) {
-        try {
-          const insights = await webSearchService.generateMarketInsights(sym);
-          if (insights.length > 0) {
-            insightsMap[sym] = insights;
-          }
-        } catch (e) {
-          console.warn(`Market insights fetch failed for ${sym}:`, e);
-        }
-      }
-      */
-      console.log(`Market insights: disabled for rate limit protection`);
-      
-      // Verify data completeness - but allow partial data
-      const validPrices = Object.values(pricesMap).filter(p => p !== null && p !== undefined && p > 0).length;
-      const validMetrics = quantMetricsArray.filter(m => m.signal !== 'INSUFFICIENT DATA').length;
-      
-      console.log(`Data quality: ${validPrices}/${symbols.length} prices, ${validMetrics}/${symbols.length} metrics`);
-      
-      // Only fail if we have ZERO data - otherwise proceed with partial data
-      if (validPrices === 0 && Object.keys(fundamentalsMap).length === 0) {
-        // Try one more time with a longer delay
-        console.warn('[WARN] No data received, retrying with longer delay...');
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        // Re-fetch just prices from frontend
-        const retryPrices = await marketDataService.getCurrentPricesBatch(symbols);
-        const retryValidPrices = Object.values(retryPrices).filter(p => p > 0).length;
-        
-        if (retryValidPrices === 0) {
-          throw new Error('Unable to fetch market data. Please try again in a few minutes.');
-        }
-        
-        // Use retry prices
-        Object.assign(pricesMap, retryPrices);
-      }
-      
-      const metricsMap = new Map(quantMetricsArray.map(m => [m.symbol, m]));
+      const metricsMap = new Map(quantMetricsArray.map((m: any) => [m.symbol, m]));
 
-      // Enrich assets with COMPLETE data
+      // Enrich assets
       const enrichedAssets = portfolio.assets.map((asset) => {
         const price = pricesMap[asset.symbol];
         const metrics = metricsMap.get(asset.symbol);
         const fundamentals = fundamentalsMap[asset.symbol];
         const sentiment = sentimentMap[asset.symbol];
         const analyst = analystMap[asset.symbol];
-        const insights = insightsMap[asset.symbol];
         
-        if (!price) {
-          console.warn(`Missing price for ${asset.symbol}`);
-        }
-        
-        if (!fundamentals) {
-          console.warn(`Missing fundamentals for ${asset.symbol}`);
-        }
-        
-        // Calculate upside to target price
         let upside: number | null = null;
         if (price && analyst?.targetPriceMean) {
           upside = ((analyst.targetPriceMean - price) / price) * 100;
         }
         
-        // Calculate composite score (0-100)
         const compositeScore = this.calculateCompositeScore(metrics, fundamentals, sentiment, analyst, upside);
         
-        const baseAsset = {
+        return {
           ...asset,
-          currentPrice: price,
+          currentPrice: price || undefined,
           sentiment: sentiment ? {
             overallSentiment: sentiment.overallSentiment,
             sentimentScore: sentiment.sentimentScore,
@@ -565,57 +627,29 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             upside
           } : undefined,
           compositeScore,
-          marketInsights: insights || undefined
-        };
-        
-        if (!metrics || metrics.signal === 'INSUFFICIENT DATA') {
-          console.warn(`Insufficient metrics for ${asset.symbol}`);
-          return {
-            ...baseAsset,
-            technicalSignal: 'Data pending',
-            quantMetrics: {
-              sharpeRatio: 0,
-              volatility: 0,
-              expectedReturn: 0,
-              maxDrawdown: 0,
-              rsi: 50,
-              recommendation: 'Data pending',
-              confidence: 0
-            },
-            fundamentals: fundamentals ? {
-              peRatio: fundamentals.peRatio,
-              forwardPE: fundamentals.forwardPE,
-              priceToBook: fundamentals.priceToBook,
-              profitMargin: fundamentals.profitMargin,
-              returnOnEquity: fundamentals.returnOnEquity,
-              revenueGrowthYoY: fundamentals.revenueGrowthYoY,
-              debtToEquity: fundamentals.debtToEquity,
-              dividendYield: fundamentals.dividendYield,
-              marketCap: fundamentals.marketCap,
-              eps: fundamentals.eps,
-              beta: fundamentals.beta
-            } : undefined
-          };
-        }
-        
-        return {
-          ...baseAsset,
-          technicalSignal: metrics.signal,
-          quantMetrics: {
-            sharpeRatio: metrics.sharpe_ratio,
-            volatility: metrics.volatility,
-            expectedReturn: metrics.annualized_return,
-            maxDrawdown: metrics.max_drawdown,
-            rsi: metrics.rsi,
-            recommendation: metrics.signal,
-            confidence: metrics.confidence,
+          technicalSignal: metrics?.signal || 'Pending',
+          quantMetrics: metrics ? {
+            sharpeRatio: metrics.sharpe_ratio || 0,
+            volatility: metrics.volatility || 0,
+            expectedReturn: metrics.annualized_return || 0,
+            maxDrawdown: metrics.max_drawdown || 0,
+            rsi: metrics.rsi || 50,
+            recommendation: metrics.signal || 'Hold',
+            confidence: metrics.confidence || 0,
             sortinoRatio: metrics.sortino_ratio,
             calmarRatio: metrics.calmar_ratio,
             beta: metrics.beta,
             alpha: metrics.alpha,
             var95: metrics.var_95,
-          },
-          dailyReturns: metrics.daily_returns || [],
+            omegaRatio: metrics.omega_ratio,
+            tailRatio: metrics.tail_ratio,
+            skewness: metrics.skewness,
+            kurtosis: metrics.kurtosis,
+            ulcerIndex: metrics.ulcer_index,
+            gainToLossRatio: metrics.gain_to_loss_ratio,
+            winRate: metrics.win_rate,
+          } : undefined,
+          dailyReturns: metrics?.daily_returns || [],
           fundamentals: fundamentals ? {
             peRatio: fundamentals.peRatio,
             forwardPE: fundamentals.forwardPE,
@@ -632,21 +666,13 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         };
       });
 
-      const fullyEnriched = enrichedAssets.filter(a => 
-        a.currentPrice && 
-        a.quantMetrics?.recommendation !== 'Data pending' &&
-        a.fundamentals
-      ).length;
-      console.log(`COMPLETE: ${fullyEnriched}/${symbols.length} assets fully enriched with all data`);
-      
-      if (fullyEnriched < symbols.length * 0.5) {
-        console.warn(`WARNING: Only ${fullyEnriched}/${symbols.length} assets have complete data`);
-      }
-      
+      console.log(`[INFO] Enrichment complete in ${Date.now() - startTime}ms`);
       return { ...portfolio, assets: enrichedAssets };
+      
     } catch (error) {
-      console.error('[ERROR] CRITICAL: Market data enrichment failed:', error);
-      throw new Error(`Failed to fetch market data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('[ERROR] Market data enrichment failed:', error);
+      // Return portfolio with whatever data we have
+      return portfolio;
     }
   }
 
