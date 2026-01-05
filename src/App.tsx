@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
 import VibeStudio from "./components/VibeStudio";
 import { PortfolioTab } from "./PortfolioTab";
@@ -109,7 +109,11 @@ function App() {
   const [marketPrices, setMarketPrices] = useState<Record<string, number>>({});
   const [isLoadingMarket, setIsLoadingMarket] = useState(false);
 
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
+    isMountedRef.current = true;
     checkHealth();
     loadTemplates();
     loadDefaultPlan();
@@ -117,21 +121,31 @@ function App() {
     loadUniverses();
     loadSavedPlans();
     loadMarketOverview();
+    
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   async function checkHealth() {
     try {
       const health = await invoke<string>("health_check");
-      setStatus(health);
+      if (isMountedRef.current) {
+        setStatus(health);
+      }
     } catch (error) {
-      setStatus("Error: " + error);
+      if (isMountedRef.current) {
+        setStatus("Error: " + error);
+      }
     }
   }
 
   async function loadTemplates() {
     try {
       const templateList = await invoke<string[]>("list_templates");
-      setTemplates(templateList);
+      if (isMountedRef.current) {
+        setTemplates(templateList);
+      }
     } catch (error) {
       console.error("Failed to load templates:", error);
     }
@@ -140,7 +154,9 @@ function App() {
   async function loadDefaultPlan() {
     try {
       const defaultPlan = await invoke<VibePlan>("get_default_plan");
-      setPlan(defaultPlan);
+      if (isMountedRef.current) {
+        setPlan(defaultPlan);
+      }
     } catch (error) {
       console.error("Failed to load default plan:", error);
     }
@@ -149,7 +165,9 @@ function App() {
   async function loadCacheStats() {
     try {
       const stats = await invoke<{ memory_prices: number; memory_quant: number }>("get_cache_stats");
-      setCachedSymbolsCount(stats.memory_prices + stats.memory_quant);
+      if (isMountedRef.current) {
+        setCachedSymbolsCount(stats.memory_prices + stats.memory_quant);
+      }
     } catch (error) {
       console.error("Failed to load cache stats:", error);
     }
@@ -158,7 +176,9 @@ function App() {
   async function loadUniverses() {
     try {
       const universeList = await invoke<Universe[]>("list_universes");
-      setUniverses(universeList);
+      if (isMountedRef.current) {
+        setUniverses(universeList);
+      }
     } catch (error) {
       console.error("Failed to load universes:", error);
     }
@@ -167,22 +187,30 @@ function App() {
   async function loadSavedPlans() {
     try {
       const plans = await invoke<string[]>("list_saved_plans");
-      setSavedPlans(plans);
+      if (isMountedRef.current) {
+        setSavedPlans(plans);
+      }
     } catch (error) {
       console.error("Failed to load saved plans:", error);
     }
   }
 
   async function loadMarketOverview() {
-    setIsLoadingMarket(true);
+    if (isMountedRef.current) {
+      setIsLoadingMarket(true);
+    }
     try {
       const symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"];
       const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
-      setMarketPrices(prices);
+      if (isMountedRef.current) {
+        setMarketPrices(prices);
+      }
     } catch (error) {
       console.error("Failed to load market prices:", error);
     } finally {
-      setIsLoadingMarket(false);
+      if (isMountedRef.current) {
+        setIsLoadingMarket(false);
+      }
     }
   }
 
@@ -199,23 +227,31 @@ function App() {
         description: `Universe created on ${new Date().toLocaleDateString()}`,
         symbols
       });
-      setUniverses([...universes, universe]);
-      setNewUniverseName("");
-      setNewUniverseSymbols("");
+      if (isMountedRef.current) {
+        setUniverses([...universes, universe]);
+        setNewUniverseName("");
+        setNewUniverseSymbols("");
+      }
     } catch (error) {
-      alert("Error creating universe: " + error);
+      if (isMountedRef.current) {
+        alert("Error creating universe: " + error);
+      }
     }
   }
 
   async function deleteUniverse(id: string) {
     try {
       await invoke("delete_universe", { id });
-      setUniverses(universes.filter(u => u.id !== id));
-      if (selectedUniverse?.id === id) {
-        setSelectedUniverse(null);
+      if (isMountedRef.current) {
+        setUniverses(universes.filter(u => u.id !== id));
+        if (selectedUniverse?.id === id) {
+          setSelectedUniverse(null);
+        }
       }
     } catch (error) {
-      alert("Error deleting universe: " + error);
+      if (isMountedRef.current) {
+        alert("Error deleting universe: " + error);
+      }
     }
   }
 
@@ -228,9 +264,13 @@ function App() {
     try {
       await invoke("save_plan", { plan });
       await loadSavedPlans();
-      alert("Plan saved successfully!");
+      if (isMountedRef.current) {
+        alert("Plan saved successfully!");
+      }
     } catch (error) {
-      alert("Error saving plan: " + error);
+      if (isMountedRef.current) {
+        alert("Error saving plan: " + error);
+      }
     }
   }
 
@@ -250,7 +290,9 @@ function App() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert("Error exporting data: " + error);
+      if (isMountedRef.current) {
+        alert("Error exporting data: " + error);
+      }
     }
   }
 
@@ -261,23 +303,29 @@ function App() {
     try {
       const text = await file.text();
       const result = await invoke<{ success: boolean }>("import_data_bundle", { bundleJson: text });
-      if (result.success) {
+      if (result.success && isMountedRef.current) {
         alert("Data imported successfully!");
         await loadUniverses();
         await loadSavedPlans();
       }
     } catch (error) {
-      alert("Error importing data: " + error);
+      if (isMountedRef.current) {
+        alert("Error importing data: " + error);
+      }
     }
   }
 
   async function loadTemplate(templateName: string) {
     try {
       const template = await invoke<VibePlan>("get_template", { name: templateName });
-      setPlan(template);
-      setSelectedTemplate(templateName);
+      if (isMountedRef.current) {
+        setPlan(template);
+        setSelectedTemplate(templateName);
+      }
     } catch (error) {
-      alert("Error loading template: " + error);
+      if (isMountedRef.current) {
+        alert("Error loading template: " + error);
+      }
     }
   }
 
@@ -287,11 +335,17 @@ function App() {
     
     try {
       const result = await invoke<string>("test_data_connection");
-      setConnectionStatus("✅ " + result);
+      if (isMountedRef.current) {
+        setConnectionStatus("✅ " + result);
+      }
     } catch (error) {
-      setConnectionStatus("❌ " + error);
+      if (isMountedRef.current) {
+        setConnectionStatus("❌ " + error);
+      }
     } finally {
-      setIsTestingConnection(false);
+      if (isMountedRef.current) {
+        setIsTestingConnection(false);
+      }
     }
   }
 
@@ -304,12 +358,16 @@ function App() {
         : ["AAPL", "MSFT", "GOOGL", "AMZN", "META"];
       
       await invoke("prefetch_symbols", { symbols: symbolsToSync });
-      setLastSyncTime(new Date().toISOString());
-      await loadCacheStats();
+      if (isMountedRef.current) {
+        setLastSyncTime(new Date().toISOString());
+        await loadCacheStats();
+      }
     } catch (error) {
       console.error("Sync failed:", error);
     } finally {
-      setIsSyncing(false);
+      if (isMountedRef.current) {
+        setIsSyncing(false);
+      }
     }
   }
 
@@ -381,11 +439,17 @@ function App() {
       
       // Sort by score descending
       results.sort((a, b) => b.total_score - a.total_score);
-      setScores(results);
+      if (isMountedRef.current) {
+        setScores(results);
+      }
     } catch (error) {
-      alert("Error scoring symbols: " + error);
+      if (isMountedRef.current) {
+        alert("Error scoring symbols: " + error);
+      }
     } finally {
-      setIsScoring(false);
+      if (isMountedRef.current) {
+        setIsScoring(false);
+      }
     }
   }
 

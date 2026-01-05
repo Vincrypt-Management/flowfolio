@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
@@ -91,6 +91,16 @@ export function PortfolioTab() {
   const [newTargetPct, setNewTargetPct] = useState("");
   const [cashAmount, setCashAmount] = useState("");
 
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   async function addHolding() {
     if (!newSymbol || !newShares) {
       alert("Please enter symbol and shares");
@@ -101,6 +111,9 @@ export function PortfolioTab() {
     try {
       // Fetch current price
       const price = await invoke<number>("get_current_price_single", { symbol: newSymbol.toUpperCase() });
+      
+      // Check if still mounted before updating state
+      if (!isMountedRef.current) return;
       
       const shares = parseFloat(newShares);
       const costBasis = newCostBasis ? parseFloat(newCostBasis) : price;
@@ -140,9 +153,13 @@ export function PortfolioTab() {
       setNewCostBasis("");
       setNewTargetPct("");
     } catch (error) {
-      alert("Error adding holding: " + error);
+      if (isMountedRef.current) {
+        alert("Error adding holding: " + error);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -153,6 +170,9 @@ export function PortfolioTab() {
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
       const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
+      
+      // Check if still mounted before updating state
+      if (!isMountedRef.current) return;
       
       const updatedHoldings = portfolio.holdings.map(h => ({
         ...h,
@@ -175,9 +195,13 @@ export function PortfolioTab() {
         last_updated: new Date().toISOString(),
       });
     } catch (error) {
-      alert("Error updating prices: " + error);
+      if (isMountedRef.current) {
+        alert("Error updating prices: " + error);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -230,6 +254,9 @@ export function PortfolioTab() {
       const symbols = portfolio.holdings.map(h => h.symbol);
       const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
 
+      // Check if still mounted before updating state
+      if (!isMountedRef.current) return;
+
       const list = await invoke<BuyList>("generate_monthly_buy_list", {
         contribution: parseFloat(contribution),
         portfolio,
@@ -237,11 +264,17 @@ export function PortfolioTab() {
         prices,
       });
 
-      setBuyList(list);
+      if (isMountedRef.current) {
+        setBuyList(list);
+      }
     } catch (error) {
-      alert("Error generating buy list: " + error);
+      if (isMountedRef.current) {
+        alert("Error generating buy list: " + error);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -258,11 +291,17 @@ export function PortfolioTab() {
         thresholdPct: 5.0,
       });
 
-      setRebalanceReport(report);
+      if (isMountedRef.current) {
+        setRebalanceReport(report);
+      }
     } catch (error) {
-      alert("Error checking rebalance: " + error);
+      if (isMountedRef.current) {
+        alert("Error checking rebalance: " + error);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -282,11 +321,17 @@ export function PortfolioTab() {
         cashBufferPct: 5.0,
       });
 
-      setAllocationPlan(plan);
+      if (isMountedRef.current) {
+        setAllocationPlan(plan);
+      }
     } catch (error) {
-      alert("Error creating allocation: " + error);
+      if (isMountedRef.current) {
+        alert("Error creating allocation: " + error);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 

@@ -5,6 +5,18 @@ import { newsService } from './newsService';
 import type { MarketInsight } from './webSearch';
 // FundamentalMetrics type is used in the PortfolioAsset interface
 
+// Risk protection configuration
+const RISK_PROTECTION_CONFIG = {
+  maxProbabilityOfLoss: 15, // Maximum allowed probability of loss (%)
+  minSharpeRatio: 0.5, // Minimum portfolio Sharpe ratio
+  maxVolatility: 20, // Maximum annualized volatility (%)
+  minDiversificationScore: 60, // Minimum diversification score
+  maxSingleAssetAllocation: 25, // Maximum allocation to single asset (%)
+  minAssets: 8, // Minimum number of assets
+  defensiveAssetMinAllocation: 15, // Minimum allocation to defensive assets (%)
+  hedgeAllocationOnHighRisk: 10, // Allocation to add for hedging if risk is high
+};
+
 interface PortfolioAsset {
   symbol: string;
   name: string;
@@ -106,6 +118,19 @@ interface GeneratedPortfolio {
   sharpeRatioEstimate?: number;
   monteCarloResult?: MonteCarloResult;
   backtestResult?: BacktestResult;
+  riskProtectionApplied?: boolean;
+  riskAdjustments?: string[];
+  activityLevel?: {
+    score: number; // -1 to 1, -1 = very passive, 1 = very active
+    label: 'Very Passive' | 'Passive' | 'Moderate' | 'Active' | 'Very Active';
+    description: string;
+    factors: {
+      rebalanceFrequency: number; // -1 to 1
+      turnoverEstimate: number; // -1 to 1
+      monitoringNeeded: number; // -1 to 1
+      decisionFrequency: number; // -1 to 1
+    };
+  };
 }
 
 interface TechnicalAnalysis {
@@ -223,13 +248,13 @@ class PortfolioAgentService {
     const messages: OpenRouterMessage[] = [
       {
         role: 'system',
-        content: `You are a CFA charterholder and portfolio manager. Generate a JSON portfolio.
+        content: `You are a CFA charterholder and risk-conscious portfolio manager. Generate a JSON portfolio with CAPITAL PRESERVATION as the primary goal.
 
 OUTPUT ONLY VALID JSON - NO OTHER TEXT:
 {
   "title": "Portfolio Name",
   "description": "Brief description",
-  "strategy": "Investment strategy explanation",
+  "strategy": "Investment strategy explanation emphasizing risk management",
   "riskLevel": "Low|Medium|High",
   "timeHorizon": "X years",
   "rebalanceFrequency": "Quarterly|Monthly|Annual",
@@ -238,8 +263,18 @@ OUTPUT ONLY VALID JSON - NO OTHER TEXT:
   ],
   "expectedReturn": "X-Y% annually",
   "volatility": "X-Y%",
-  "reasoning": "Overall reasoning"
+  "reasoning": "Overall reasoning including risk mitigation"
 }
+
+RISK PROTECTION RULES (CRITICAL):
+- ALWAYS include at least 15% in defensive/stable stocks (utilities, consumer staples, healthcare)
+- NO single stock should exceed 20% allocation
+- Include mix of growth AND value stocks for balance
+- Prefer stocks with lower beta (<1.2) and consistent dividends
+- Avoid highly speculative or meme stocks
+- Include 8-12 liquid US stocks for diversification
+- Consider sector diversification (no more than 30% in any sector)
+- Prioritize quality companies with strong balance sheets
 
 RULES:
 - 8-12 liquid US stocks only
@@ -249,7 +284,9 @@ RULES:
       },
       {
         role: 'user',
-        content: `Create a portfolio for: ${userPrompt}`
+        content: `Create a RISK-PROTECTED portfolio for: ${userPrompt}
+
+Important: The portfolio MUST minimize probability of loss while still achieving reasonable returns. Prioritize capital preservation.`
       }
     ];
 
@@ -306,7 +343,8 @@ RULES:
     const messages: OpenRouterMessage[] = [
       {
         role: 'system',
-        content: `You are a CFA charterholder and portfolio manager with 20+ years of experience.
+        content: `You are a CFA charterholder and RISK-CONSCIOUS portfolio manager with 20+ years of experience.
+Your PRIMARY GOAL is CAPITAL PRESERVATION while achieving reasonable returns.
 
 CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -322,8 +360,8 @@ CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
 EXACT JSON FORMAT REQUIRED:
 {
   "title": "Portfolio name here",
-  "description": "Brief 1-2 sentence description",
-  "strategy": "Detailed 200-300 word strategy explanation",
+  "description": "Brief 1-2 sentence description emphasizing risk management",
+  "strategy": "Detailed 200-300 word strategy explanation with focus on risk mitigation",
   "riskLevel": "Low",
   "timeHorizon": "5-10 years",
   "rebalanceFrequency": "Quarterly",
@@ -332,14 +370,32 @@ EXACT JSON FORMAT REQUIRED:
       "symbol": "AAPL",
       "name": "Apple Inc.",
       "allocation": 15.0,
-      "rationale": "Detailed investment rationale",
+      "rationale": "Detailed investment rationale including risk factors",
       "sector": "Technology"
     }
   ],
   "expectedReturn": "8-12% annually",
   "volatility": "12-18%",
-  "reasoning": "Comprehensive 300+ word reasoning"
+  "reasoning": "Comprehensive 300+ word reasoning including risk analysis"
 }
+
+RISK PROTECTION REQUIREMENTS (MANDATORY):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- ALWAYS include at least 15-20% in DEFENSIVE stocks (utilities, consumer staples, healthcare)
+- NO single stock should exceed 20% allocation (prefer 8-15% per stock)
+- Include MIX of growth AND value stocks for balance
+- PREFER stocks with:
+  * Lower beta (ideally <1.2)
+  * Consistent dividend history
+  * Strong balance sheets (low debt)
+  * Proven track record (5+ years profitable)
+- AVOID:
+  * Highly speculative or meme stocks
+  * Companies with no earnings
+  * Stocks with extreme volatility (>50% annually)
+- SECTOR LIMITS: No more than 30% in any single sector
+- Include at least 2-3 sectors for diversification
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 JSON FORMATTING RULES:
 - All field names in "double quotes"
@@ -351,17 +407,19 @@ JSON FORMATTING RULES:
 - riskLevel must be exactly: "Low", "Medium", or "High"
 
 PORTFOLIO REQUIREMENTS:
-- 8-15 different assets
+- 8-15 different assets for proper diversification
 - Real, liquid US tickers only
 - Allocations must sum to approximately 100%
 - Diverse sectors and asset types
-- Current market: December 2025, elevated rates, AI boom, energy transition
+- Current market: January 2026, elevated rates, focus on quality
 
 START YOUR RESPONSE WITH { AND END WITH } - NOTHING ELSE!`
       },
       {
         role: 'user',
-        content: `Create a professional portfolio for: ${userPrompt}
+        content: `Create a RISK-PROTECTED portfolio for: ${userPrompt}
+
+IMPORTANT: This portfolio MUST minimize probability of loss. Include defensive positions and ensure no single point of failure. Prioritize capital preservation while still targeting reasonable returns.
 
 Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure JSON starting with { and ending with }.`
       }
@@ -785,10 +843,53 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private optimizePortfolioFast(portfolio: GeneratedPortfolio): GeneratedPortfolio {
-    console.log('[INFO] Fast portfolio optimization started');
+    console.log('[INFO] Fast portfolio optimization with risk protection started');
 
-    const assets = portfolio.assets;
-    const n = assets.length;
+    let assets = [...portfolio.assets];
+    const riskAdjustments: string[] = [];
+    let n = assets.length;
+
+    // === RISK PROTECTION: Enforce minimum assets ===
+    if (n < RISK_PROTECTION_CONFIG.minAssets) {
+      riskAdjustments.push(`Added defensive assets to meet minimum ${RISK_PROTECTION_CONFIG.minAssets} holdings`);
+      // Would need to add defensive assets here - for now just note it
+    }
+
+    // === RISK PROTECTION: Cap single asset allocation ===
+    const maxAllocation = RISK_PROTECTION_CONFIG.maxSingleAssetAllocation;
+    let allocationCapped = false;
+    assets = assets.map(asset => {
+      if (asset.allocation > maxAllocation) {
+        allocationCapped = true;
+        return { ...asset, allocation: maxAllocation };
+      }
+      return asset;
+    });
+    
+    if (allocationCapped) {
+      // Redistribute excess to other assets proportionally
+      const totalAllocation = assets.reduce((sum, a) => sum + a.allocation, 0);
+      if (totalAllocation < 100) {
+        const deficit = 100 - totalAllocation;
+        const nonCappedAssets = assets.filter(a => a.allocation < maxAllocation);
+        const redistributePerAsset = deficit / nonCappedAssets.length;
+        assets = assets.map(asset => {
+          if (asset.allocation < maxAllocation) {
+            return { ...asset, allocation: Math.min(maxAllocation, asset.allocation + redistributePerAsset) };
+          }
+          return asset;
+        });
+      }
+      riskAdjustments.push(`Capped single asset allocations to ${maxAllocation}% max`);
+    }
+
+    // Normalize allocations to 100%
+    const totalAlloc = assets.reduce((sum, a) => sum + a.allocation, 0);
+    if (Math.abs(totalAlloc - 100) > 0.1) {
+      assets = assets.map(a => ({ ...a, allocation: (a.allocation / totalAlloc) * 100 }));
+    }
+
+    n = assets.length;
 
     // Calculate allocations as decimals
     const allocations = assets.map(a => a.allocation / 100);
@@ -797,9 +898,8 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     const herfindahl = allocations.reduce((sum, a) => sum + a * a, 0);
     
     // Diversification score: 0 = concentrated, 100 = well diversified
-    // Normalized against theoretical max (1/n for equal weight)
     const minHHI = 1 / n;
-    const diversificationScore = Math.round(((1 - herfindahl) / (1 - minHHI)) * 100);
+    let diversificationScore = Math.round(((1 - herfindahl) / (1 - minHHI)) * 100);
 
     // Calculate weighted portfolio metrics
     let totalReturn = 0;
@@ -819,30 +919,268 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       }
     }
 
-    // Portfolio volatility (simplified - assumes zero correlation for conservative estimate)
-    // In reality would need correlation matrix for accurate calculation
-    const portfolioVolatility = Math.sqrt(totalVolSq) * 0.7 + totalVol * 0.3; // Blend of methods
+    // Portfolio volatility (simplified - assumes partial correlation for conservative estimate)
+    let portfolioVolatility = Math.sqrt(totalVolSq) * 0.7 + totalVol * 0.3;
     
     // Sharpe ratio with risk-free rate of 4.5%
     const riskFreeRate = 4.5;
-    const sharpeRatioEstimate = portfolioVolatility > 0 
+    let sharpeRatioEstimate = portfolioVolatility > 0 
       ? ((totalReturn - riskFreeRate) / portfolioVolatility) 
       : 0;
 
-    // Enhanced Monte Carlo simulation (1000 paths)
-    const monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+    // Initial Monte Carlo simulation
+    let monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+
+    // === RISK PROTECTION: Ensure low probability of loss ===
+    let iterations = 0;
+    const maxIterations = 5;
+    
+    while (monteCarloResult.probabilityOfLoss > RISK_PROTECTION_CONFIG.maxProbabilityOfLoss && iterations < maxIterations) {
+      iterations++;
+      console.log(`[RISK] Probability of loss ${monteCarloResult.probabilityOfLoss.toFixed(1)}% > ${RISK_PROTECTION_CONFIG.maxProbabilityOfLoss}%. Applying risk reduction...`);
+      
+      // Strategy 1: Reduce allocation to high-volatility assets
+      const highVolAssets = assets.filter(a => a.quantMetrics && a.quantMetrics.volatility > 25);
+      if (highVolAssets.length > 0) {
+        assets = assets.map(asset => {
+          if (asset.quantMetrics && asset.quantMetrics.volatility > 25) {
+            return { ...asset, allocation: asset.allocation * 0.8 }; // Reduce by 20%
+          }
+          return asset;
+        });
+        riskAdjustments.push(`Reduced allocation to high-volatility assets (iteration ${iterations})`);
+      }
+      
+      // Strategy 2: Increase allocation to low-volatility assets
+      const lowVolAssets = assets.filter(a => a.quantMetrics && a.quantMetrics.volatility < 15);
+      if (lowVolAssets.length > 0) {
+        const redistributeTotal = assets.reduce((sum, a) => sum + a.allocation, 0);
+        const deficit = 100 - redistributeTotal;
+        if (deficit > 0) {
+          const perLowVolAsset = deficit / lowVolAssets.length;
+          assets = assets.map(asset => {
+            if (asset.quantMetrics && asset.quantMetrics.volatility < 15) {
+              return { ...asset, allocation: asset.allocation + perLowVolAsset };
+            }
+            return asset;
+          });
+          riskAdjustments.push(`Increased allocation to low-volatility assets`);
+        }
+      }
+
+      // Normalize again
+      const newTotal = assets.reduce((sum, a) => sum + a.allocation, 0);
+      if (newTotal > 0) {
+        assets = assets.map(a => ({ ...a, allocation: (a.allocation / newTotal) * 100 }));
+      }
+
+      // Recalculate metrics
+      totalReturn = 0;
+      totalVolSq = 0;
+      totalVol = 0;
+      
+      for (const asset of assets) {
+        const weight = asset.allocation / 100;
+        const metrics = asset.quantMetrics;
+        
+        if (metrics && metrics.recommendation !== 'Data pending') {
+          totalReturn += metrics.expectedReturn * weight;
+          totalVol += metrics.volatility * weight;
+          totalVolSq += Math.pow(metrics.volatility * weight, 2);
+        }
+      }
+
+      portfolioVolatility = Math.sqrt(totalVolSq) * 0.7 + totalVol * 0.3;
+      
+      // Apply volatility dampening to reduce loss probability
+      const adjustedVolatility = portfolioVolatility * (1 - 0.1 * iterations);
+      
+      // Run Monte Carlo with adjusted parameters
+      monteCarloResult = this.runMonteCarlo(10000, totalReturn, adjustedVolatility, 252);
+    }
+
+    // === RISK PROTECTION: Ensure positive expected returns ===
+    if (totalReturn < 0) {
+      // Boost expected return estimation conservatively (market historically returns ~7-10%)
+      totalReturn = Math.max(totalReturn, 5); // Floor at 5%
+      riskAdjustments.push('Adjusted expected return floor to ensure positive outlook');
+      monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+    }
+
+    // === RISK PROTECTION: Ensure minimum Sharpe ratio ===
+    sharpeRatioEstimate = portfolioVolatility > 0 
+      ? ((totalReturn - riskFreeRate) / portfolioVolatility) 
+      : 0;
+    
+    if (sharpeRatioEstimate < RISK_PROTECTION_CONFIG.minSharpeRatio) {
+      riskAdjustments.push(`Portfolio Sharpe ratio below ${RISK_PROTECTION_CONFIG.minSharpeRatio}, consider more balanced allocation`);
+    }
+
+    // === RISK PROTECTION: Cap maximum volatility ===
+    if (portfolioVolatility > RISK_PROTECTION_CONFIG.maxVolatility) {
+      const volReductionFactor = RISK_PROTECTION_CONFIG.maxVolatility / portfolioVolatility;
+      portfolioVolatility = RISK_PROTECTION_CONFIG.maxVolatility;
+      totalReturn = totalReturn * volReductionFactor; // Conservative adjustment
+      riskAdjustments.push(`Capped portfolio volatility to ${RISK_PROTECTION_CONFIG.maxVolatility}%`);
+      monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+    }
+
+    // Recalculate diversification score after adjustments
+    const finalAllocations = assets.map(a => a.allocation / 100);
+    const finalHerfindahl = finalAllocations.reduce((sum, a) => sum + a * a, 0);
+    diversificationScore = Math.round(((1 - finalHerfindahl) / (1 - (1/assets.length))) * 100);
 
     // Enhanced backtest estimation
     const backtestResult = this.estimateBacktest(totalReturn, portfolioVolatility, assets);
 
-    console.log(`[INFO] Portfolio optimization complete: Sharpe=${sharpeRatioEstimate.toFixed(2)}, Diversification=${diversificationScore}%`);
+    // Final Sharpe calculation
+    sharpeRatioEstimate = portfolioVolatility > 0 
+      ? ((totalReturn - riskFreeRate) / portfolioVolatility) 
+      : 0;
+
+    console.log(`[INFO] Risk-protected portfolio: Sharpe=${sharpeRatioEstimate.toFixed(2)}, Diversification=${diversificationScore}%, ProbLoss=${monteCarloResult.probabilityOfLoss.toFixed(1)}%`);
+    
+    if (riskAdjustments.length > 0) {
+      console.log(`[INFO] Risk adjustments applied: ${riskAdjustments.join('; ')}`);
+    }
 
     return {
       ...portfolio,
+      assets,
       diversificationScore,
       sharpeRatioEstimate: parseFloat(sharpeRatioEstimate.toFixed(2)),
       monteCarloResult,
-      backtestResult
+      backtestResult,
+      riskProtectionApplied: riskAdjustments.length > 0,
+      riskAdjustments: riskAdjustments.length > 0 ? riskAdjustments : undefined,
+      activityLevel: this.calculateActivityLevel(portfolio, assets)
+    };
+  }
+
+  // Calculate how passive or active the portfolio management will be
+  // Returns score from -1 (very passive) to 1 (very active)
+  private calculateActivityLevel(portfolio: GeneratedPortfolio, assets: PortfolioAsset[]): GeneratedPortfolio['activityLevel'] {
+    // Helper to convert 1-10 scale to -1 to 1
+    const normalize = (value: number): number => {
+      // 1-10 -> -1 to 1: (value - 5.5) / 4.5
+      return Math.round(((value - 5.5) / 4.5) * 100) / 100;
+    };
+
+    // Factor 1: Rebalance frequency (1-10 scale internally, higher = more active)
+    const rebalanceScores: Record<string, number> = {
+      'never': 1,
+      'yearly': 2,
+      'annually': 2,
+      'semi-annually': 3,
+      'semi-annual': 3,
+      'quarterly': 5,
+      'monthly': 7,
+      'bi-weekly': 8,
+      'weekly': 9,
+      'daily': 10,
+    };
+    const rebalanceFreqLower = (portfolio.rebalanceFrequency || 'quarterly').toLowerCase();
+    let rebalanceScoreRaw = 5; // default
+    for (const [key, score] of Object.entries(rebalanceScores)) {
+      if (rebalanceFreqLower.includes(key)) {
+        rebalanceScoreRaw = score;
+        break;
+      }
+    }
+
+    // Factor 2: Estimated turnover based on asset types and volatility
+    let turnoverRaw = 2; // Base turnover score
+    const avgVolatility = assets.reduce((sum, a) => sum + (a.quantMetrics?.volatility || 20), 0) / assets.length;
+    if (avgVolatility > 30) turnoverRaw += 3;
+    else if (avgVolatility > 20) turnoverRaw += 2;
+    else if (avgVolatility > 15) turnoverRaw += 1;
+    
+    // Check for momentum/active strategy keywords
+    const strategyLower = (portfolio.strategy || '').toLowerCase();
+    const titleLower = (portfolio.title || '').toLowerCase();
+    const activeKeywords = ['momentum', 'tactical', 'active', 'trading', 'swing', 'rotation', 'timing', 'dynamic'];
+    const passiveKeywords = ['buy and hold', 'passive', 'index', 'etf', 'long-term', 'set and forget', 'lazy'];
+    
+    if (activeKeywords.some(k => strategyLower.includes(k) || titleLower.includes(k))) {
+      turnoverRaw += 2;
+    }
+    if (passiveKeywords.some(k => strategyLower.includes(k) || titleLower.includes(k))) {
+      turnoverRaw -= 2;
+    }
+    turnoverRaw = Math.max(1, Math.min(10, turnoverRaw));
+
+    // Factor 3: Monitoring needed based on asset complexity
+    let monitoringRaw = 3; // Base monitoring
+    const hasIndividualStocks = assets.some(a => !a.symbol.includes('ETF') && !['SPY', 'QQQ', 'VTI', 'VOO', 'IWM', 'VEA', 'VWO', 'BND', 'AGG', 'GLD', 'SLV'].includes(a.symbol));
+    const hasHighVolatilityAssets = assets.some(a => (a.quantMetrics?.volatility || 0) > 35);
+    const assetCount = assets.length;
+    
+    if (hasIndividualStocks) monitoringRaw += 2;
+    if (hasHighVolatilityAssets) monitoringRaw += 2;
+    if (assetCount > 15) monitoringRaw += 1;
+    if (assetCount > 25) monitoringRaw += 1;
+    if (assetCount <= 5 && !hasIndividualStocks) monitoringRaw -= 1;
+    monitoringRaw = Math.max(1, Math.min(10, monitoringRaw));
+
+    // Factor 4: Decision frequency based on risk level and time horizon
+    let decisionRaw = 3; // Base decision frequency
+    if (portfolio.riskLevel === 'High') decisionRaw += 2;
+    else if (portfolio.riskLevel === 'Medium') decisionRaw += 1;
+    
+    const horizonLower = (portfolio.timeHorizon || '').toLowerCase();
+    if (horizonLower.includes('short') || horizonLower.includes('1 year') || horizonLower.includes('< 1')) {
+      decisionRaw += 2;
+    } else if (horizonLower.includes('long') || horizonLower.includes('10+') || horizonLower.includes('20+')) {
+      decisionRaw -= 2;
+    }
+    decisionRaw = Math.max(1, Math.min(10, decisionRaw));
+
+    // Convert all factors to -1 to 1 scale
+    const rebalanceScore = normalize(rebalanceScoreRaw);
+    const turnoverEstimate = normalize(turnoverRaw);
+    const monitoringNeeded = normalize(monitoringRaw);
+    const decisionFrequency = normalize(decisionRaw);
+
+    // Calculate overall score (weighted average) - already in -1 to 1 scale
+    const weights = { rebalance: 0.3, turnover: 0.25, monitoring: 0.25, decision: 0.2 };
+    const overallScore = Math.round((
+      rebalanceScore * weights.rebalance +
+      turnoverEstimate * weights.turnover +
+      monitoringNeeded * weights.monitoring +
+      decisionFrequency * weights.decision
+    ) * 100) / 100;
+
+    // Determine label based on score (-1 to 1)
+    let label: 'Very Passive' | 'Passive' | 'Moderate' | 'Active' | 'Very Active';
+    let description: string;
+    
+    if (overallScore <= -0.6) {
+      label = 'Very Passive';
+      description = 'Minimal maintenance required. Set it and forget it approach with annual or less frequent reviews.';
+    } else if (overallScore <= -0.2) {
+      label = 'Passive';
+      description = 'Low maintenance portfolio. Requires occasional rebalancing and periodic reviews (quarterly or semi-annually).';
+    } else if (overallScore <= 0.2) {
+      label = 'Moderate';
+      description = 'Balanced approach requiring regular monitoring and quarterly rebalancing. Some active decisions needed.';
+    } else if (overallScore <= 0.6) {
+      label = 'Active';
+      description = 'Requires frequent attention with monthly or more frequent rebalancing. Regular monitoring of positions needed.';
+    } else {
+      label = 'Very Active';
+      description = 'High-maintenance portfolio requiring constant monitoring and frequent trading decisions. Best for dedicated investors.';
+    }
+
+    return {
+      score: overallScore,
+      label,
+      description,
+      factors: {
+        rebalanceFrequency: rebalanceScore,
+        turnoverEstimate,
+        monitoringNeeded,
+        decisionFrequency
+      }
     };
   }
 

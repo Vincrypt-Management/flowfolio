@@ -77,6 +77,11 @@ impl EnhancedMarketDataService {
         }
     }
 
+    /// Get reference to the database pool (for direct queries like saved portfolios)
+    pub fn get_db_pool(&self) -> Option<&Pool<Sqlite>> {
+        self.db_cache.as_ref().map(|cache| cache.get_pool())
+    }
+
     // ================== PRICE FETCHING ==================
 
     /// Get current price for a single symbol

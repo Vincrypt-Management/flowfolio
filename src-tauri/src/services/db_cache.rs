@@ -81,6 +81,11 @@ impl DatabaseCacheService {
         }
     }
 
+    /// Get reference to the database pool for direct queries
+    pub fn get_pool(&self) -> &Pool<Sqlite> {
+        &self.pool
+    }
+
     fn is_cache_valid(updated_at: &str, ttl_hours: i64) -> bool {
         if let Ok(cached_time) = chrono::DateTime::parse_from_rfc3339(updated_at) {
             let now = Utc::now();

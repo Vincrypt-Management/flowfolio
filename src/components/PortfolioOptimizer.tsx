@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { invoke } from "../services/tauri";
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { LiveProgressPanel } from "./LiveProgressPanel";
@@ -139,6 +139,16 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
   // Live progress hook
   const { progress, reset: resetProgress } = useLiveProgress("optimization_progress");
 
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   async function generateReport() {
     if (holdings.length === 0) {
       alert("Please add holdings to your portfolio first");
@@ -171,11 +181,18 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
         thresholds,
       });
 
-      setReport(result);
+      // Check if still mounted before updating state
+      if (isMountedRef.current) {
+        setReport(result);
+      }
     } catch (error) {
-      alert("Error generating optimization report: " + error);
+      if (isMountedRef.current) {
+        alert("Error generating optimization report: " + error);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 

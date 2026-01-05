@@ -154,6 +154,70 @@ export const AVAILABLE_TOOLS: Tool[] = [
       },
       required: ['symbols', 'allocations', 'startDate', 'endDate']
     }
+  },
+  {
+    name: 'web_search',
+    description: 'Search the internet for financial news, market analysis, company information, and investment research. Use this for real-time information, recent events, analyst opinions, and market trends.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query - be specific for better results (e.g., "AAPL Q4 2025 earnings analysis", "tech sector outlook 2026", "Federal Reserve interest rate decision")'
+        },
+        type: {
+          type: 'string',
+          enum: ['news', 'general', 'finance'],
+          description: 'Type of search: news (recent news), general (web pages), finance (financial data and analysis)'
+        },
+        count: {
+          type: 'number',
+          description: 'Number of results to return (default: 5, max: 10)'
+        }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'search_stock_news',
+    description: 'Search for recent news articles about a specific stock or company',
+    parameters: {
+      type: 'object',
+      properties: {
+        symbol: {
+          type: 'string',
+          description: 'Stock ticker symbol (e.g., AAPL, MSFT)'
+        },
+        query: {
+          type: 'string',
+          description: 'Optional additional search terms to filter news'
+        },
+        days: {
+          type: 'number',
+          description: 'Number of days to look back (default: 7)'
+        }
+      },
+      required: ['symbol']
+    }
+  },
+  {
+    name: 'search_market_trends',
+    description: 'Search for current market trends, sector analysis, and economic indicators',
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: 'Market topic to search (e.g., "AI stocks", "energy sector", "interest rates", "inflation")'
+        },
+        timeframe: {
+          type: 'string',
+          enum: ['today', 'week', 'month'],
+          description: 'Timeframe for the search'
+        }
+      },
+      required: ['topic']
+    }
   }
 ];
 

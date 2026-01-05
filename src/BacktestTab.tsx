@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
 import {
   FlaskConical,
@@ -120,6 +120,16 @@ export function BacktestTab() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [symbolInput, setSymbolInput] = useState("AAPL, MSFT, GOOGL");
 
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   async function runBacktest() {
     if (config.symbols.length === 0) {
       alert("Please add at least one symbol to backtest");
@@ -131,12 +141,20 @@ export function BacktestTab() {
     
     try {
       const backtestResult = await invoke<BacktestResult>("run_backtest_simulation", { config });
-      setResult(backtestResult);
-      setSelectedView("overview");
+      
+      // Check if still mounted before updating state
+      if (isMountedRef.current) {
+        setResult(backtestResult);
+        setSelectedView("overview");
+      }
     } catch (error) {
-      alert("Error running backtest: " + error);
+      if (isMountedRef.current) {
+        alert("Error running backtest: " + error);
+      }
     } finally {
-      setIsRunning(false);
+      if (isMountedRef.current) {
+        setIsRunning(false);
+      }
     }
   }
 

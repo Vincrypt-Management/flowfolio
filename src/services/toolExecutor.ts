@@ -1,6 +1,7 @@
 import { ToolCall, ToolResult } from './tools';
 import { marketDataService } from './marketData';
 import { quantAnalyzer } from './quantAnalysis';
+import { mcpWebSearch } from './mcpWebSearch';
 
 export class ToolExecutor {
   async executeTool(toolCall: ToolCall): Promise<ToolResult> {
@@ -25,6 +26,16 @@ export class ToolExecutor {
         
         case 'backtest_portfolio':
           return await this.backtestPortfolio(toolCall.arguments);
+        
+        // Web search tools
+        case 'web_search':
+          return await this.webSearch(toolCall.arguments);
+        
+        case 'search_stock_news':
+          return await this.searchStockNews(toolCall.arguments);
+        
+        case 'search_market_trends':
+          return await this.searchMarketTrends(toolCall.arguments);
         
         default:
           return {
@@ -237,6 +248,80 @@ export class ToolExecutor {
         sharpeRatio: 0,
         maxDrawdown: 0,
         note: 'Backtest requires more historical data'
+      }
+    };
+  }
+
+  // Web search tools
+  private async webSearch(args: any): Promise<ToolResult> {
+    const { query, type = 'general', count = 5 } = args;
+    
+    const response = await mcpWebSearch.search(query, type, Math.min(count, 10));
+    
+    return {
+      tool: 'web_search',
+      result: {
+        query: response.query,
+        provider: response.provider,
+        totalResults: response.totalResults,
+        results: response.results.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.snippet,
+          source: r.source,
+          publishedDate: r.publishedDate,
+          isTrustedSource: mcpWebSearch.isTrustedFinancialSource(r.url)
+        }))
+      }
+    };
+  }
+
+  private async searchStockNews(args: any): Promise<ToolResult> {
+    const { symbol, query, days = 7 } = args;
+    
+    const results = await mcpWebSearch.searchStockNews(symbol, query, days);
+    
+    return {
+      tool: 'search_stock_news',
+      result: {
+        symbol,
+        newsCount: results.length,
+        articles: results.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.snippet,
+          source: r.source,
+          publishedDate: r.publishedDate,
+          sentiment: r.sentiment,
+          isTrustedSource: mcpWebSearch.isTrustedFinancialSource(r.url)
+        })),
+        sentimentSummary: {
+          positive: results.filter(r => r.sentiment === 'positive').length,
+          negative: results.filter(r => r.sentiment === 'negative').length,
+          neutral: results.filter(r => r.sentiment === 'neutral').length
+        }
+      }
+    };
+  }
+
+  private async searchMarketTrends(args: any): Promise<ToolResult> {
+    const { topic, timeframe = 'week' } = args;
+    
+    const response = await mcpWebSearch.searchMarketTrends(topic, timeframe);
+    
+    return {
+      tool: 'search_market_trends',
+      result: {
+        topic,
+        timeframe,
+        provider: response.provider,
+        insights: response.results.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.snippet,
+          source: r.source,
+          isTrustedSource: mcpWebSearch.isTrustedFinancialSource(r.url)
+        }))
       }
     };
   }

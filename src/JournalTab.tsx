@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
 
 interface JournalEntry {
@@ -31,6 +31,16 @@ export function JournalTab() {
   });
   const [filterType, setFilterType] = useState<string>("all");
 
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (entries.length > 0) {
       calculateStats();
@@ -40,7 +50,9 @@ export function JournalTab() {
   async function calculateStats() {
     try {
       const journalStats = await invoke<JournalStats>("calculate_journal_stats", { entries });
-      setStats(journalStats);
+      if (isMountedRef.current) {
+        setStats(journalStats);
+      }
     } catch (error) {
       console.error("Error calculating stats:", error);
     }
@@ -66,11 +78,15 @@ export function JournalTab() {
         tags,
       });
 
-      setEntries([entry, ...entries]);
-      setNewEntry({ title: "", content: "", event_type: "reflection", tags: "" });
-      setSelectedView("timeline");
+      if (isMountedRef.current) {
+        setEntries([entry, ...entries]);
+        setNewEntry({ title: "", content: "", event_type: "reflection", tags: "" });
+        setSelectedView("timeline");
+      }
     } catch (error) {
-      alert("Error creating entry: " + error);
+      if (isMountedRef.current) {
+        alert("Error creating entry: " + error);
+      }
     }
   }
 
@@ -87,7 +103,9 @@ export function JournalTab() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert("Error exporting: " + error);
+      if (isMountedRef.current) {
+        alert("Error exporting: " + error);
+      }
     }
   }
 

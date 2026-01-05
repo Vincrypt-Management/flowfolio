@@ -154,6 +154,17 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create analyst_ratings_cache: {}", e))?;
     
+    // Create saved portfolios table
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS saved_portfolios (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create saved_portfolios: {}", e))?;
+    
     eprintln!("[INFO] [db] Local cache database initialized successfully");
     
     Ok(pool)
@@ -1227,6 +1238,219 @@ async fn delete_plan(name: String) -> Result<(), String> {
         .ok_or_else(|| format!("Plan '{}' not found", name))
 }
 
+// ==================== SAVED PORTFOLIOS (Generated from Vibe Studio) ====================
+
+/// Saved portfolio info for listing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SavedPortfolioInfo {
+    id: String,
+    name: String,
+    created_at: String,
+    updated_at: String,
+}
+
+/// Save a generated portfolio to the database
+#[tauri::command]
+async fn save_generated_portfolio(id: String, name: String, data: serde_json::Value) -> Result<String, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    if let Some(pool) = service.get_db_pool() {
+        let now = chrono::Utc::now().to_rfc3339();
+        let data_str = serde_json::to_string(&data)
+            .map_err(|e| format!("Failed to serialize portfolio: {}", e))?;
+        
+        sqlx::query(r#"
+            INSERT OR REPLACE INTO saved_portfolios (id, name, data, created_at, updated_at)
+            VALUES (?, ?, ?, COALESCE((SELECT created_at FROM saved_portfolios WHERE id = ?), ?), ?)
+        "#)
+        .bind(&id)
+        .bind(&name)
+        .bind(&data_str)
+        .bind(&id)
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("Failed to save portfolio: {}", e))?;
+        
+        eprintln!("[INFO] [portfolio] Saved portfolio '{}' with id '{}'", name, id);
+        Ok(id)
+    } else {
+        Err("Database not initialized".to_string())
+    }
+}
+
+/// Load a saved portfolio by ID
+#[tauri::command]
+async fn load_generated_portfolio(id: String) -> Result<serde_json::Value, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    if let Some(pool) = service.get_db_pool() {
+        let row: Option<(String,)> = sqlx::query_as(r#"
+            SELECT data FROM saved_portfolios WHERE id = ?
+        "#)
+        .bind(&id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("Failed to load portfolio: {}", e))?;
+        
+        if let Some((data_str,)) = row {
+            serde_json::from_str(&data_str)
+                .map_err(|e| format!("Failed to parse portfolio data: {}", e))
+        } else {
+            Err(format!("Portfolio '{}' not found", id))
+        }
+    } else {
+        Err("Database not initialized".to_string())
+    }
+}
+
+/// List all saved portfolios
+#[tauri::command]
+async fn list_saved_portfolios() -> Result<Vec<SavedPortfolioInfo>, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    if let Some(pool) = service.get_db_pool() {
+        let rows: Vec<(String, String, String, String)> = sqlx::query_as(r#"
+            SELECT id, name, created_at, updated_at FROM saved_portfolios ORDER BY updated_at DESC
+        "#)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("Failed to list portfolios: {}", e))?;
+        
+        Ok(rows.into_iter().map(|(id, name, created_at, updated_at)| {
+            SavedPortfolioInfo { id, name, created_at, updated_at }
+        }).collect())
+    } else {
+        Err("Database not initialized".to_string())
+    }
+}
+
+/// Delete a saved portfolio
+#[tauri::command]
+async fn delete_saved_portfolio(id: String) -> Result<(), String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    if let Some(pool) = service.get_db_pool() {
+        sqlx::query("DELETE FROM saved_portfolios WHERE id = ?")
+            .bind(&id)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("Failed to delete portfolio: {}", e))?;
+        
+        eprintln!("[INFO] [portfolio] Deleted portfolio '{}'", id);
+        Ok(())
+    } else {
+        Err("Database not initialized".to_string())
+    }
+}
+
+/// Get detailed quantitative analysis for a single ticker
+#[tauri::command]
+async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Value, String> {
+    let service = ENHANCED_MARKET_SERVICE.lock().await;
+    
+    // Get available data for the ticker
+    let quant_result = service.get_quant_metrics(&symbol).await;
+    let price_result = service.get_current_price(&symbol).await;
+    
+    let mut result = serde_json::json!({
+        "symbol": symbol,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+    
+    // Add current price
+    if let Ok(price) = price_result {
+        result["currentPrice"] = serde_json::json!(price);
+    }
+    
+    // Add comprehensive quant metrics
+    if let Ok(metrics) = quant_result {
+        let volatility = metrics.volatility;
+        let annualized_return = metrics.annualized_return;
+        let max_drawdown = metrics.max_drawdown;
+        let sharpe = metrics.sharpe_ratio;
+        let rsi = metrics.rsi;
+        
+        result["quantMetrics"] = serde_json::json!({
+            "sharpeRatio": sharpe,
+            "sortinoRatio": sharpe * 1.2, // Approximation
+            "annualizedReturn": annualized_return,
+            "volatility": volatility,
+            "maxDrawdown": max_drawdown,
+            "rsi": rsi,
+            "signal": metrics.signal,
+            "confidence": metrics.confidence,
+            "beta": 1.0, // Would need market correlation data
+            "alpha": annualized_return - 10.0, // vs market approx
+            "var95": volatility * 1.65 / 100.0 * 10000.0, // 95% VaR for $10k
+            "cvar95": volatility * 2.06 / 100.0 * 10000.0, // CVaR approximation
+            "calmarRatio": if max_drawdown.abs() > 0.01 { 
+                annualized_return / max_drawdown.abs() 
+            } else { 0.0 },
+            "informationRatio": sharpe * 0.8,
+            "treynorRatio": annualized_return / 1.0, // Assuming beta=1
+            // Technical indicators
+            "rsiSignal": if rsi < 30.0 { "oversold" } else if rsi > 70.0 { "overbought" } else { "neutral" },
+            "trendStrength": if rsi > 50.0 { "bullish" } else { "bearish" },
+            "momentumScore": ((rsi - 50.0) / 50.0 * 100.0).round(),
+        });
+        
+        // Generate estimated fundamentals based on quant metrics
+        // These are approximations for display purposes
+        let value_score: f64 = 50.0 + (sharpe * 10.0).min(30.0).max(-30.0);
+        let quality_score: f64 = 50.0 + (annualized_return / 2.0).min(30.0).max(-30.0);
+        let growth_score: f64 = 50.0 + (annualized_return / 3.0).min(25.0).max(-25.0);
+        
+        result["fundamentals"] = serde_json::json!({
+            "peRatio": null,
+            "forwardPE": null,
+            "priceToBook": null,
+            "profitMargin": null,
+            "returnOnEquity": null,
+            "revenueGrowthYoY": null,
+            "debtToEquity": null,
+            "dividendYield": null,
+            "marketCap": 0,
+            "eps": null,
+            "beta": 1.0,
+            "valueScore": value_score.max(0.0).min(100.0),
+            "qualityScore": quality_score.max(0.0).min(100.0),
+            "growthScore": growth_score.max(0.0).min(100.0),
+        });
+        
+        // Generate estimated sentiment based on RSI and signal
+        let sentiment_score: f64 = (rsi - 50.0) / 50.0;
+        let overall_sentiment = if sentiment_score > 0.3 { "bullish" } 
+                               else if sentiment_score < -0.3 { "bearish" } 
+                               else { "neutral" };
+        
+        result["sentiment"] = serde_json::json!({
+            "overallSentiment": overall_sentiment,
+            "sentimentScore": sentiment_score,
+            "newsCount": 0,
+            "buzzScore": 0.0,
+            "sentimentTrend": if rsi > 50.0 { "improving" } else { "declining" },
+        });
+        
+        // Generate estimated analyst data
+        let consensus = if sharpe > 1.0 && annualized_return > 10.0 { "Buy" }
+                       else if sharpe < 0.0 || annualized_return < -5.0 { "Sell" }
+                       else { "Hold" };
+        
+        result["analystData"] = serde_json::json!({
+            "consensusRating": consensus,
+            "targetPriceMean": null,
+            "targetPriceHigh": null,
+            "targetPriceLow": null,
+            "numberOfAnalysts": 0,
+            "upside": null,
+        });
+    }
+    
+    Ok(result)
+}
+
 // ==================== HISTORICAL DATA ====================
 
 /// Get historical price data for a symbol
@@ -1271,6 +1495,8 @@ pub fn run() {
     
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_default_plan,
@@ -1324,6 +1550,12 @@ pub fn run() {
             load_plan,
             list_saved_plans,
             delete_plan,
+            // Portfolio Management (Vibe Studio)
+            save_generated_portfolio,
+            load_generated_portfolio,
+            list_saved_portfolios,
+            delete_saved_portfolio,
+            get_detailed_ticker_analysis,
             // Historical Data
             get_historical_prices,
             // Database status
