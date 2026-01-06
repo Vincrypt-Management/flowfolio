@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage } from "../services/openrouter";
 import { invoke } from "../services/tauri";
@@ -29,7 +29,10 @@ import {
   Save,
   FolderOpen,
   Trash2,
-  Eye
+  Eye,
+  RefreshCw,
+  AlertTriangle,
+  ArrowUpRight
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -90,6 +93,27 @@ export default function VibeStudio() {
   
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
+
+  // Helper to check if sections have data (for hiding empty sections)
+  const sectionVisibility = useMemo(() => {
+    if (!generatedPortfolio) return {};
+    
+    const assets = generatedPortfolio.assets || [];
+    
+    return {
+      hasQuantMetrics: assets.some(a => a.quantMetrics && a.quantMetrics.recommendation !== 'Data pending'),
+      hasFundamentals: assets.some(a => a.fundamentals),
+      hasSentiment: assets.some(a => a.sentiment),
+      hasAnalystData: assets.some(a => a.analystData),
+      hasMarketInsights: assets.some(a => a.marketInsights && a.marketInsights.length > 0),
+      hasMonteCarloResult: !!generatedPortfolio.monteCarloResult,
+      hasBacktestResult: !!generatedPortfolio.backtestResult,
+      hasActivityLevel: !!generatedPortfolio.activityLevel,
+      hasQuantFeedback: !!generatedPortfolio.quantFeedbackApplied && !!generatedPortfolio.quantFeedbackSummary,
+      hasRiskAdjustments: !!generatedPortfolio.riskAdjustments && generatedPortfolio.riskAdjustments.length > 0,
+      hasAssets: assets.length > 0,
+    };
+  }, [generatedPortfolio]);
   
   useEffect(() => {
     isMountedRef.current = true;
@@ -221,6 +245,7 @@ export default function VibeStudio() {
       { id: 'generating', label: 'Generating portfolio structure', status: 'pending' },
       { id: 'fetching', label: 'Fetching all market data (prices, metrics)', status: 'pending' },
       { id: 'quantitative', label: 'Running quantitative analysis', status: 'pending' },
+      { id: 'feedback', label: 'Applying quant feedback loop', status: 'pending' },
       { id: 'complete', label: 'Finalizing portfolio', status: 'pending' },
     ];
     setProgressSteps(steps);
@@ -1061,8 +1086,11 @@ export default function VibeStudio() {
                 {generatedPortfolio.riskProtectionApplied && (
                   <span className="meta-badge success">✓ Risk Protected</span>
                 )}
+                {generatedPortfolio.quantFeedbackApplied && (
+                  <span className="meta-badge info">🔄 Quant Optimized</span>
+                )}
               </div>
-              {generatedPortfolio.riskAdjustments && generatedPortfolio.riskAdjustments.length > 0 && (
+              {sectionVisibility.hasRiskAdjustments && (
                 <div className="risk-adjustments-notice" style={{ 
                   marginTop: '0.75rem', 
                   padding: '0.5rem 0.75rem', 
@@ -1071,7 +1099,41 @@ export default function VibeStudio() {
                   fontSize: '0.85rem',
                   color: 'var(--success, #00e599)'
                 }}>
-                  <strong>🛡️ Risk Protection Applied:</strong> {generatedPortfolio.riskAdjustments.join(' • ')}
+                  <strong>🛡️ Risk Protection Applied:</strong> {generatedPortfolio.riskAdjustments!.join(' • ')}
+                </div>
+              )}
+              {sectionVisibility.hasQuantFeedback && generatedPortfolio.quantFeedbackSummary && (
+                <div className="quant-feedback-notice" style={{ 
+                  marginTop: '0.75rem', 
+                  padding: '0.75rem', 
+                  background: 'rgba(99, 102, 241, 0.1)', 
+                  borderRadius: '6px',
+                  fontSize: '0.85rem',
+                  border: '1px solid rgba(99, 102, 241, 0.3)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <RefreshCw size={16} style={{ color: 'var(--primary, #6366f1)' }} />
+                    <strong style={{ color: 'var(--primary, #6366f1)' }}>
+                      Quant Feedback Loop Applied ({generatedPortfolio.quantFeedbackSummary.adjustmentsCount} adjustments)
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {generatedPortfolio.quantFeedbackSummary.actions.slice(0, 5).map((action, i) => (
+                      <span key={i} style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{action}</span>
+                    ))}
+                    {generatedPortfolio.quantFeedbackSummary.actions.length > 5 && (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        ...and {generatedPortfolio.quantFeedbackSummary.actions.length - 5} more adjustments
+                      </span>
+                    )}
+                  </div>
+                  {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                      <span style={{ color: 'var(--warning, #f59e0b)', fontSize: '0.8rem' }}>
+                        ⚠️ {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.length} ticker(s) flagged for review
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1117,7 +1179,7 @@ export default function VibeStudio() {
             </div>
 
             {/* Activity Level Card */}
-            {generatedPortfolio.activityLevel && (
+            {sectionVisibility.hasActivityLevel && generatedPortfolio.activityLevel && (
               <div className="detail-card">
                 <h3><Activity size={20} /> Portfolio Activity Level</h3>
                 <div className="detail-content">
@@ -1300,41 +1362,42 @@ export default function VibeStudio() {
             </div>
 
             {/* Quantitative Metrics Table */}
-            <div className="detail-card full-width">
-              <h3><Activity size={20} /> Quantitative Metrics</h3>
-              <div className="detail-content">
-                <div className="quant-metrics-table">
-                  <div className="quant-table-header">
-                    <div className="qth">Symbol</div>
-                    <div className="qth">Sharpe Ratio</div>
-                    <div className="qth">Ann. Return</div>
-                    <div className="qth">Volatility</div>
-                    <div className="qth">Max Drawdown</div>
-                    <div className="qth">RSI</div>
-                    <div className="qth">Signal</div>
-                    <div className="qth">Confidence</div>
-                  </div>
-                  {generatedPortfolio.assets.map((asset, i) => (
-                    asset.quantMetrics && (
-                      <div key={i} className="quant-table-row">
-                        <div className="qtd symbol-cell">{asset.symbol}</div>
-                        <div className="qtd">
-                          <span className={`metric-value ${asset.quantMetrics.sharpeRatio > 1 ? 'good' : asset.quantMetrics.sharpeRatio > 0 ? 'neutral' : 'bad'}`}>
-                            {asset.quantMetrics.sharpeRatio.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="qtd">
-                          <span className={`metric-value ${asset.quantMetrics.expectedReturn > 0 ? 'good' : 'bad'}`}>
-                            {asset.quantMetrics.expectedReturn.toFixed(2)}%
-                          </span>
-                        </div>
-                        <div className="qtd">
-                          <span className={`metric-value ${asset.quantMetrics.volatility > 30 ? 'bad' : asset.quantMetrics.volatility > 20 ? 'neutral' : 'good'}`}>
-                            {asset.quantMetrics.volatility.toFixed(2)}%
-                          </span>
-                        </div>
-                        <div className="qtd">
-                          <span className={`metric-value ${asset.quantMetrics.maxDrawdown < -30 ? 'bad' : asset.quantMetrics.maxDrawdown < -15 ? 'neutral' : 'good'}`}>
+            {sectionVisibility.hasQuantMetrics && (
+              <div className="detail-card full-width">
+                <h3><Activity size={20} /> Quantitative Metrics</h3>
+                <div className="detail-content">
+                  <div className="quant-metrics-table">
+                    <div className="quant-table-header">
+                      <div className="qth">Symbol</div>
+                      <div className="qth">Sharpe Ratio</div>
+                      <div className="qth">Ann. Return</div>
+                      <div className="qth">Volatility</div>
+                      <div className="qth">Max Drawdown</div>
+                      <div className="qth">RSI</div>
+                      <div className="qth">Signal</div>
+                      <div className="qth">Confidence</div>
+                    </div>
+                    {generatedPortfolio.assets.map((asset, i) => (
+                      asset.quantMetrics && (
+                        <div key={i} className="quant-table-row">
+                          <div className="qtd symbol-cell">{asset.symbol}</div>
+                          <div className="qtd">
+                            <span className={`metric-value ${asset.quantMetrics.sharpeRatio > 1 ? 'good' : asset.quantMetrics.sharpeRatio > 0 ? 'neutral' : 'bad'}`}>
+                              {asset.quantMetrics.sharpeRatio.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="qtd">
+                            <span className={`metric-value ${asset.quantMetrics.expectedReturn > 0 ? 'good' : 'bad'}`}>
+                              {asset.quantMetrics.expectedReturn.toFixed(2)}%
+                            </span>
+                          </div>
+                          <div className="qtd">
+                            <span className={`metric-value ${asset.quantMetrics.volatility > 30 ? 'bad' : asset.quantMetrics.volatility > 20 ? 'neutral' : 'good'}`}>
+                              {asset.quantMetrics.volatility.toFixed(2)}%
+                            </span>
+                          </div>
+                          <div className="qtd">
+                            <span className={`metric-value ${asset.quantMetrics.maxDrawdown < -30 ? 'bad' : asset.quantMetrics.maxDrawdown < -15 ? 'neutral' : 'good'}`}>
                             {asset.quantMetrics.maxDrawdown.toFixed(2)}%
                           </span>
                         </div>
@@ -1367,53 +1430,55 @@ export default function VibeStudio() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Fundamental Analysis Table */}
-            <div className="detail-card full-width">
-              <h3><BarChart3 size={20} /> Fundamental Analysis</h3>
-              <div className="detail-content">
-                <div className="fundamentals-table">
-                  <div className="fundamentals-header">
-                    <div className="fth">Symbol</div>
-                    <div className="fth">P/E Ratio</div>
-                    <div className="fth">P/B Ratio</div>
-                    <div className="fth">ROE</div>
-                    <div className="fth">Profit Margin</div>
-                    <div className="fth">Revenue Growth</div>
-                    <div className="fth">Debt/Equity</div>
-                    <div className="fth">Div. Yield</div>
-                    <div className="fth">Market Cap</div>
-                  </div>
-                  {generatedPortfolio.assets.map((asset, i) => (
-                    asset.fundamentals ? (
-                      <div key={i} className="fundamentals-row">
-                        <div className="ftd symbol-cell">{asset.symbol}</div>
-                        <div className="ftd">
-                          {asset.fundamentals.peRatio !== null ? (
-                            <span className={`metric-value ${asset.fundamentals.peRatio < 15 ? 'good' : asset.fundamentals.peRatio < 25 ? 'neutral' : 'bad'}`}>
-                              {asset.fundamentals.peRatio.toFixed(2)}
-                            </span>
-                          ) : 'N/A'}
-                        </div>
-                        <div className="ftd">
-                          {asset.fundamentals.priceToBook !== null ? (
-                            <span className={`metric-value ${asset.fundamentals.priceToBook < 1 ? 'good' : asset.fundamentals.priceToBook < 3 ? 'neutral' : 'bad'}`}>
-                              {asset.fundamentals.priceToBook.toFixed(2)}
-                            </span>
-                          ) : 'N/A'}
-                        </div>
-                        <div className="ftd">
-                          {asset.fundamentals.returnOnEquity !== null ? (
-                            <span className={`metric-value ${asset.fundamentals.returnOnEquity > 0.15 ? 'good' : asset.fundamentals.returnOnEquity > 0.10 ? 'neutral' : 'bad'}`}>
-                              {(asset.fundamentals.returnOnEquity * 100).toFixed(1)}%
-                            </span>
-                          ) : 'N/A'}
-                        </div>
-                        <div className="ftd">
-                          {asset.fundamentals.profitMargin !== null ? (
-                            <span className={`metric-value ${asset.fundamentals.profitMargin > 0.15 ? 'good' : asset.fundamentals.profitMargin > 0.05 ? 'neutral' : 'bad'}`}>
-                              {(asset.fundamentals.profitMargin * 100).toFixed(1)}%
-                            </span>
+            {sectionVisibility.hasFundamentals && (
+              <div className="detail-card full-width">
+                <h3><BarChart3 size={20} /> Fundamental Analysis</h3>
+                <div className="detail-content">
+                  <div className="fundamentals-table">
+                    <div className="fundamentals-header">
+                      <div className="fth">Symbol</div>
+                      <div className="fth">P/E Ratio</div>
+                      <div className="fth">P/B Ratio</div>
+                      <div className="fth">ROE</div>
+                      <div className="fth">Profit Margin</div>
+                      <div className="fth">Revenue Growth</div>
+                      <div className="fth">Debt/Equity</div>
+                      <div className="fth">Div. Yield</div>
+                      <div className="fth">Market Cap</div>
+                    </div>
+                    {generatedPortfolio.assets.map((asset, i) => (
+                      asset.fundamentals ? (
+                        <div key={i} className="fundamentals-row">
+                          <div className="ftd symbol-cell">{asset.symbol}</div>
+                          <div className="ftd">
+                            {asset.fundamentals.peRatio !== null ? (
+                              <span className={`metric-value ${asset.fundamentals.peRatio < 15 ? 'good' : asset.fundamentals.peRatio < 25 ? 'neutral' : 'bad'}`}>
+                                {asset.fundamentals.peRatio.toFixed(2)}
+                              </span>
+                            ) : 'N/A'}
+                          </div>
+                          <div className="ftd">
+                            {asset.fundamentals.priceToBook !== null ? (
+                              <span className={`metric-value ${asset.fundamentals.priceToBook < 1 ? 'good' : asset.fundamentals.priceToBook < 3 ? 'neutral' : 'bad'}`}>
+                                {asset.fundamentals.priceToBook.toFixed(2)}
+                              </span>
+                            ) : 'N/A'}
+                          </div>
+                          <div className="ftd">
+                            {asset.fundamentals.returnOnEquity !== null ? (
+                              <span className={`metric-value ${asset.fundamentals.returnOnEquity > 0.15 ? 'good' : asset.fundamentals.returnOnEquity > 0.10 ? 'neutral' : 'bad'}`}>
+                                {(asset.fundamentals.returnOnEquity * 100).toFixed(1)}%
+                              </span>
+                            ) : 'N/A'}
+                          </div>
+                          <div className="ftd">
+                            {asset.fundamentals.profitMargin !== null ? (
+                              <span className={`metric-value ${asset.fundamentals.profitMargin > 0.15 ? 'good' : asset.fundamentals.profitMargin > 0.05 ? 'neutral' : 'bad'}`}>
+                                {(asset.fundamentals.profitMargin * 100).toFixed(1)}%
+                              </span>
                           ) : 'N/A'}
                         </div>
                         <div className="ftd">
@@ -1456,9 +1521,10 @@ export default function VibeStudio() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Market Insights from Web Search */}
-            {generatedPortfolio.assets.some(a => a.marketInsights && a.marketInsights.length > 0) && (
+            {sectionVisibility.hasMarketInsights && (
               <div className="detail-card full-width">
                 <h3><TrendingUp size={20} /> Market Insights (Web Research)</h3>
                 <div className="detail-content">
@@ -1489,8 +1555,145 @@ export default function VibeStudio() {
               </div>
             )}
 
+            {/* Quant Feedback Loop - Detailed Analysis */}
+            {sectionVisibility.hasQuantFeedback && generatedPortfolio.quantFeedbackSummary && (
+              <div className="detail-card full-width">
+                <h3><RefreshCw size={20} /> Quant Feedback Analysis</h3>
+                <div className="detail-content">
+                  <div className="quant-feedback-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '1rem',
+                    marginBottom: '1rem'
+                  }}>
+                    {/* Flagged Assets */}
+                    {generatedPortfolio.quantFeedbackSummary.flaggedAssets.length > 0 && (
+                      <div className="feedback-section" style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(239, 68, 68, 0.3)'
+                      }}>
+                        <h4 style={{ color: 'var(--danger, #ef4444)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <AlertTriangle size={18} /> Flagged for Review
+                        </h4>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {generatedPortfolio.quantFeedbackSummary.flaggedAssets.map((symbol, i) => {
+                            const asset = generatedPortfolio.assets.find(a => a.symbol === symbol);
+                            return (
+                              <div key={i} style={{
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: '6px',
+                                fontSize: '0.85rem'
+                              }}>
+                                <strong>{symbol}</strong>
+                                {asset?.quantFeedback?.issues && (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                    {asset.quantFeedback.issues.slice(0, 2).join(', ')}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Replacement Suggestions */}
+                    {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.length > 0 && (
+                      <div className="feedback-section" style={{
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        padding: '1rem',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(245, 158, 11, 0.3)'
+                      }}>
+                        <h4 style={{ color: 'var(--warning, #f59e0b)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <ArrowUpRight size={18} /> Alternative Suggestions
+                        </h4>
+                        {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.map((suggestion, i) => (
+                          <div key={i} style={{ marginBottom: '0.5rem' }}>
+                            <div style={{ fontSize: '0.85rem' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>Replace </span>
+                              <strong style={{ color: 'var(--danger)' }}>{suggestion.symbol}</strong>
+                              <span style={{ color: 'var(--text-muted)' }}> with: </span>
+                              <span style={{ color: 'var(--success)' }}>{suggestion.alternatives.join(', ')}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Portfolio Metrics After Feedback */}
+                    <div className="feedback-section" style={{
+                      background: 'rgba(99, 102, 241, 0.1)',
+                      padding: '1rem',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(99, 102, 241, 0.3)'
+                    }}>
+                      <h4 style={{ color: 'var(--primary, #6366f1)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Gauge size={18} /> Post-Optimization Metrics
+                      </h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Est. Sharpe Ratio</div>
+                          <div style={{ 
+                            fontSize: '1.25rem', 
+                            fontWeight: 'bold',
+                            color: generatedPortfolio.quantFeedbackSummary.portfolioMetricsAfter.estimatedSharpe > 1 
+                              ? 'var(--success)' 
+                              : generatedPortfolio.quantFeedbackSummary.portfolioMetricsAfter.estimatedSharpe > 0.5 
+                                ? 'var(--warning)' 
+                                : 'var(--danger)'
+                          }}>
+                            {generatedPortfolio.quantFeedbackSummary.portfolioMetricsAfter.estimatedSharpe.toFixed(2)}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Est. Volatility</div>
+                          <div style={{ 
+                            fontSize: '1.25rem', 
+                            fontWeight: 'bold',
+                            color: generatedPortfolio.quantFeedbackSummary.portfolioMetricsAfter.estimatedVolatility < 20 
+                              ? 'var(--success)' 
+                              : generatedPortfolio.quantFeedbackSummary.portfolioMetricsAfter.estimatedVolatility < 30 
+                                ? 'var(--warning)' 
+                                : 'var(--danger)'
+                          }}>
+                            {generatedPortfolio.quantFeedbackSummary.portfolioMetricsAfter.estimatedVolatility.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* All Feedback Actions */}
+                  <div style={{ 
+                    background: 'var(--bg-secondary)', 
+                    padding: '1rem', 
+                    borderRadius: '8px',
+                    maxHeight: '200px',
+                    overflowY: 'auto'
+                  }}>
+                    <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>All Adjustments Made:</h4>
+                    {generatedPortfolio.quantFeedbackSummary.actions.map((action, i) => (
+                      <div key={i} style={{ 
+                        fontSize: '0.85rem', 
+                        padding: '0.25rem 0',
+                        borderBottom: i < generatedPortfolio.quantFeedbackSummary!.actions.length - 1 
+                          ? '1px solid var(--border)' 
+                          : 'none'
+                      }}>
+                        {action}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Monte Carlo Simulation Results */}
-            {generatedPortfolio.monteCarloResult && (
+            {sectionVisibility.hasMonteCarloResult && generatedPortfolio.monteCarloResult && (
               <div className="detail-card full-width">
                 <h3><Activity size={20} /> Monte Carlo Simulation (1-Year Forecast)</h3>
                 <div className="detail-content">
@@ -1535,7 +1738,7 @@ export default function VibeStudio() {
             )}
 
             {/* Backtest Results */}
-            {generatedPortfolio.backtestResult && (
+            {sectionVisibility.hasBacktestResult && generatedPortfolio.backtestResult && (
               <div className="detail-card full-width">
                 <h3><TrendingUp size={20} /> Historical Backtest Results</h3>
                 <div className="detail-content">

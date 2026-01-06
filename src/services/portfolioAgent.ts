@@ -78,6 +78,13 @@ interface PortfolioAsset {
   };
   compositeScore?: number; // 0-100 overall score
   marketInsights?: MarketInsight[]; // Web search insights
+  // Quant Feedback Loop analysis
+  quantFeedback?: {
+    issues: string[];
+    riskScore: number;
+    needsAttention: boolean;
+    allocationAdjustment?: string;
+  };
 }
 
 interface MonteCarloResult {
@@ -131,6 +138,22 @@ interface GeneratedPortfolio {
       decisionFrequency: number; // -1 to 1
     };
   };
+  // Quant Feedback Loop fields
+  quantFeedbackApplied?: boolean;
+  quantFeedbackSummary?: {
+    adjustmentsCount: number;
+    actions: string[];
+    flaggedAssets: string[];
+    replacementSuggestions: Array<{
+      symbol: string;
+      issues: string[];
+      alternatives: string[];
+    }>;
+    portfolioMetricsAfter: {
+      estimatedSharpe: number;
+      estimatedVolatility: number;
+    };
+  };
 }
 
 interface TechnicalAnalysis {
@@ -148,6 +171,29 @@ interface StreamUpdate {
   data?: Partial<GeneratedPortfolio>;
   error?: string;
 }
+
+// Quant feedback thresholds for recommendation improvement
+const QUANT_FEEDBACK_THRESHOLDS = {
+  minSharpeRatio: 0.3,          // Below this suggests poor risk-adjusted returns
+  maxVolatility: 40,            // Above this is too risky
+  maxDrawdown: -35,             // Beyond this drawdown is concerning
+  minCompositeScore: 35,        // Below this score suggests replacement
+  rsiOversold: 30,              // RSI below this is oversold
+  rsiOverbought: 70,            // RSI above this is overbought
+  minConfidence: 40,            // Minimum signal confidence
+  allocationAdjustFactor: 0.2,  // Max % to adjust allocation by
+};
+
+// Defensive replacement candidates for poor performers
+const DEFENSIVE_ALTERNATIVES: Record<string, string[]> = {
+  'Technology': ['MSFT', 'AAPL', 'V', 'MA'],
+  'Healthcare': ['JNJ', 'UNH', 'PFE', 'ABBV'],
+  'Consumer': ['PG', 'KO', 'PEP', 'WMT'],
+  'Financial': ['JPM', 'BRK-B', 'V', 'MA'],
+  'Energy': ['XOM', 'CVX', 'NEE', 'DUK'],
+  'Industrial': ['UNP', 'HON', 'CAT', 'DE'],
+  'Default': ['VTI', 'SPY', 'QQQ', 'VIG'],
+};
 
 class PortfolioAgentService {
   private vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
@@ -167,7 +213,191 @@ class PortfolioAgentService {
     const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
     console.log('[INFO] Optimized portfolio:', optimizedPortfolio);
 
-    return optimizedPortfolio;
+    // Apply quant feedback loop to improve recommendations
+    const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
+    console.log('[INFO] Feedback improved portfolio:', feedbackImprovedPortfolio);
+
+    return feedbackImprovedPortfolio;
+  }
+
+  /**
+   * Quant Feedback Loop: Analyze portfolio assets and improve recommendations
+   * based on quantitative metrics. Adjusts allocations and suggests replacements.
+   */
+  private async applyQuantFeedbackLoop(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
+    console.log('[QUANT FEEDBACK] Starting feedback loop analysis...');
+    
+    let assets = [...portfolio.assets];
+    const feedbackActions: string[] = [];
+    const assetsToFlag: string[] = [];
+    
+    // Step 1: Identify underperforming assets based on quant metrics
+    const assetAnalysis = assets.map(asset => {
+      const metrics = asset.quantMetrics;
+      const score = asset.compositeScore || 50;
+      const issues: string[] = [];
+      let riskScore = 0; // Higher = more issues
+      
+      if (metrics) {
+        // Check Sharpe Ratio
+        if (metrics.sharpeRatio < QUANT_FEEDBACK_THRESHOLDS.minSharpeRatio) {
+          issues.push(`Low Sharpe (${metrics.sharpeRatio.toFixed(2)})`);
+          riskScore += 2;
+        }
+        
+        // Check Volatility
+        if (metrics.volatility > QUANT_FEEDBACK_THRESHOLDS.maxVolatility) {
+          issues.push(`High Volatility (${metrics.volatility.toFixed(1)}%)`);
+          riskScore += 2;
+        }
+        
+        // Check Max Drawdown
+        if (metrics.maxDrawdown < QUANT_FEEDBACK_THRESHOLDS.maxDrawdown) {
+          issues.push(`Large Drawdown (${metrics.maxDrawdown.toFixed(1)}%)`);
+          riskScore += 3;
+        }
+        
+        // Check RSI extremes
+        if (metrics.rsi > QUANT_FEEDBACK_THRESHOLDS.rsiOverbought) {
+          issues.push(`Overbought RSI (${metrics.rsi.toFixed(0)})`);
+          riskScore += 1;
+        }
+        
+        // Check confidence
+        if (metrics.confidence < QUANT_FEEDBACK_THRESHOLDS.minConfidence) {
+          issues.push(`Low Confidence (${metrics.confidence.toFixed(0)}%)`);
+          riskScore += 1;
+        }
+        
+        // Check signal
+        if (metrics.recommendation?.toLowerCase().includes('sell')) {
+          issues.push('Sell Signal');
+          riskScore += 2;
+        }
+      }
+      
+      // Check composite score
+      if (score < QUANT_FEEDBACK_THRESHOLDS.minCompositeScore) {
+        issues.push(`Low Score (${score})`);
+        riskScore += 2;
+      }
+      
+      return {
+        symbol: asset.symbol,
+        sector: asset.sector || 'Default',
+        allocation: asset.allocation,
+        issues,
+        riskScore,
+        needsAttention: riskScore >= 3,
+        metrics,
+        compositeScore: score,
+      };
+    });
+    
+    // Step 2: Apply allocation adjustments based on analysis
+    const totalRiskScore = assetAnalysis.reduce((sum, a) => sum + a.riskScore, 0);
+    const avgRiskScore = totalRiskScore / assets.length;
+    
+    assets = assets.map((asset, index) => {
+      const analysis = assetAnalysis[index];
+      let newAllocation = asset.allocation;
+      let allocationReason = '';
+      
+      if (analysis.riskScore >= 4) {
+        // High risk: reduce allocation significantly
+        const reduction = asset.allocation * QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor;
+        newAllocation = Math.max(2, asset.allocation - reduction);
+        allocationReason = `Reduced allocation due to: ${analysis.issues.join(', ')}`;
+        feedbackActions.push(`⚠️ ${asset.symbol}: ${allocationReason}`);
+        assetsToFlag.push(asset.symbol);
+      } else if (analysis.riskScore >= 2 && analysis.riskScore < avgRiskScore) {
+        // Moderate risk: slight reduction
+        const reduction = asset.allocation * (QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor / 2);
+        newAllocation = Math.max(2, asset.allocation - reduction);
+        allocationReason = `Slightly reduced due to: ${analysis.issues.join(', ')}`;
+        feedbackActions.push(`📉 ${asset.symbol}: ${allocationReason}`);
+      } else if (analysis.riskScore === 0 && analysis.compositeScore > 60) {
+        // Strong performer: can increase allocation
+        const boost = asset.allocation * (QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor / 2);
+        newAllocation = Math.min(25, asset.allocation + boost); // Cap at 25%
+        allocationReason = `Increased allocation - strong quant metrics`;
+        feedbackActions.push(`📈 ${asset.symbol}: ${allocationReason}`);
+      }
+      
+      return {
+        ...asset,
+        allocation: newAllocation,
+        quantFeedback: {
+          issues: analysis.issues,
+          riskScore: analysis.riskScore,
+          needsAttention: analysis.needsAttention,
+          allocationAdjustment: allocationReason || undefined,
+        },
+      };
+    });
+    
+    // Step 3: Normalize allocations back to 100%
+    const totalAlloc = assets.reduce((sum, a) => sum + a.allocation, 0);
+    if (Math.abs(totalAlloc - 100) > 0.1) {
+      assets = assets.map(a => ({
+        ...a,
+        allocation: parseFloat(((a.allocation / totalAlloc) * 100).toFixed(2)),
+      }));
+    }
+    
+    // Step 4: Generate replacement suggestions for flagged assets
+    const replacementSuggestions: Array<{
+      symbol: string;
+      issues: string[];
+      alternatives: string[];
+    }> = [];
+    
+    assetAnalysis.filter(a => a.needsAttention).forEach(analysis => {
+      const alternatives = DEFENSIVE_ALTERNATIVES[analysis.sector] || DEFENSIVE_ALTERNATIVES['Default'];
+      const availableAlternatives = alternatives.filter(
+        alt => !assets.some(a => a.symbol === alt)
+      );
+      
+      if (availableAlternatives.length > 0) {
+        replacementSuggestions.push({
+          symbol: analysis.symbol,
+          issues: analysis.issues,
+          alternatives: availableAlternatives.slice(0, 3),
+        });
+      }
+    });
+    
+    // Step 5: Recalculate portfolio metrics after adjustments
+    let portfolioSharpe = 0;
+    let portfolioVol = 0;
+    assets.forEach(asset => {
+      const weight = asset.allocation / 100;
+      if (asset.quantMetrics) {
+        portfolioSharpe += asset.quantMetrics.sharpeRatio * weight;
+        portfolioVol += Math.pow(asset.quantMetrics.volatility * weight, 2);
+      }
+    });
+    portfolioVol = Math.sqrt(portfolioVol) * 0.7 + portfolioVol * 0.3;
+    
+    console.log(`[QUANT FEEDBACK] Applied ${feedbackActions.length} adjustments`);
+    console.log(`[QUANT FEEDBACK] ${assetsToFlag.length} assets flagged for attention`);
+    console.log(`[QUANT FEEDBACK] ${replacementSuggestions.length} replacement suggestions`);
+    
+    return {
+      ...portfolio,
+      assets,
+      quantFeedbackApplied: feedbackActions.length > 0,
+      quantFeedbackSummary: feedbackActions.length > 0 ? {
+        adjustmentsCount: feedbackActions.length,
+        actions: feedbackActions,
+        flaggedAssets: assetsToFlag,
+        replacementSuggestions,
+        portfolioMetricsAfter: {
+          estimatedSharpe: portfolioSharpe,
+          estimatedVolatility: portfolioVol,
+        },
+      } : undefined,
+    };
   }
 
   async *generatePortfolioStream(userPrompt: string): AsyncGenerator<StreamUpdate> {
@@ -225,12 +455,16 @@ class PortfolioAgentService {
 
       // Fast optimization (no AI)
       const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
+
+      // Apply quant feedback loop to improve recommendations
+      yield { type: 'progress', step: 'feedback', message: 'Applying quant feedback loop...' };
+      const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
       
       yield { 
         type: 'complete', 
         step: 'complete', 
         message: 'Portfolio ready',
-        data: optimizedPortfolio 
+        data: feedbackImprovedPortfolio 
       };
 
     } catch (error) {
