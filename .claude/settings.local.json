@@ -5,7 +5,8 @@
       "Bash(xargs:*)",
       "Bash(sort:*)",
       "Bash(wc:*)",
-      "Bash(npm run dev:landing:*)"
+      "Bash(npm run dev:landing:*)",
+      "Bash(cargo test --help:*)"
     ]
   }
 }

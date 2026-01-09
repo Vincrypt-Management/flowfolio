@@ -26,6 +26,17 @@ interface PortfolioAsset {
   sector?: string;
   analystRating?: string;
   technicalSignal?: string;
+  // AI-generated detailed description
+  aiDescription?: {
+    summary: string;           // 2-3 sentence summary of why this asset
+    investmentThesis: string;  // Detailed investment case
+    strengths: string[];       // Key strengths (3-5 points)
+    risks: string[];           // Key risks (2-4 points)
+    outlook: string;           // Forward-looking assessment
+    confidenceLevel: 'high' | 'medium' | 'low';
+    recommendedAction: 'strong_buy' | 'buy' | 'hold' | 'reduce' | 'sell';
+    targetAllocation?: string; // e.g., "10-15% of portfolio"
+  };
   quantMetrics?: {
     sharpeRatio: number;
     volatility: number;
@@ -217,7 +228,296 @@ class PortfolioAgentService {
     const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
     console.log('[INFO] Feedback improved portfolio:', feedbackImprovedPortfolio);
 
-    return feedbackImprovedPortfolio;
+    // Generate AI descriptions for each asset recommendation
+    const portfolioWithDescriptions = await this.generateAssetDescriptions(feedbackImprovedPortfolio, userPrompt);
+    console.log('[INFO] Portfolio with AI descriptions generated');
+
+    return portfolioWithDescriptions;
+  }
+
+  /**
+   * Generate detailed AI descriptions for each portfolio asset recommendation
+   */
+  async generateAssetDescriptions(
+    portfolio: GeneratedPortfolio,
+    userContext: string
+  ): Promise<GeneratedPortfolio> {
+    console.log('[AI DESCRIPTION] Generating detailed descriptions for portfolio assets...');
+    
+    // Build a comprehensive prompt for all assets at once (more efficient than individual calls)
+    const assetsSummary = portfolio.assets.map(asset => {
+      let summary = `${asset.symbol} (${asset.name}) - ${asset.allocation.toFixed(1)}% allocation`;
+      summary += `\n  Sector: ${asset.sector || 'Unknown'}`;
+      summary += `\n  Rationale: ${asset.rationale}`;
+      
+      if (asset.currentPrice) {
+        summary += `\n  Current Price: $${asset.currentPrice.toFixed(2)}`;
+      }
+      
+      if (asset.quantMetrics) {
+        summary += `\n  Quant Metrics:`;
+        summary += `\n    - Sharpe Ratio: ${asset.quantMetrics.sharpeRatio.toFixed(2)}`;
+        summary += `\n    - Annualized Return: ${asset.quantMetrics.expectedReturn.toFixed(1)}%`;
+        summary += `\n    - Volatility: ${asset.quantMetrics.volatility.toFixed(1)}%`;
+        summary += `\n    - Max Drawdown: ${asset.quantMetrics.maxDrawdown.toFixed(1)}%`;
+        summary += `\n    - RSI: ${asset.quantMetrics.rsi.toFixed(0)}`;
+        summary += `\n    - Signal: ${asset.quantMetrics.recommendation}`;
+        summary += `\n    - Confidence: ${asset.quantMetrics.confidence.toFixed(0)}%`;
+        if (asset.quantMetrics.beta) summary += `\n    - Beta: ${asset.quantMetrics.beta.toFixed(2)}`;
+        if (asset.quantMetrics.alpha) summary += `\n    - Alpha: ${asset.quantMetrics.alpha.toFixed(2)}%`;
+      }
+      
+      if (asset.fundamentals) {
+        summary += `\n  Fundamentals:`;
+        if (asset.fundamentals.peRatio) summary += `\n    - P/E: ${asset.fundamentals.peRatio.toFixed(1)}`;
+        if (asset.fundamentals.forwardPE) summary += `\n    - Forward P/E: ${asset.fundamentals.forwardPE.toFixed(1)}`;
+        if (asset.fundamentals.returnOnEquity) summary += `\n    - ROE: ${(asset.fundamentals.returnOnEquity * 100).toFixed(1)}%`;
+        if (asset.fundamentals.profitMargin) summary += `\n    - Profit Margin: ${(asset.fundamentals.profitMargin * 100).toFixed(1)}%`;
+        if (asset.fundamentals.debtToEquity) summary += `\n    - D/E: ${asset.fundamentals.debtToEquity.toFixed(2)}`;
+        if (asset.fundamentals.dividendYield) summary += `\n    - Dividend Yield: ${(asset.fundamentals.dividendYield * 100).toFixed(2)}%`;
+        if (asset.fundamentals.revenueGrowthYoY) summary += `\n    - Revenue Growth: ${(asset.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%`;
+      }
+      
+      if (asset.sentiment) {
+        summary += `\n  Sentiment: ${asset.sentiment.overallSentiment} (score: ${asset.sentiment.sentimentScore.toFixed(2)})`;
+      }
+      
+      if (asset.analystData) {
+        summary += `\n  Analyst Consensus: ${asset.analystData.consensusRating}`;
+        if (asset.analystData.upside) summary += ` (${asset.analystData.upside.toFixed(1)}% upside)`;
+        summary += ` - ${asset.analystData.numberOfAnalysts} analysts`;
+      }
+      
+      if (asset.compositeScore) {
+        summary += `\n  Composite Score: ${asset.compositeScore}/100`;
+      }
+      
+      if (asset.quantFeedback && asset.quantFeedback.issues.length > 0) {
+        summary += `\n  Issues Flagged: ${asset.quantFeedback.issues.join(', ')}`;
+      }
+      
+      return summary;
+    }).join('\n\n');
+
+    const messages: OpenRouterMessage[] = [
+      {
+        role: 'system',
+        content: `You are a CFA-certified investment analyst generating detailed investment descriptions for portfolio recommendations.
+
+For EACH asset in the portfolio, you must provide a comprehensive analysis in the following JSON format. Your analysis must be:
+- Data-driven: Reference specific metrics provided
+- Actionable: Clear recommendation with reasoning
+- Balanced: Include both opportunities and risks
+- Specific: Avoid generic statements, cite numbers
+
+OUTPUT FORMAT (JSON array):
+[
+  {
+    "symbol": "AAPL",
+    "summary": "2-3 sentence summary explaining why this asset is included and its role in the portfolio",
+    "investmentThesis": "Detailed 3-5 sentence investment case explaining the opportunity, competitive advantages, and growth drivers",
+    "strengths": [
+      "Specific strength with supporting data",
+      "Another strength with metric",
+      "Third strength"
+    ],
+    "risks": [
+      "Specific risk with potential impact",
+      "Another risk factor"
+    ],
+    "outlook": "2-3 sentence forward-looking assessment of expected performance",
+    "confidenceLevel": "high|medium|low",
+    "recommendedAction": "strong_buy|buy|hold|reduce|sell",
+    "targetAllocation": "X-Y% of portfolio"
+  }
+]
+
+CRITICAL RULES:
+1. Output ONLY valid JSON array - no other text
+2. Include ALL assets from the input
+3. Reference actual metrics from the data provided
+4. Be specific - no generic boilerplate language
+5. Match confidenceLevel to the quality of metrics available
+6. recommendedAction should align with the signal and overall assessment
+7. Each strength/risk must be specific to this asset, not generic`
+      },
+      {
+        role: 'user',
+        content: `Generate detailed investment descriptions for each asset in this portfolio.
+
+USER INVESTMENT CONTEXT:
+${userContext}
+
+PORTFOLIO OVERVIEW:
+- Title: ${portfolio.title}
+- Strategy: ${portfolio.strategy}
+- Risk Level: ${portfolio.riskLevel}
+- Time Horizon: ${portfolio.timeHorizon}
+- Expected Return: ${portfolio.expectedReturn}
+- Volatility: ${portfolio.volatility}
+
+ASSETS TO ANALYZE:
+${assetsSummary}
+
+Generate a JSON array with detailed descriptions for each of the ${portfolio.assets.length} assets above.`
+      }
+    ];
+
+    try {
+      const response = await openRouterService.chat(messages, this.vibeModel, {
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
+
+      // Parse the AI response
+      const descriptions = this.parseAssetDescriptions(response);
+      
+      // Merge descriptions into portfolio assets
+      const assetsWithDescriptions = portfolio.assets.map(asset => {
+        const desc = descriptions.find(d => d.symbol.toUpperCase() === asset.symbol.toUpperCase());
+        if (desc) {
+          return {
+            ...asset,
+            aiDescription: {
+              summary: desc.summary,
+              investmentThesis: desc.investmentThesis,
+              strengths: desc.strengths,
+              risks: desc.risks,
+              outlook: desc.outlook,
+              confidenceLevel: desc.confidenceLevel as 'high' | 'medium' | 'low',
+              recommendedAction: desc.recommendedAction as 'strong_buy' | 'buy' | 'hold' | 'reduce' | 'sell',
+              targetAllocation: desc.targetAllocation,
+            },
+          };
+        }
+        // Fallback if no description was generated
+        return {
+          ...asset,
+          aiDescription: this.generateFallbackDescription(asset),
+        };
+      });
+
+      console.log(`[AI DESCRIPTION] Generated descriptions for ${descriptions.length}/${portfolio.assets.length} assets`);
+      
+      return {
+        ...portfolio,
+        assets: assetsWithDescriptions,
+      };
+    } catch (error) {
+      console.error('[AI DESCRIPTION] Failed to generate descriptions:', error);
+      // Return portfolio with fallback descriptions
+      return {
+        ...portfolio,
+        assets: portfolio.assets.map(asset => ({
+          ...asset,
+          aiDescription: this.generateFallbackDescription(asset),
+        })),
+      };
+    }
+  }
+
+  /**
+   * Parse AI-generated asset descriptions from JSON response
+   */
+  private parseAssetDescriptions(response: string): Array<{
+    symbol: string;
+    summary: string;
+    investmentThesis: string;
+    strengths: string[];
+    risks: string[];
+    outlook: string;
+    confidenceLevel: string;
+    recommendedAction: string;
+    targetAllocation: string;
+  }> {
+    try {
+      // Clean the response
+      let cleaned = response.trim();
+      cleaned = cleaned.replace(/```json\s*/gi, '');
+      cleaned = cleaned.replace(/```\s*/g, '');
+      
+      // Find JSON array
+      const firstBracket = cleaned.indexOf('[');
+      const lastBracket = cleaned.lastIndexOf(']');
+      
+      if (firstBracket === -1 || lastBracket === -1) {
+        console.warn('[AI DESCRIPTION] No JSON array found in response');
+        return [];
+      }
+      
+      const jsonStr = cleaned.substring(firstBracket, lastBracket + 1);
+      const parsed = JSON.parse(jsonStr);
+      
+      if (!Array.isArray(parsed)) {
+        console.warn('[AI DESCRIPTION] Response is not an array');
+        return [];
+      }
+      
+      return parsed;
+    } catch (error) {
+      console.error('[AI DESCRIPTION] Failed to parse descriptions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Generate fallback description when AI generation fails
+   */
+  private generateFallbackDescription(asset: PortfolioAsset): NonNullable<PortfolioAsset['aiDescription']> {
+    const metrics = asset.quantMetrics;
+    const fundamentals = asset.fundamentals;
+    
+    // Determine confidence based on available data
+    let dataQuality = 0;
+    if (metrics) dataQuality += 2;
+    if (fundamentals) dataQuality += 2;
+    if (asset.sentiment) dataQuality += 1;
+    if (asset.analystData) dataQuality += 1;
+    
+    const confidenceLevel: 'high' | 'medium' | 'low' = 
+      dataQuality >= 5 ? 'high' : dataQuality >= 3 ? 'medium' : 'low';
+    
+    // Determine action based on signal
+    let recommendedAction: 'strong_buy' | 'buy' | 'hold' | 'reduce' | 'sell' = 'hold';
+    if (metrics) {
+      const signal = metrics.recommendation.toLowerCase();
+      if (signal.includes('strong buy')) recommendedAction = 'strong_buy';
+      else if (signal.includes('buy')) recommendedAction = 'buy';
+      else if (signal.includes('sell')) recommendedAction = 'sell';
+      else if (signal.includes('reduce')) recommendedAction = 'reduce';
+    }
+    
+    // Build strengths
+    const strengths: string[] = [];
+    if (metrics && metrics.sharpeRatio > 1) strengths.push(`Strong risk-adjusted returns (Sharpe: ${metrics.sharpeRatio.toFixed(2)})`);
+    if (metrics && metrics.sharpeRatio > 0.5 && metrics.sharpeRatio <= 1) strengths.push(`Positive risk-adjusted returns (Sharpe: ${metrics.sharpeRatio.toFixed(2)})`);
+    if (fundamentals && fundamentals.returnOnEquity && fundamentals.returnOnEquity > 0.15) strengths.push(`High profitability (ROE: ${(fundamentals.returnOnEquity * 100).toFixed(1)}%)`);
+    if (fundamentals && fundamentals.revenueGrowthYoY && fundamentals.revenueGrowthYoY > 0.1) strengths.push(`Strong revenue growth (${(fundamentals.revenueGrowthYoY * 100).toFixed(1)}% YoY)`);
+    if (asset.sentiment?.overallSentiment === 'bullish') strengths.push('Positive market sentiment');
+    if (asset.analystData?.upside && asset.analystData.upside > 15) strengths.push(`Analyst upside potential (${asset.analystData.upside.toFixed(1)}%)`);
+    if (strengths.length === 0) strengths.push('Diversification benefit', 'Portfolio allocation balance');
+    
+    // Build risks
+    const risks: string[] = [];
+    if (metrics && metrics.volatility > 30) risks.push(`Elevated volatility (${metrics.volatility.toFixed(1)}%)`);
+    if (metrics && metrics.maxDrawdown < -25) risks.push(`Significant drawdown potential (${metrics.maxDrawdown.toFixed(1)}%)`);
+    if (fundamentals && fundamentals.debtToEquity && fundamentals.debtToEquity > 1.5) risks.push(`High leverage (D/E: ${fundamentals.debtToEquity.toFixed(2)})`);
+    if (metrics && metrics.rsi > 70) risks.push('Currently overbought (RSI > 70)');
+    if (metrics && metrics.rsi < 30) risks.push('Currently oversold - potential value trap');
+    if (risks.length === 0) risks.push('Market risk exposure', 'Economic cycle sensitivity');
+    
+    return {
+      summary: `${asset.name} (${asset.symbol}) allocated at ${asset.allocation.toFixed(1)}% for ${asset.rationale}`,
+      investmentThesis: asset.rationale || `${asset.name} provides exposure to the ${asset.sector || 'diversified'} sector with a balanced risk-return profile suitable for the portfolio strategy.`,
+      strengths: strengths.slice(0, 4),
+      risks: risks.slice(0, 3),
+      outlook: metrics 
+        ? `Based on current metrics (Sharpe: ${metrics.sharpeRatio.toFixed(2)}, Vol: ${metrics.volatility.toFixed(1)}%), ${asset.symbol} shows ${metrics.recommendation.toLowerCase()} signals with ${metrics.confidence.toFixed(0)}% confidence.`
+        : `${asset.symbol} is positioned for the portfolio's ${asset.sector || 'broad'} sector exposure.`,
+      confidenceLevel,
+      recommendedAction,
+      targetAllocation: `${Math.max(5, asset.allocation - 3).toFixed(0)}-${Math.min(25, asset.allocation + 3).toFixed(0)}% of portfolio`,
+    };
   }
 
   /**
@@ -460,11 +760,15 @@ class PortfolioAgentService {
       yield { type: 'progress', step: 'feedback', message: 'Applying quant feedback loop...' };
       const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
       
+      // Generate AI descriptions for each asset
+      yield { type: 'progress', step: 'descriptions', message: 'Generating AI descriptions...' };
+      const portfolioWithDescriptions = await this.generateAssetDescriptions(feedbackImprovedPortfolio, userPrompt);
+      
       yield { 
         type: 'complete', 
         step: 'complete', 
         message: 'Portfolio ready',
-        data: feedbackImprovedPortfolio 
+        data: portfolioWithDescriptions 
       };
 
     } catch (error) {

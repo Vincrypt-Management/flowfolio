@@ -5,6 +5,7 @@ import { PortfolioTab } from "./PortfolioTab";
 import { BacktestTab } from "./BacktestTab";
 import { JournalTab } from "./JournalTab";
 import { YearlyReviewComponent } from "./components/YearlyReview";
+import { SavedPortfoliosTab } from "./components/SavedPortfoliosTab";
 import { 
   LayoutDashboard, 
   Sparkles, 
@@ -489,6 +490,14 @@ function App() {
           {!isSidebarCollapsed && <span>Vibe Studio</span>}
         </button>
         <button 
+          className={`nav-item ${activeTab === "saved-portfolios" ? "active" : ""}`}
+          onClick={() => setActiveTab("saved-portfolios")}
+          title={isSidebarCollapsed ? "Saved Portfolios" : ""}
+        >
+          <Save className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Saved Portfolios</span>}
+        </button>
+        <button 
           className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
           onClick={() => setActiveTab("templates")}
           title={isSidebarCollapsed ? "Templates" : ""}
@@ -681,6 +690,12 @@ function App() {
           <div className="animate-fade-in">
             <VibeStudio />
           </div>
+        )}
+
+        {activeTab === "saved-portfolios" && (
+          <SavedPortfoliosTab onLoadPortfolio={() => {
+            setActiveTab("vibe-studio");
+          }} />
         )}
 
         {activeTab === "templates" && (

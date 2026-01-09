@@ -49,6 +49,31 @@
   font-weight: 400;
 }
 
+.header-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-saved-portfolios {
+  padding: 0.5rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-saved-portfolios:hover {
+  background: var(--accent);
+  color: white;
+}
+
 .btn-reset, .btn-chat {
   padding: 0.5rem 1rem;
   background: var(--bg-card);
@@ -1823,4 +1848,175 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* New Saved Portfolios Panel - Inline */
+.saved-portfolios-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.saved-portfolios-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+.saved-portfolios-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-main);
+}
+
+.saved-portfolios-header h3 svg {
+  color: var(--accent);
+}
+
+.btn-close-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-close-panel:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-main);
+}
+
+.loading-portfolios {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.no-portfolios {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.no-portfolios p {
+  margin: 0 0 0.25rem 0;
+}
+
+.no-portfolios .hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.saved-portfolios-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.saved-portfolio-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.saved-portfolio-item:hover {
+  background: var(--bg-card);
+  border-color: var(--accent);
+}
+
+.saved-portfolio-item .portfolio-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.saved-portfolio-item .portfolio-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.saved-portfolio-item .portfolio-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.saved-portfolio-item .portfolio-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.btn-icon-small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-icon-small:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.btn-icon-small.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.btn-refresh-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-refresh-list:hover {
+  background: var(--bg-card);
+  color: var(--accent);
 }

@@ -1,6 +1,7 @@
 /**
  * Detailed Ticker Analysis Component
  * Provides comprehensive quantitative and fundamental analysis for a single ticker
+ * Shows AI-generated report directly inline with a clean list-based layout
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -25,8 +26,15 @@ import {
   RefreshCw,
   Shield,
   Zap,
+  CheckCircle,
+  Clock,
+  Download,
+  Copy,
+  Check,
 } from 'lucide-react';
 import './TickerAnalysis.css';
+import { useAnalysisReport } from '../hooks/useAnalysisReport';
+import type { TickerAnalysisData } from '../services/analysisReport';
 
 interface TickerAnalysisProps {
   symbol: string;
@@ -34,6 +42,7 @@ interface TickerAnalysisProps {
   inline?: boolean;
   availableTickers?: string[];
   onTickerChange?: (ticker: string) => void;
+  autoGenerateReport?: boolean;
 }
 
 interface TickerData {
@@ -93,14 +102,34 @@ interface TickerData {
   };
 }
 
-export default function TickerAnalysis({ symbol, onClose, inline = false, availableTickers, onTickerChange }: TickerAnalysisProps) {
+export default function TickerAnalysis({ 
+  symbol, 
+  onClose, 
+  inline = false, 
+  availableTickers, 
+  onTickerChange,
+  autoGenerateReport = true 
+}: TickerAnalysisProps) {
   const [data, setData] = useState<TickerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const isMountedRef = useRef(true);
+  const reportGeneratedRef = useRef(false);
+  
+  const { 
+    report, 
+    isLoading: isReportLoading, 
+    error: reportError,
+    progress: reportProgress,
+    generateTickerReport,
+    exportMarkdown,
+    clearReport
+  } = useAnalysisReport();
 
   useEffect(() => {
     isMountedRef.current = true;
+    reportGeneratedRef.current = false;
     loadTickerData();
     
     return () => {
@@ -108,9 +137,18 @@ export default function TickerAnalysis({ symbol, onClose, inline = false, availa
     };
   }, [symbol]);
 
+  // Auto-generate report when data is loaded
+  useEffect(() => {
+    if (data && autoGenerateReport && !reportGeneratedRef.current && !report && !isReportLoading) {
+      reportGeneratedRef.current = true;
+      handleGenerateReport();
+    }
+  }, [data, autoGenerateReport, report, isReportLoading]);
+
   async function loadTickerData() {
     setIsLoading(true);
     setError(null);
+    clearReport();
     
     try {
       const result = await invoke<TickerData>('get_detailed_ticker_analysis', { symbol });
@@ -128,6 +166,73 @@ export default function TickerAnalysis({ symbol, onClose, inline = false, availa
     }
   }
 
+  async function handleGenerateReport() {
+    if (!data || !data.currentPrice) return;
+    
+    const reportData: TickerAnalysisData = {
+      symbol: data.symbol,
+      currentPrice: data.currentPrice,
+      quantMetrics: data.quantMetrics ? {
+        sharpeRatio: data.quantMetrics.sharpeRatio,
+        sortinoRatio: data.quantMetrics.sortinoRatio,
+        annualizedReturn: data.quantMetrics.annualizedReturn,
+        volatility: data.quantMetrics.volatility,
+        maxDrawdown: data.quantMetrics.maxDrawdown,
+        rsi: data.quantMetrics.rsi,
+        signal: data.quantMetrics.signal,
+        confidence: data.quantMetrics.confidence,
+        beta: data.quantMetrics.beta,
+        alpha: data.quantMetrics.alpha,
+      } : undefined,
+      fundamentals: data.fundamentals ? {
+        peRatio: data.fundamentals.peRatio,
+        forwardPE: data.fundamentals.forwardPE,
+        priceToBook: data.fundamentals.priceToBook,
+        profitMargin: data.fundamentals.profitMargin,
+        returnOnEquity: data.fundamentals.returnOnEquity,
+        revenueGrowthYoY: data.fundamentals.revenueGrowthYoY,
+        debtToEquity: data.fundamentals.debtToEquity,
+        dividendYield: data.fundamentals.dividendYield,
+        marketCap: data.fundamentals.marketCap,
+      } : undefined,
+      sentiment: data.sentiment ? {
+        overallSentiment: data.sentiment.overallSentiment,
+        sentimentScore: data.sentiment.sentimentScore,
+        newsCount: data.sentiment.newsCount,
+      } : undefined,
+      analystData: data.analystData ? {
+        consensusRating: data.analystData.consensusRating,
+        targetPriceMean: data.analystData.targetPriceMean,
+        numberOfAnalysts: data.analystData.numberOfAnalysts,
+        upside: data.analystData.upside,
+      } : undefined,
+    };
+    
+    await generateTickerReport(reportData);
+  }
+
+  const handleCopyReport = async () => {
+    const markdown = exportMarkdown();
+    if (markdown) {
+      await navigator.clipboard.writeText(markdown);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadReport = () => {
+    const markdown = exportMarkdown();
+    if (markdown) {
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${symbol}_analysis_${new Date().toISOString().split('T')[0]}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const formatCurrency = (value: number) => {
     if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
     if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
@@ -141,7 +246,14 @@ export default function TickerAnalysis({ symbol, onClose, inline = false, availa
     return '#ef4444';
   };
 
-  // Prepare radar chart data for composite scores
+  const getSignalClass = (signal: string) => {
+    const s = signal.toLowerCase();
+    if (s.includes('strong buy') || s.includes('buy')) return 'positive';
+    if (s.includes('sell')) return 'negative';
+    return 'neutral';
+  };
+
+  // Prepare radar chart data
   const radarData = data?.fundamentals ? [
     { metric: 'Value', score: data.fundamentals.valueScore, fullMark: 100 },
     { metric: 'Quality', score: data.fundamentals.qualityScore, fullMark: 100 },
@@ -150,14 +262,19 @@ export default function TickerAnalysis({ symbol, onClose, inline = false, availa
     { metric: 'Sentiment', score: data.sentiment ? (data.sentiment.sentimentScore + 1) * 50 : 50, fullMark: 100 },
   ] : [];
 
+  const overallScore = radarData.length > 0 
+    ? Math.round(radarData.reduce((sum, d) => sum + d.score, 0) / radarData.length)
+    : 50;
+
   return (
     <div className={inline ? "ticker-analysis-inline" : "ticker-analysis-overlay"}>
-      <div className={inline ? "ticker-analysis-card" : "ticker-analysis-modal"}>
-        <div className="ticker-analysis-header">
-          <div className="header-left">
+      <div className={inline ? "ticker-analysis-container" : "ticker-analysis-modal"}>
+        {/* Header */}
+        <div className="ta-header">
+          <div className="ta-header-left">
             {inline && availableTickers && availableTickers.length > 1 ? (
               <select 
-                className="ticker-selector"
+                className="ta-ticker-select"
                 value={symbol}
                 onChange={(e) => onTickerChange?.(e.target.value)}
               >
@@ -166,302 +283,459 @@ export default function TickerAnalysis({ symbol, onClose, inline = false, availa
                 ))}
               </select>
             ) : (
-              <h2>{symbol}</h2>
+              <h2 className="ta-symbol">{symbol}</h2>
             )}
             {data?.currentPrice && (
-              <span className="current-price">${data.currentPrice.toFixed(2)}</span>
+              <span className="ta-price">${data.currentPrice.toFixed(2)}</span>
             )}
             {data?.quantMetrics && (
-              <span className={`signal-badge ${data.quantMetrics.signal.toLowerCase().replace(' ', '-')}`}>
+              <span className={`ta-signal ${getSignalClass(data.quantMetrics.signal)}`}>
                 {data.quantMetrics.signal}
               </span>
             )}
           </div>
-          <div className="header-actions">
-            <button className="btn-refresh" onClick={loadTickerData} disabled={isLoading}>
-              <RefreshCw size={16} className={isLoading ? 'spinning' : ''} />
+          <div className="ta-header-right">
+            {report && (
+              <>
+                <button className="ta-btn-icon" onClick={handleCopyReport} title="Copy Report">
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+                <button className="ta-btn-icon" onClick={handleDownloadReport} title="Download">
+                  <Download size={16} />
+                </button>
+              </>
+            )}
+            <button 
+              className="ta-btn-icon" 
+              onClick={() => {
+                reportGeneratedRef.current = false;
+                loadTickerData();
+              }} 
+              disabled={isLoading || isReportLoading}
+              title="Refresh"
+            >
+              <RefreshCw size={16} className={isLoading || isReportLoading ? 'spinning' : ''} />
             </button>
             {!inline && (
-              <button className="btn-close" onClick={onClose}>
+              <button className="ta-btn-close" onClick={onClose}>
                 <X size={20} />
               </button>
             )}
           </div>
         </div>
 
-        {isLoading && (
-          <div className="loading-state">
-            <Loader2 size={32} className="spinning" />
-            <span>Analyzing {symbol}...</span>
+        {/* Loading */}
+        {(isLoading || isReportLoading) && (
+          <div className="ta-loading">
+            <Loader2 size={24} className="spinning" />
+            <span>{isLoading ? `Loading ${symbol}...` : reportProgress || 'Generating report...'}</span>
           </div>
         )}
 
-        {error && (
-          <div className="error-state">
-            <AlertTriangle size={32} />
+        {/* Error */}
+        {error && !isLoading && (
+          <div className="ta-error">
+            <AlertTriangle size={20} />
             <span>{error}</span>
             <button onClick={loadTickerData}>Retry</button>
           </div>
         )}
 
+        {reportError && (
+          <div className="ta-error">
+            <AlertTriangle size={16} />
+            <span>{reportError}</span>
+            <button onClick={handleGenerateReport}>Retry</button>
+          </div>
+        )}
+
+        {/* Content */}
         {data && !isLoading && (
-          <div className="ticker-analysis-content">
-            {/* Composite Score Radar */}
-            <div className="analysis-section">
-              <h3><Target size={18} /> Composite Analysis</h3>
-              <div className="radar-container">
-                <ResponsiveContainer width="100%" height={250}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="var(--border)" />
-                    <PolarAngleAxis dataKey="metric" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-                    <PolarRadiusAxis domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-                    <Radar
-                      name="Score"
-                      dataKey="score"
-                      stroke="var(--accent)"
-                      fill="var(--accent)"
-                      fillOpacity={0.3}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
+          <div className="ta-content">
+            {/* Summary Section */}
+            <div className="ta-section">
+              <div className="ta-section-header">
+                <Target size={18} />
+                <h3>Summary</h3>
+                <span className="ta-score" style={{ color: getScoreColor(overallScore) }}>
+                  Score: {overallScore}/100
+                </span>
               </div>
+              
+              <div className="ta-summary-grid">
+                <div className="ta-summary-chart">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid stroke="var(--border)" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                      <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+                      <Radar name="Score" dataKey="score" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                <div className="ta-summary-stats">
+                  {data.quantMetrics && (
+                    <>
+                      <div className="ta-stat-row">
+                        <span className="ta-stat-label">Annual Return</span>
+                        <span className={`ta-stat-value ${data.quantMetrics.annualizedReturn >= 0 ? 'positive' : 'negative'}`}>
+                          {data.quantMetrics.annualizedReturn >= 0 ? '+' : ''}{data.quantMetrics.annualizedReturn.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="ta-stat-row">
+                        <span className="ta-stat-label">Volatility</span>
+                        <span className="ta-stat-value">{data.quantMetrics.volatility.toFixed(1)}%</span>
+                      </div>
+                      <div className="ta-stat-row">
+                        <span className="ta-stat-label">Sharpe Ratio</span>
+                        <span className={`ta-stat-value ${data.quantMetrics.sharpeRatio >= 1 ? 'positive' : ''}`}>
+                          {data.quantMetrics.sharpeRatio.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="ta-stat-row">
+                        <span className="ta-stat-label">Max Drawdown</span>
+                        <span className="ta-stat-value negative">{data.quantMetrics.maxDrawdown.toFixed(1)}%</span>
+                      </div>
+                      <div className="ta-stat-row">
+                        <span className="ta-stat-label">Confidence</span>
+                        <span className="ta-stat-value">{data.quantMetrics.confidence.toFixed(0)}%</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Summary */}
+              {report?.executiveSummary && (
+                <div className="ta-ai-summary">
+                  <p>{report.executiveSummary}</p>
+                </div>
+              )}
             </div>
 
             {/* Quantitative Metrics */}
             {data.quantMetrics && (
-              <div className="analysis-section">
-                <h3><Activity size={18} /> Quantitative Metrics</h3>
-                <div className="metrics-grid">
-                  <div className="metric-card">
-                    <span className="metric-label">Sharpe Ratio</span>
-                    <span className={`metric-value ${data.quantMetrics.sharpeRatio >= 1 ? 'positive' : data.quantMetrics.sharpeRatio >= 0 ? 'neutral' : 'negative'}`}>
+              <div className="ta-section">
+                <div className="ta-section-header">
+                  <Activity size={18} />
+                  <h3>Quantitative Metrics</h3>
+                </div>
+                
+                <div className="ta-metrics-list">
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Sharpe Ratio</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.sharpeRatio >= 1 ? 'positive' : data.quantMetrics.sharpeRatio >= 0.5 ? 'neutral' : 'negative'}`}>
                       {data.quantMetrics.sharpeRatio.toFixed(2)}
                     </span>
+                    <span className="ta-metric-status">{data.quantMetrics.sharpeRatio >= 1 ? 'Excellent' : data.quantMetrics.sharpeRatio >= 0.5 ? 'Fair' : 'Poor'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Sortino Ratio</span>
-                    <span className={`metric-value ${data.quantMetrics.sortinoRatio >= 1 ? 'positive' : 'neutral'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Sortino Ratio</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.sortinoRatio >= 1 ? 'positive' : 'neutral'}`}>
                       {data.quantMetrics.sortinoRatio.toFixed(2)}
                     </span>
+                    <span className="ta-metric-status">{data.quantMetrics.sortinoRatio >= 1 ? 'Good' : 'Moderate'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Ann. Return</span>
-                    <span className={`metric-value ${data.quantMetrics.annualizedReturn >= 0 ? 'positive' : 'negative'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Annual Return</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.annualizedReturn >= 0 ? 'positive' : 'negative'}`}>
                       {data.quantMetrics.annualizedReturn >= 0 ? '+' : ''}{data.quantMetrics.annualizedReturn.toFixed(2)}%
                     </span>
+                    <span className="ta-metric-status">{data.quantMetrics.annualizedReturn >= 10 ? 'Strong' : data.quantMetrics.annualizedReturn >= 0 ? 'Positive' : 'Loss'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Volatility</span>
-                    <span className={`metric-value ${data.quantMetrics.volatility <= 20 ? 'positive' : data.quantMetrics.volatility <= 35 ? 'neutral' : 'negative'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Volatility</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.volatility <= 20 ? 'positive' : data.quantMetrics.volatility <= 35 ? 'neutral' : 'negative'}`}>
                       {data.quantMetrics.volatility.toFixed(2)}%
                     </span>
+                    <span className="ta-metric-status">{data.quantMetrics.volatility <= 20 ? 'Low' : data.quantMetrics.volatility <= 35 ? 'Moderate' : 'High'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Max Drawdown</span>
-                    <span className={`metric-value ${data.quantMetrics.maxDrawdown >= -15 ? 'positive' : data.quantMetrics.maxDrawdown >= -30 ? 'neutral' : 'negative'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Max Drawdown</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.maxDrawdown >= -15 ? 'positive' : data.quantMetrics.maxDrawdown >= -30 ? 'neutral' : 'negative'}`}>
                       {data.quantMetrics.maxDrawdown.toFixed(2)}%
                     </span>
+                    <span className="ta-metric-status">{data.quantMetrics.maxDrawdown >= -15 ? 'Contained' : data.quantMetrics.maxDrawdown >= -30 ? 'Moderate' : 'Severe'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">RSI</span>
-                    <span className={`metric-value ${data.quantMetrics.rsiSignal === 'oversold' ? 'positive' : data.quantMetrics.rsiSignal === 'overbought' ? 'negative' : 'neutral'}`}>
-                      {data.quantMetrics.rsi.toFixed(0)}
-                      <small> ({data.quantMetrics.rsiSignal})</small>
-                    </span>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Beta</span>
+                    <span className="ta-metric-value">{data.quantMetrics.beta.toFixed(2)}</span>
+                    <span className="ta-metric-status">{data.quantMetrics.beta <= 0.8 ? 'Defensive' : data.quantMetrics.beta <= 1.2 ? 'Market' : 'Aggressive'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Beta</span>
-                    <span className="metric-value">{data.quantMetrics.beta.toFixed(2)}</span>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Alpha</span>
-                    <span className={`metric-value ${data.quantMetrics.alpha >= 0 ? 'positive' : 'negative'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Alpha</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.alpha >= 0 ? 'positive' : 'negative'}`}>
                       {data.quantMetrics.alpha >= 0 ? '+' : ''}{data.quantMetrics.alpha.toFixed(2)}%
                     </span>
+                    <span className="ta-metric-status">{data.quantMetrics.alpha >= 2 ? 'Outperform' : data.quantMetrics.alpha >= 0 ? 'Neutral' : 'Underperform'}</span>
                   </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Calmar Ratio</span>
-                    <span className={`metric-value ${data.quantMetrics.calmarRatio >= 1 ? 'positive' : 'neutral'}`}>
-                      {data.quantMetrics.calmarRatio.toFixed(2)}
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">RSI</span>
+                    <span className={`ta-metric-value ${data.quantMetrics.rsiSignal === 'oversold' ? 'positive' : data.quantMetrics.rsiSignal === 'overbought' ? 'negative' : 'neutral'}`}>
+                      {data.quantMetrics.rsi.toFixed(0)}
                     </span>
-                  </div>
-                  <div className="metric-card">
-                    <span className="metric-label">Confidence</span>
-                    <span className="metric-value">{data.quantMetrics.confidence.toFixed(0)}%</span>
+                    <span className="ta-metric-status">{data.quantMetrics.rsiSignal}</span>
                   </div>
                 </div>
 
                 {/* Risk Metrics */}
-                <div className="risk-section">
-                  <h4><Shield size={16} /> Risk Metrics</h4>
-                  <div className="risk-bars">
-                    <div className="risk-item">
-                      <span className="risk-label">VaR (95%)</span>
-                      <div className="risk-bar">
-                        <div 
-                          className="risk-fill" 
-                          style={{ 
-                            width: `${Math.min(100, (data.quantMetrics.var95 / 5000) * 100)}%`,
-                            background: data.quantMetrics.var95 > 2000 ? '#ef4444' : data.quantMetrics.var95 > 1000 ? '#f59e0b' : '#22c55e'
-                          }} 
-                        />
-                      </div>
-                      <span className="risk-value">${data.quantMetrics.var95.toFixed(0)}</span>
+                <div className="ta-subsection">
+                  <h4><Shield size={16} /> Risk Metrics (per $10,000)</h4>
+                  <div className="ta-risk-row">
+                    <div className="ta-risk-item">
+                      <span className="ta-risk-label">VaR (95%)</span>
+                      <span className={`ta-risk-value ${data.quantMetrics.var95 > 2000 ? 'negative' : data.quantMetrics.var95 > 1000 ? 'neutral' : 'positive'}`}>
+                        ${data.quantMetrics.var95.toFixed(0)}
+                      </span>
                     </div>
-                    <div className="risk-item">
-                      <span className="risk-label">CVaR (95%)</span>
-                      <div className="risk-bar">
-                        <div 
-                          className="risk-fill" 
-                          style={{ 
-                            width: `${Math.min(100, (data.quantMetrics.cvar95 / 7500) * 100)}%`,
-                            background: data.quantMetrics.cvar95 > 3000 ? '#ef4444' : data.quantMetrics.cvar95 > 1500 ? '#f59e0b' : '#22c55e'
-                          }} 
-                        />
-                      </div>
-                      <span className="risk-value">${data.quantMetrics.cvar95.toFixed(0)}</span>
+                    <div className="ta-risk-item">
+                      <span className="ta-risk-label">CVaR (95%)</span>
+                      <span className={`ta-risk-value ${data.quantMetrics.cvar95 > 3000 ? 'negative' : data.quantMetrics.cvar95 > 1500 ? 'neutral' : 'positive'}`}>
+                        ${data.quantMetrics.cvar95.toFixed(0)}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Fundamental Analysis */}
+            {/* Fundamentals */}
             {data.fundamentals && (
-              <div className="analysis-section">
-                <h3><BarChart3 size={18} /> Fundamental Analysis</h3>
-                <div className="fundamentals-grid">
-                  <div className="fundamental-item">
-                    <span className="fund-label">Market Cap</span>
-                    <span className="fund-value">{formatCurrency(data.fundamentals.marketCap)}</span>
+              <div className="ta-section">
+                <div className="ta-section-header">
+                  <BarChart3 size={18} />
+                  <h3>Fundamentals</h3>
+                </div>
+                
+                <div className="ta-metrics-list">
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Market Cap</span>
+                    <span className="ta-metric-value">{formatCurrency(data.fundamentals.marketCap)}</span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">P/E Ratio</span>
-                    <span className={`fund-value ${data.fundamentals.peRatio && data.fundamentals.peRatio < 20 ? 'positive' : data.fundamentals.peRatio && data.fundamentals.peRatio < 35 ? 'neutral' : 'negative'}`}>
-                      {data.fundamentals.peRatio?.toFixed(2) ?? 'N/A'}
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">P/E Ratio</span>
+                    <span className={`ta-metric-value ${data.fundamentals.peRatio && data.fundamentals.peRatio < 20 ? 'positive' : data.fundamentals.peRatio && data.fundamentals.peRatio > 35 ? 'negative' : ''}`}>
+                      {data.fundamentals.peRatio?.toFixed(1) ?? 'N/A'}
                     </span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">Forward P/E</span>
-                    <span className="fund-value">{data.fundamentals.forwardPE?.toFixed(2) ?? 'N/A'}</span>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Forward P/E</span>
+                    <span className="ta-metric-value">{data.fundamentals.forwardPE?.toFixed(1) ?? 'N/A'}</span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">P/B Ratio</span>
-                    <span className="fund-value">{data.fundamentals.priceToBook?.toFixed(2) ?? 'N/A'}</span>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">P/B Ratio</span>
+                    <span className="ta-metric-value">{data.fundamentals.priceToBook?.toFixed(2) ?? 'N/A'}</span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">EPS</span>
-                    <span className="fund-value">${data.fundamentals.eps?.toFixed(2) ?? 'N/A'}</span>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">EPS</span>
+                    <span className="ta-metric-value">${data.fundamentals.eps?.toFixed(2) ?? 'N/A'}</span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">ROE</span>
-                    <span className={`fund-value ${data.fundamentals.returnOnEquity && data.fundamentals.returnOnEquity > 0.15 ? 'positive' : 'neutral'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">ROE</span>
+                    <span className={`ta-metric-value ${data.fundamentals.returnOnEquity && data.fundamentals.returnOnEquity > 0.15 ? 'positive' : ''}`}>
                       {data.fundamentals.returnOnEquity ? `${(data.fundamentals.returnOnEquity * 100).toFixed(1)}%` : 'N/A'}
                     </span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">Profit Margin</span>
-                    <span className="fund-value">
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Profit Margin</span>
+                    <span className={`ta-metric-value ${data.fundamentals.profitMargin && data.fundamentals.profitMargin > 0.15 ? 'positive' : ''}`}>
                       {data.fundamentals.profitMargin ? `${(data.fundamentals.profitMargin * 100).toFixed(1)}%` : 'N/A'}
                     </span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">Revenue Growth</span>
-                    <span className={`fund-value ${data.fundamentals.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY > 0 ? 'positive' : 'negative'}`}>
-                      {data.fundamentals.revenueGrowthYoY ? `${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Revenue Growth</span>
+                    <span className={`ta-metric-value ${data.fundamentals.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY > 0 ? 'positive' : 'negative'}`}>
+                      {data.fundamentals.revenueGrowthYoY ? `${data.fundamentals.revenueGrowthYoY > 0 ? '+' : ''}${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
                     </span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">Debt/Equity</span>
-                    <span className={`fund-value ${data.fundamentals.debtToEquity && data.fundamentals.debtToEquity < 0.5 ? 'positive' : data.fundamentals.debtToEquity && data.fundamentals.debtToEquity < 1.5 ? 'neutral' : 'negative'}`}>
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Debt/Equity</span>
+                    <span className={`ta-metric-value ${data.fundamentals.debtToEquity && data.fundamentals.debtToEquity < 0.5 ? 'positive' : data.fundamentals.debtToEquity && data.fundamentals.debtToEquity > 1.5 ? 'negative' : ''}`}>
                       {data.fundamentals.debtToEquity?.toFixed(2) ?? 'N/A'}
                     </span>
                   </div>
-                  <div className="fundamental-item">
-                    <span className="fund-label">Div. Yield</span>
-                    <span className="fund-value">
+                  <div className="ta-metric-item">
+                    <span className="ta-metric-name">Dividend Yield</span>
+                    <span className="ta-metric-value">
                       {data.fundamentals.dividendYield ? `${(data.fundamentals.dividendYield * 100).toFixed(2)}%` : 'N/A'}
                     </span>
                   </div>
                 </div>
 
-                {/* Score Summary */}
-                <div className="score-summary">
-                  <div className="score-item">
-                    <div className="score-circle" style={{ borderColor: getScoreColor(data.fundamentals.valueScore) }}>
-                      <span>{data.fundamentals.valueScore.toFixed(0)}</span>
+                {/* Factor Scores */}
+                <div className="ta-subsection">
+                  <h4>Factor Scores</h4>
+                  <div className="ta-factor-list">
+                    <div className="ta-factor-item">
+                      <span className="ta-factor-name">Value</span>
+                      <div className="ta-factor-bar">
+                        <div className="ta-factor-fill" style={{ width: `${data.fundamentals.valueScore}%`, background: getScoreColor(data.fundamentals.valueScore) }} />
+                      </div>
+                      <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.valueScore) }}>{data.fundamentals.valueScore.toFixed(0)}</span>
                     </div>
-                    <span className="score-label">Value</span>
-                  </div>
-                  <div className="score-item">
-                    <div className="score-circle" style={{ borderColor: getScoreColor(data.fundamentals.qualityScore) }}>
-                      <span>{data.fundamentals.qualityScore.toFixed(0)}</span>
+                    <div className="ta-factor-item">
+                      <span className="ta-factor-name">Quality</span>
+                      <div className="ta-factor-bar">
+                        <div className="ta-factor-fill" style={{ width: `${data.fundamentals.qualityScore}%`, background: getScoreColor(data.fundamentals.qualityScore) }} />
+                      </div>
+                      <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.qualityScore) }}>{data.fundamentals.qualityScore.toFixed(0)}</span>
                     </div>
-                    <span className="score-label">Quality</span>
-                  </div>
-                  <div className="score-item">
-                    <div className="score-circle" style={{ borderColor: getScoreColor(data.fundamentals.growthScore) }}>
-                      <span>{data.fundamentals.growthScore.toFixed(0)}</span>
+                    <div className="ta-factor-item">
+                      <span className="ta-factor-name">Growth</span>
+                      <div className="ta-factor-bar">
+                        <div className="ta-factor-fill" style={{ width: `${data.fundamentals.growthScore}%`, background: getScoreColor(data.fundamentals.growthScore) }} />
+                      </div>
+                      <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.growthScore) }}>{data.fundamentals.growthScore.toFixed(0)}</span>
                     </div>
-                    <span className="score-label">Growth</span>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Sentiment & Analyst */}
-            <div className="analysis-section dual">
-              {data.sentiment && (
-                <div className="sub-section">
-                  <h4><Zap size={16} /> Market Sentiment</h4>
-                  <div className="sentiment-display">
-                    <div className={`sentiment-badge ${data.sentiment.overallSentiment}`}>
-                      {data.sentiment.overallSentiment === 'bullish' ? <TrendingUp size={20} /> : 
-                       data.sentiment.overallSentiment === 'bearish' ? <TrendingDown size={20} /> : 
-                       <Activity size={20} />}
-                      <span>{data.sentiment.overallSentiment}</span>
-                    </div>
-                    <div className="sentiment-metrics">
-                      <div><span>Score:</span> {data.sentiment.sentimentScore.toFixed(2)}</div>
-                      <div><span>News Count:</span> {data.sentiment.newsCount}</div>
-                      <div><span>Buzz:</span> {data.sentiment.buzzScore.toFixed(2)}</div>
-                      <div><span>Trend:</span> {data.sentiment.sentimentTrend}</div>
-                    </div>
-                  </div>
+            {(data.sentiment || data.analystData) && (
+              <div className="ta-section">
+                <div className="ta-section-header">
+                  <Zap size={18} />
+                  <h3>Sentiment & Analyst</h3>
                 </div>
-              )}
-
-              {data.analystData && (
-                <div className="sub-section">
-                  <h4><Target size={16} /> Analyst Ratings</h4>
-                  <div className="analyst-display">
-                    <div className={`analyst-badge ${data.analystData.consensusRating.toLowerCase().replace(' ', '-')}`}>
-                      {data.analystData.consensusRating}
-                    </div>
-                    <div className="analyst-metrics">
-                      <div>
-                        <span>Target (Avg):</span> 
-                        {data.analystData.targetPriceMean ? `$${data.analystData.targetPriceMean.toFixed(2)}` : 'N/A'}
+                
+                <div className="ta-two-col">
+                  {data.sentiment && (
+                    <div className="ta-col">
+                      <h4>Market Sentiment</h4>
+                      <div className={`ta-sentiment-badge ${data.sentiment.overallSentiment}`}>
+                        {data.sentiment.overallSentiment === 'bullish' ? <TrendingUp size={16} /> : 
+                         data.sentiment.overallSentiment === 'bearish' ? <TrendingDown size={16} /> : 
+                         <Activity size={16} />}
+                        {data.sentiment.overallSentiment}
                       </div>
-                      <div>
-                        <span>Target Range:</span>
-                        {data.analystData.targetPriceLow && data.analystData.targetPriceHigh 
-                          ? `$${data.analystData.targetPriceLow.toFixed(0)} - $${data.analystData.targetPriceHigh.toFixed(0)}`
-                          : 'N/A'}
-                      </div>
-                      <div>
-                        <span>Analysts:</span> {data.analystData.numberOfAnalysts}
-                      </div>
-                      {data.analystData.upside !== null && (
-                        <div className={`upside ${data.analystData.upside >= 0 ? 'positive' : 'negative'}`}>
-                          <span>Upside:</span> {data.analystData.upside >= 0 ? '+' : ''}{data.analystData.upside.toFixed(1)}%
+                      <div className="ta-detail-list">
+                        <div className="ta-detail-row">
+                          <span>Score</span>
+                          <span className={data.sentiment.sentimentScore > 0 ? 'positive' : data.sentiment.sentimentScore < 0 ? 'negative' : ''}>
+                            {data.sentiment.sentimentScore.toFixed(2)}
+                          </span>
                         </div>
-                      )}
+                        <div className="ta-detail-row">
+                          <span>News Count</span>
+                          <span>{data.sentiment.newsCount}</span>
+                        </div>
+                        <div className="ta-detail-row">
+                          <span>Buzz</span>
+                          <span>{data.sentiment.buzzScore.toFixed(1)}</span>
+                        </div>
+                        <div className="ta-detail-row">
+                          <span>Trend</span>
+                          <span>{data.sentiment.sentimentTrend}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {data.analystData && (
+                    <div className="ta-col">
+                      <h4>Analyst Consensus</h4>
+                      <div className={`ta-analyst-badge ${data.analystData.consensusRating.toLowerCase().replace(' ', '-')}`}>
+                        {data.analystData.consensusRating}
+                      </div>
+                      <div className="ta-detail-list">
+                        <div className="ta-detail-row">
+                          <span>Target Price</span>
+                          <span>{data.analystData.targetPriceMean ? `$${data.analystData.targetPriceMean.toFixed(2)}` : 'N/A'}</span>
+                        </div>
+                        <div className="ta-detail-row">
+                          <span>Range</span>
+                          <span>
+                            {data.analystData.targetPriceLow && data.analystData.targetPriceHigh 
+                              ? `$${data.analystData.targetPriceLow.toFixed(0)} - $${data.analystData.targetPriceHigh.toFixed(0)}`
+                              : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="ta-detail-row">
+                          <span>Analysts</span>
+                          <span>{data.analystData.numberOfAnalysts}</span>
+                        </div>
+                        {data.analystData.upside !== null && (
+                          <div className="ta-detail-row highlight">
+                            <span>Upside</span>
+                            <span className={data.analystData.upside >= 0 ? 'positive' : 'negative'}>
+                              {data.analystData.upside >= 0 ? '+' : ''}{data.analystData.upside.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* AI Recommendations */}
+            {report && (report.keyTakeaways?.length > 0 || report.actionItems?.length > 0 || report.riskWarnings?.length > 0) && (
+              <div className="ta-section">
+                <div className="ta-section-header">
+                  <Target size={18} />
+                  <h3>Key Takeaways & Recommendations</h3>
+                </div>
+                
+                {report.keyTakeaways && report.keyTakeaways.length > 0 && (
+                  <div className="ta-subsection">
+                    <h4>Key Takeaways</h4>
+                    <ul className="ta-list">
+                      {report.keyTakeaways.map((item, idx) => (
+                        <li key={idx}>
+                          <CheckCircle size={14} className="icon-success" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {report.actionItems && report.actionItems.length > 0 && (
+                  <div className="ta-subsection">
+                    <h4>Recommended Actions</h4>
+                    <div className="ta-actions">
+                      {report.actionItems.map((item, idx) => (
+                        <div key={idx} className={`ta-action priority-${item.priority}`}>
+                          <span className="ta-action-priority">{item.priority}</span>
+                          <div className="ta-action-content">
+                            <span className="ta-action-text">{item.action}</span>
+                            {item.timeline && (
+                              <span className="ta-action-timeline"><Clock size={12} /> {item.timeline}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+
+                {report.riskWarnings && report.riskWarnings.length > 0 && (
+                  <div className="ta-subsection">
+                    <h4><AlertTriangle size={14} /> Risk Warnings</h4>
+                    <ul className="ta-list warnings">
+                      {report.riskWarnings.map((item, idx) => (
+                        <li key={idx}>
+                          <AlertTriangle size={14} className="icon-warning" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Footer */}
+            {report && (
+              <div className="ta-footer">
+                <span><Clock size={12} /> {new Date(report.generatedAt).toLocaleString()}</span>
+                <span>Confidence: {report.metadata.confidence}%</span>
+              </div>
+            )}
           </div>
         )}
       </div>

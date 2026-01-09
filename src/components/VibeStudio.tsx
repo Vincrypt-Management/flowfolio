@@ -32,7 +32,8 @@ import {
   Eye,
   RefreshCw,
   AlertTriangle,
-  ArrowUpRight
+  ArrowUpRight,
+  X
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -1000,12 +1001,83 @@ export default function VibeStudio() {
           <h2><Sparkles size={24} style={{ display: 'inline', marginRight: '0.5rem' }} /> Vibe Studio</h2>
           <p className="subtitle">AI-powered portfolio generation with real market data</p>
         </div>
-        {generatedPortfolio && (
-          <button className="btn-reset" onClick={handleReset}>
-            <RotateCcw size={16} /> New Portfolio
+        <div className="header-buttons">
+          <button 
+            className="btn-saved-portfolios" 
+            onClick={() => setShowSavedPortfolios(!showSavedPortfolios)}
+          >
+            <FolderOpen size={16} /> 
+            Saved ({savedPortfolios.length})
           </button>
-        )}
+          {generatedPortfolio && (
+            <button className="btn-reset" onClick={handleReset}>
+              <RotateCcw size={16} /> New Portfolio
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Saved Portfolios Panel */}
+      {showSavedPortfolios && (
+        <div className="saved-portfolios-panel">
+          <div className="saved-portfolios-header">
+            <h3><FolderOpen size={18} /> Saved Portfolios</h3>
+            <button className="btn-close-panel" onClick={() => setShowSavedPortfolios(false)}>
+              <X size={18} />
+            </button>
+          </div>
+          {isLoadingPortfolios ? (
+            <div className="loading-portfolios">
+              <Loader2 size={20} className="spinning" />
+              <span>Loading portfolios...</span>
+            </div>
+          ) : savedPortfolios.length === 0 ? (
+            <div className="no-portfolios">
+              <p>No saved portfolios yet.</p>
+              <p className="hint">Generate a portfolio and click "Save" to save it here.</p>
+            </div>
+          ) : (
+            <div className="saved-portfolios-list">
+              {savedPortfolios.map((portfolio) => (
+                <div 
+                  key={portfolio.id} 
+                  className="saved-portfolio-item"
+                  onClick={() => handleLoadPortfolio(portfolio.id)}
+                >
+                  <div className="portfolio-info">
+                    <span className="portfolio-name">{portfolio.name}</span>
+                    <span className="portfolio-date">
+                      {new Date(portfolio.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="portfolio-actions">
+                    <button 
+                      className="btn-icon-small" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLoadPortfolio(portfolio.id);
+                      }}
+                      title="Load"
+                    >
+                      <Eye size={14} />
+                    </button>
+                    <button 
+                      className="btn-icon-small danger" 
+                      onClick={(e) => handleDeletePortfolio(portfolio.id, e)}
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <button className="btn-refresh-list" onClick={loadSavedPortfolios}>
+            <RefreshCw size={14} /> Refresh List
+          </button>
+        </div>
+      )}
 
       {/* Progress Indicator */}
       {isGenerating && renderProgressIndicator()}
@@ -1939,65 +2011,6 @@ export default function VibeStudio() {
           <Lightbulb size={14} /> Be specific about your risk tolerance, investment goals, preferred sectors, and time horizon
         </div>
       </div>
-
-      {/* Saved Portfolios Panel */}
-      {showSavedPortfolios && (
-        <div className="saved-portfolios-overlay">
-          <div className="saved-portfolios-panel">
-            <div className="panel-header">
-              <h3><FolderOpen size={20} /> Saved Portfolios</h3>
-              <button className="btn-close" onClick={() => setShowSavedPortfolios(false)}>×</button>
-            </div>
-            <div className="panel-content">
-              {isLoadingPortfolios ? (
-                <div className="loading-state">
-                  <Loader2 size={24} className="spinning" />
-                  <span>Loading portfolios...</span>
-                </div>
-              ) : savedPortfolios.length === 0 ? (
-                <div className="empty-state">
-                  <p>No saved portfolios yet.</p>
-                  <p className="hint">Generate and save a portfolio to see it here.</p>
-                </div>
-              ) : (
-                <div className="portfolios-list">
-                  {savedPortfolios.map((portfolio) => (
-                    <div
-                      key={portfolio.id}
-                      className="portfolio-item"
-                      onClick={() => handleLoadPortfolio(portfolio.id)}
-                    >
-                      <div className="portfolio-info">
-                        <span className="portfolio-name">{portfolio.name}</span>
-                        <span className="portfolio-date">
-                          {new Date(portfolio.updated_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <button
-                        className="btn-delete"
-                        onClick={(e) => handleDeletePortfolio(portfolio.id, e)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Load Portfolios Button - Show when no portfolio is loaded */}
-      {!generatedPortfolio && !isGenerating && savedPortfolios.length > 0 && (
-        <button
-          className="btn-load-portfolios"
-          onClick={() => setShowSavedPortfolios(true)}
-        >
-          <FolderOpen size={16} />
-          Load Saved ({savedPortfolios.length})
-        </button>
-      )}
     </div>
   );
 }
