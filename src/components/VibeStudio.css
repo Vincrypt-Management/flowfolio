@@ -2020,3 +2020,108 @@
   background: var(--bg-card);
   color: var(--accent);
 }
+
+/* Asset Type Selector */
+.asset-type-section {
+  background: var(--bg-card);
+  padding: 1.5rem 2rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.asset-type-section h3 {
+  margin-top: 0;
+  color: var(--text-main);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.asset-type-section h3 svg {
+  color: var(--primary);
+}
+
+.asset-type-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .asset-type-buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
+.asset-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem 1rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.asset-type-btn:hover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.asset-type-btn.active {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.asset-type-btn svg {
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.asset-type-btn:hover svg,
+.asset-type-btn.active svg {
+  color: var(--primary);
+}
+
+.asset-type-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.asset-type-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* Asset Type Badge in Table */
+.asset-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.asset-type-badge.stock {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.asset-type-badge.etf {
+  background: rgba(0, 229, 153, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(0, 229, 153, 0.3);
+}

@@ -27,13 +27,10 @@ import {
   Gauge,
   FileText,
   Save,
-  FolderOpen,
-  Trash2,
-  Eye,
-  RefreshCw,
   AlertTriangle,
   ArrowUpRight,
-  X
+  RefreshCw,
+  Eye
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -59,14 +56,12 @@ interface ProgressStep {
   message?: string;
 }
 
-interface SavedPortfolioInfo {
-  id: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
+interface VibeStudioProps {
+  initialPortfolio?: GeneratedPortfolio | null;
+  onPortfolioLoaded?: () => void;
 }
 
-export default function VibeStudio() {
+export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPortfolio, setGeneratedPortfolio] = useState<GeneratedPortfolio | null>(null);
@@ -80,11 +75,8 @@ export default function VibeStudio() {
   const [showQuantDashboard, setShowQuantDashboard] = useState(true);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   
-  // Saved portfolios state
-  const [savedPortfolios, setSavedPortfolios] = useState<SavedPortfolioInfo[]>([]);
-  const [showSavedPortfolios, setShowSavedPortfolios] = useState(false);
+  // Save state
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingPortfolios, setIsLoadingPortfolios] = useState(false);
   
   // Refs for chart containers (for PDF export)
   const pieChartRef = useRef<HTMLDivElement>(null);
@@ -94,6 +86,17 @@ export default function VibeStudio() {
   
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
+
+  // Load portfolio from props when passed (from SavedPortfoliosTab)
+  useEffect(() => {
+    if (initialPortfolio) {
+      setGeneratedPortfolio(initialPortfolio);
+      setError(null);
+      if (onPortfolioLoaded) {
+        onPortfolioLoaded();
+      }
+    }
+  }, [initialPortfolio, onPortfolioLoaded]);
 
   // Helper to check if sections have data (for hiding empty sections)
   const sectionVisibility = useMemo(() => {
@@ -118,30 +121,12 @@ export default function VibeStudio() {
   
   useEffect(() => {
     isMountedRef.current = true;
-    loadSavedPortfolios();
     return () => {
       isMountedRef.current = false;
     };
   }, []);
 
-  // Load saved portfolios from backend
-  const loadSavedPortfolios = async () => {
-    setIsLoadingPortfolios(true);
-    try {
-      const portfolios = await invoke<SavedPortfolioInfo[]>('list_saved_portfolios');
-      if (isMountedRef.current) {
-        setSavedPortfolios(portfolios);
-      }
-    } catch (err) {
-      console.error('Failed to load saved portfolios:', err);
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoadingPortfolios(false);
-      }
-    }
-  };
-
-  // Save current portfolio to backend
+  // Save current portfolio to local storage via backend
   const handleSavePortfolio = async () => {
     if (!generatedPortfolio) return;
     
@@ -157,8 +142,7 @@ export default function VibeStudio() {
       });
       
       if (isMountedRef.current) {
-        await loadSavedPortfolios();
-        alert('Portfolio saved successfully!');
+        alert('Portfolio saved successfully! View it in the Saved Portfolios tab.');
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -172,41 +156,6 @@ export default function VibeStudio() {
     }
   };
 
-  // Load a saved portfolio
-  const handleLoadPortfolio = async (id: string) => {
-    try {
-      const portfolio = await invoke<GeneratedPortfolio>('load_generated_portfolio', { id });
-      if (isMountedRef.current) {
-        setGeneratedPortfolio(portfolio);
-        setShowSavedPortfolios(false);
-        setError(null);
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        console.error('Failed to load portfolio:', err);
-        alert('Failed to load portfolio: ' + err);
-      }
-    }
-  };
-
-  // Delete a saved portfolio
-  const handleDeletePortfolio = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this portfolio?')) return;
-    
-    try {
-      await invoke('delete_saved_portfolio', { id });
-      if (isMountedRef.current) {
-        await loadSavedPortfolios();
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        console.error('Failed to delete portfolio:', err);
-        alert('Failed to delete portfolio: ' + err);
-      }
-    }
-  };
-
   // Disabled preloading to avoid rate limit issues
   // Data is fetched on-demand when portfolio is generated
 
@@ -214,9 +163,11 @@ export default function VibeStudio() {
 
   const examplePrompts = [
     "Create a growth-focused tech portfolio with quarterly rebalancing",
-    "Build a conservative dividend portfolio with blue-chip stocks",
-    "Design an ESG-focused portfolio with renewable energy exposure",
-    "Create a balanced portfolio mixing growth and value stocks"
+    "Build a diversified ETF portfolio with global exposure and low fees",
+    "Design an ESG-focused portfolio with renewable energy ETFs",
+    "Create a core-satellite portfolio with index ETFs and growth stocks",
+    "Build a conservative dividend portfolio with dividend ETFs and blue-chips",
+    "Create a balanced portfolio mixing bond ETFs and value stocks"
   ];
 
   const updateProgress = (stepId: string, status: ProgressStep['status'], message?: string) => {
@@ -254,7 +205,7 @@ export default function VibeStudio() {
     try {
       console.log('[INFO] Streaming portfolio generation for:', prompt);
 
-      // Use streaming API
+      // Use streaming API - asset type is auto-detected from prompt
       const stream = portfolioAgent.generatePortfolioStream(prompt);
       
       for await (const update of stream) {
@@ -1002,13 +953,6 @@ export default function VibeStudio() {
           <p className="subtitle">AI-powered portfolio generation with real market data</p>
         </div>
         <div className="header-buttons">
-          <button 
-            className="btn-saved-portfolios" 
-            onClick={() => setShowSavedPortfolios(!showSavedPortfolios)}
-          >
-            <FolderOpen size={16} /> 
-            Saved ({savedPortfolios.length})
-          </button>
           {generatedPortfolio && (
             <button className="btn-reset" onClick={handleReset}>
               <RotateCcw size={16} /> New Portfolio
@@ -1016,68 +960,6 @@ export default function VibeStudio() {
           )}
         </div>
       </div>
-
-      {/* Saved Portfolios Panel */}
-      {showSavedPortfolios && (
-        <div className="saved-portfolios-panel">
-          <div className="saved-portfolios-header">
-            <h3><FolderOpen size={18} /> Saved Portfolios</h3>
-            <button className="btn-close-panel" onClick={() => setShowSavedPortfolios(false)}>
-              <X size={18} />
-            </button>
-          </div>
-          {isLoadingPortfolios ? (
-            <div className="loading-portfolios">
-              <Loader2 size={20} className="spinning" />
-              <span>Loading portfolios...</span>
-            </div>
-          ) : savedPortfolios.length === 0 ? (
-            <div className="no-portfolios">
-              <p>No saved portfolios yet.</p>
-              <p className="hint">Generate a portfolio and click "Save" to save it here.</p>
-            </div>
-          ) : (
-            <div className="saved-portfolios-list">
-              {savedPortfolios.map((portfolio) => (
-                <div 
-                  key={portfolio.id} 
-                  className="saved-portfolio-item"
-                  onClick={() => handleLoadPortfolio(portfolio.id)}
-                >
-                  <div className="portfolio-info">
-                    <span className="portfolio-name">{portfolio.name}</span>
-                    <span className="portfolio-date">
-                      {new Date(portfolio.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="portfolio-actions">
-                    <button 
-                      className="btn-icon-small" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleLoadPortfolio(portfolio.id);
-                      }}
-                      title="Load"
-                    >
-                      <Eye size={14} />
-                    </button>
-                    <button 
-                      className="btn-icon-small danger" 
-                      onClick={(e) => handleDeletePortfolio(portfolio.id, e)}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <button className="btn-refresh-list" onClick={loadSavedPortfolios}>
-            <RefreshCw size={14} /> Refresh List
-          </button>
-        </div>
-      )}
 
       {/* Progress Indicator */}
       {isGenerating && renderProgressIndicator()}
@@ -1088,10 +970,10 @@ export default function VibeStudio() {
             <h3><Target size={20} /> How it works</h3>
             <ol className="steps-list">
               <li>Describe your investment goals and risk tolerance</li>
-              <li>AI analyzes your requirements and generates a custom portfolio</li>
+              <li>AI automatically detects if you want stocks, ETFs, or a mix</li>
+              <li>Portfolio is generated with appropriate assets and analysis</li>
               <li>Real-time market data is fetched for each recommended asset</li>
               <li>Review allocations, rationale, and current prices</li>
-              <li>Chat with AI to refine or ask questions about the portfolio</li>
             </ol>
           </div>
 
@@ -1343,11 +1225,11 @@ export default function VibeStudio() {
                   <div className="table-header">
                     <div className="th">Symbol</div>
                     <div className="th">Name</div>
+                    <div className="th">Type</div>
                     <div className="th">Score</div>
                     <div className="th">Allocation</div>
                     <div className="th">Price</div>
                     <div className="th">Analyst</div>
-                    <div className="th">Target</div>
                     <div className="th">Sentiment</div>
                   </div>
                   {generatedPortfolio.assets.map((asset, i) => (
@@ -1356,6 +1238,11 @@ export default function VibeStudio() {
                         {asset.symbol}
                       </div>
                       <div className="td name">{asset.name}</div>
+                      <div className="td asset-type">
+                        <span className={`asset-type-badge ${asset.assetType || 'stock'}`}>
+                          {asset.assetType === 'etf' ? 'ETF' : 'Stock'}
+                        </span>
+                      </div>
                       <div className="td score">
                         {asset.compositeScore !== undefined ? (
                           <div className="composite-score-wrapper">
@@ -1393,21 +1280,6 @@ export default function VibeStudio() {
                             asset.analystData.consensusRating.includes('Sell') ? 'sell' : 'hold'
                           }`}>
                             {asset.analystData.consensusRating}
-                          </span>
-                        ) : '-'}
-                      </div>
-                      <div className="td target">
-                        {asset.analystData?.targetPriceMean ? (
-                          <span className={`target-price ${
-                            (asset.analystData.upside || 0) > 10 ? 'upside' : 
-                            (asset.analystData.upside || 0) < -10 ? 'downside' : 'neutral'
-                          }`}>
-                            ${asset.analystData.targetPriceMean.toFixed(0)}
-                            {asset.analystData.upside !== null && (
-                              <span className="upside-text">
-                                ({asset.analystData.upside > 0 ? '+' : ''}{asset.analystData.upside.toFixed(0)}%)
-                              </span>
-                            )}
                           </span>
                         ) : '-'}
                       </div>

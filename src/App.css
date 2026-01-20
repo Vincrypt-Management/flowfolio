@@ -113,10 +113,32 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   color: var(--primary);
   flex-shrink: 0;
+}
+
+.logo-image {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* When sidebar is collapsed, center and enlarge the logo */
+.sidebar.collapsed .logo-area {
+  justify-content: center;
+}
+
+.sidebar.collapsed .logo-icon-wrapper {
+  width: 36px;
+  height: 36px;
+}
+
+.sidebar.collapsed .logo-image {
+  width: 36px;
+  height: 36px;
 }
 
 .logo-text {

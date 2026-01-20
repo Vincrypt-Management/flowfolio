@@ -43,3 +43,4 @@ SUMMARY.md
 SESSION*.md
 *.txt
 !LICENSE.txt
+.env.encrypted

@@ -239,52 +239,73 @@ impl MultiSourceProvider {
             return Err("Alpaca rate limit exceeded".to_string());
         }
 
-        // Fetch latest bar
+        // Fetch recent bars (last 5 days to get at least one trading day)
+        let end_date = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let start_date = (chrono::Utc::now() - chrono::Duration::days(5)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        
         let bars_url = format!(
-            "https://data.alpaca.markets/v2/stocks/{}/bars/latest",
-            symbol
+            "https://data.alpaca.markets/v2/stocks/{}/bars?timeframe=1Day&start={}&end={}&limit=5&adjustment=split&feed=iex",
+            symbol, start_date, end_date
         );
 
         let response = self.client
             .get(&bars_url)
             .header("APCA-API-KEY-ID", api_key.trim())
             .header("APCA-API-SECRET-KEY", api_secret.trim())
+            .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
             .map_err(|e| format!("Alpaca request failed: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Alpaca API error: {}", response.status()));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Alpaca API error: {} - {}", status, body));
         }
 
         let data: Value = response.json().await.map_err(|e| format!("Parse error: {}", e))?;
         
-        let bar = data.get("bar").ok_or("No bar data")?;
-        let price = bar.get("c").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let volume = bar.get("v").and_then(|v| v.as_i64()).unwrap_or(0);
-        let timestamp = bar.get("t").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        // Get latest bar from bars array
+        let bars = data.get("bars").and_then(|b| b.as_array()).ok_or("No bars data")?;
+        let latest_bar = bars.last().ok_or("No recent bars")?;
+        
+        let price = latest_bar.get("c").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let volume = latest_bar.get("v").and_then(|v| v.as_i64()).unwrap_or(0);
+        let timestamp = latest_bar.get("t").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        
+        // Calculate change from previous bar if available
+        let (change, change_percent) = if bars.len() >= 2 {
+            let prev_bar = &bars[bars.len() - 2];
+            let prev_close = prev_bar.get("c").and_then(|v| v.as_f64()).unwrap_or(price);
+            let chg = price - prev_close;
+            let chg_pct = if prev_close > 0.0 { (chg / prev_close) * 100.0 } else { 0.0 };
+            (chg, chg_pct)
+        } else {
+            (0.0, 0.0)
+        };
 
-        // Fetch historical bars
-        let end_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        let start_date = (chrono::Utc::now() - chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
+        // Fetch historical bars (1 year)
+        let hist_end = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let hist_start = (chrono::Utc::now() - chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
         
         let hist_url = format!(
-            "https://data.alpaca.markets/v2/stocks/{}/bars?timeframe=1Day&start={}&end={}&limit=365",
-            symbol, start_date, end_date
+            "https://data.alpaca.markets/v2/stocks/{}/bars?timeframe=1Day&start={}&end={}&limit=365&adjustment=split&feed=iex",
+            symbol, hist_start, hist_end
         );
 
         let hist_response = self.client
             .get(&hist_url)
             .header("APCA-API-KEY-ID", api_key.trim())
             .header("APCA-API-SECRET-KEY", api_secret.trim())
+            .timeout(std::time::Duration::from_secs(15))
             .send()
             .await
             .map_err(|e| format!("Alpaca historical request failed: {}", e))?;
 
         let hist_data: Value = hist_response.json().await.unwrap_or(Value::Null);
-        let bars = hist_data.get("bars").and_then(|b| b.as_array());
+        let hist_bars = hist_data.get("bars").and_then(|b| b.as_array());
         
-        let historical: Vec<HistoricalPrice> = bars
+        let historical: Vec<HistoricalPrice> = hist_bars
             .map(|b| {
                 b.iter()
                     .filter_map(|bar| {
@@ -307,8 +328,8 @@ impl MultiSourceProvider {
             quote: Some(StockQuote {
                 symbol: symbol.to_string(),
                 price,
-                change: 0.0,
-                change_percent: 0.0,
+                change,
+                change_percent,
                 volume,
                 timestamp,
                 source: "alpaca".to_string(),

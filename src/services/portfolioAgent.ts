@@ -24,6 +24,7 @@ interface PortfolioAsset {
   rationale: string;
   currentPrice?: number;
   sector?: string;
+  assetType?: 'stock' | 'etf'; // New field to indicate asset type
   analystRating?: string;
   technicalSignal?: string;
   // AI-generated detailed description
@@ -183,7 +184,7 @@ interface StreamUpdate {
   error?: string;
 }
 
-// Quant feedback thresholds for recommendation improvement
+// Quant feedback thresholds for recommendation improvement (STOCK defaults)
 const QUANT_FEEDBACK_THRESHOLDS = {
   minSharpeRatio: 0.3,          // Below this suggests poor risk-adjusted returns
   maxVolatility: 40,            // Above this is too risky
@@ -193,6 +194,22 @@ const QUANT_FEEDBACK_THRESHOLDS = {
   rsiOverbought: 70,            // RSI above this is overbought
   minConfidence: 40,            // Minimum signal confidence
   allocationAdjustFactor: 0.2,  // Max % to adjust allocation by
+};
+
+// ETF-specific quant thresholds (ETFs typically have lower volatility and different characteristics)
+const ETF_QUANT_THRESHOLDS = {
+  minSharpeRatio: 0.2,          // ETFs can have lower Sharpe due to diversification
+  maxVolatility: 25,            // ETFs should be less volatile
+  maxDrawdown: -25,             // Expect smaller drawdowns from diversified ETFs
+  minCompositeScore: 30,        // Lower bar for ETFs due to built-in diversification
+  rsiOversold: 25,              // More relaxed RSI thresholds for ETFs
+  rsiOverbought: 75,            // ETFs trend longer
+  minConfidence: 35,            // ETFs have more stable signals
+  allocationAdjustFactor: 0.15, // Smaller adjustments for ETF portfolios
+  // ETF-specific metrics
+  maxExpenseRatio: 0.5,         // Prefer low-cost ETFs (0.5% max)
+  minAUM: 100_000_000,          // Minimum $100M AUM for liquidity
+  preferredProviders: ['Vanguard', 'iShares', 'SPDR', 'Schwab', 'Invesco'],
 };
 
 // Defensive replacement candidates for poor performers
@@ -206,11 +223,116 @@ const DEFENSIVE_ALTERNATIVES: Record<string, string[]> = {
   'Default': ['VTI', 'SPY', 'QQQ', 'VIG'],
 };
 
+// ETF alternatives for different categories
+const ETF_ALTERNATIVES: Record<string, string[]> = {
+  'Technology': ['QQQ', 'VGT', 'XLK', 'ARKK', 'SMH'],
+  'Healthcare': ['XLV', 'VHT', 'IBB', 'XBI', 'IHI'],
+  'Consumer': ['XLY', 'VCR', 'XLP', 'VDC', 'IBUY'],
+  'Financial': ['XLF', 'VFH', 'KRE', 'KBE', 'IAI'],
+  'Energy': ['XLE', 'VDE', 'XOP', 'OIH', 'ICLN'],
+  'Industrial': ['XLI', 'VIS', 'ITA', 'JETS', 'PAVE'],
+  'Real Estate': ['VNQ', 'XLRE', 'IYR', 'REET', 'RWR'],
+  'Bond': ['BND', 'AGG', 'TLT', 'LQD', 'HYG'],
+  'International': ['VEA', 'VWO', 'IEFA', 'EEM', 'VT'],
+  'Dividend': ['VIG', 'SCHD', 'DVY', 'VYM', 'DGRO'],
+  'Growth': ['VUG', 'IWF', 'MGK', 'VONG', 'RPG'],
+  'Value': ['VTV', 'IWD', 'VLUE', 'VONV', 'RPV'],
+  'Default': ['VTI', 'SPY', 'VOO', 'IVV', 'ITOT'],
+};
+
+// Popular ETF list for portfolio generation
+const POPULAR_ETFS = {
+  // US Market Broad
+  broad: ['VTI', 'SPY', 'VOO', 'IVV', 'ITOT', 'SCHB'],
+  // Sector ETFs
+  technology: ['QQQ', 'VGT', 'XLK', 'SMH', 'SOXX', 'IGV'],
+  healthcare: ['XLV', 'VHT', 'IBB', 'XBI', 'IHI', 'ARKG'],
+  financial: ['XLF', 'VFH', 'KRE', 'KBE', 'IAI'],
+  energy: ['XLE', 'VDE', 'XOP', 'OIH', 'ICLN', 'TAN'],
+  consumer: ['XLY', 'VCR', 'XLP', 'VDC'],
+  industrial: ['XLI', 'VIS', 'ITA', 'PAVE'],
+  realestate: ['VNQ', 'XLRE', 'IYR', 'REET'],
+  utilities: ['XLU', 'VPU', 'IDU'],
+  materials: ['XLB', 'VAW', 'IYM'],
+  // Bond ETFs
+  bonds: ['BND', 'AGG', 'TLT', 'IEF', 'LQD', 'HYG', 'TIP', 'VCIT'],
+  // International
+  international: ['VEA', 'VWO', 'IEFA', 'EEM', 'VT', 'VXUS', 'IXUS'],
+  // Factor/Style ETFs
+  dividend: ['VIG', 'SCHD', 'DVY', 'VYM', 'DGRO', 'NOBL'],
+  growth: ['VUG', 'IWF', 'MGK', 'VONG', 'QQQ'],
+  value: ['VTV', 'IWD', 'VLUE', 'VONV', 'RPV'],
+  smallcap: ['IWM', 'VB', 'IJR', 'SCHA'],
+  // Thematic
+  clean_energy: ['ICLN', 'TAN', 'QCLN', 'PBW'],
+  ai_tech: ['AIQ', 'BOTZ', 'ROBO', 'ARKK'],
+  // Commodity
+  commodity: ['GLD', 'SLV', 'IAU', 'DBC', 'GSG'],
+};
+
+// Asset type for portfolio generation
+type AssetType = 'stocks' | 'etfs' | 'mixed';
+
 class PortfolioAgentService {
   private vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
 
+  /**
+   * Auto-detect asset type from user prompt
+   */
+  private detectAssetType(prompt: string): AssetType {
+    const promptLower = prompt.toLowerCase();
+    
+    // ETF-specific keywords
+    const etfKeywords = [
+      'etf', 'etfs', 'exchange-traded', 'exchange traded', 'index fund', 'index funds',
+      'passive', 'low cost', 'low-cost', 'vanguard', 'ishares', 'spdr', 'schwab',
+      'broad market', 'total market', 'vti', 'spy', 'voo', 'qqq', 'bnd', 'agg',
+      'sector etf', 'bond etf', 'dividend etf'
+    ];
+    
+    // Stock-specific keywords
+    const stockKeywords = [
+      'individual stock', 'individual stocks', 'single stock', 'company shares',
+      'stock pick', 'stock picks', 'blue chip', 'blue-chip', 'growth stock',
+      'value stock', 'dividend aristocrat', 'stock only', 'stocks only',
+      'no etf', 'without etf', 'exclude etf'
+    ];
+    
+    // Mixed/core-satellite keywords
+    const mixedKeywords = [
+      'core-satellite', 'core satellite', 'mix of', 'combination', 'both etf and stock',
+      'etfs and stocks', 'stocks and etfs', 'hybrid', 'blend'
+    ];
+    
+    // Count matches
+    const etfScore = etfKeywords.filter(kw => promptLower.includes(kw)).length;
+    const stockScore = stockKeywords.filter(kw => promptLower.includes(kw)).length;
+    const mixedScore = mixedKeywords.filter(kw => promptLower.includes(kw)).length;
+    
+    console.log(`[ASSET DETECTION] ETF: ${etfScore}, Stock: ${stockScore}, Mixed: ${mixedScore}`);
+    
+    // If mixed keywords found, use mixed
+    if (mixedScore > 0) {
+      return 'mixed';
+    }
+    
+    // If ETF keywords dominate
+    if (etfScore > stockScore && etfScore >= 1) {
+      return 'etfs';
+    }
+    
+    // If stock keywords dominate
+    if (stockScore > etfScore && stockScore >= 1) {
+      return 'stocks';
+    }
+    
+    // Default to mixed for best of both worlds
+    return 'mixed';
+  }
+
   async generatePortfolio(userPrompt: string): Promise<GeneratedPortfolio> {
-    console.log('[INFO] Starting expert portfolio generation for:', userPrompt);
+    const assetType = this.detectAssetType(userPrompt);
+    console.log('[INFO] Starting expert portfolio generation for:', userPrompt, 'Detected asset type:', assetType);
 
     // Single AI call with comprehensive prompt - no separate intent analysis
     const portfolioStructure = await this.generatePortfolioStructureOptimized(userPrompt);
@@ -229,10 +351,26 @@ class PortfolioAgentService {
     console.log('[INFO] Feedback improved portfolio:', feedbackImprovedPortfolio);
 
     // Generate AI descriptions for each asset recommendation
-    const portfolioWithDescriptions = await this.generateAssetDescriptions(feedbackImprovedPortfolio, userPrompt);
-    console.log('[INFO] Portfolio with AI descriptions generated');
+    // Skip AI descriptions for faster generation - use fallback descriptions
+    const portfolioWithDescriptions = this.generateFastDescriptions(feedbackImprovedPortfolio);
+    console.log('[INFO] Portfolio with descriptions generated');
 
     return portfolioWithDescriptions;
+  }
+
+  /**
+   * Generate fast fallback descriptions without AI (instant)
+   */
+  private generateFastDescriptions(portfolio: GeneratedPortfolio): GeneratedPortfolio {
+    const assetsWithDescriptions = portfolio.assets.map(asset => ({
+      ...asset,
+      aiDescription: this.generateFallbackDescription(asset),
+    }));
+
+    return {
+      ...portfolio,
+      assets: assetsWithDescriptions,
+    };
   }
 
   /**
@@ -523,6 +661,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
   /**
    * Quant Feedback Loop: Analyze portfolio assets and improve recommendations
    * based on quantitative metrics. Adjusts allocations and suggests replacements.
+   * Uses different thresholds for ETFs vs stocks.
    */
   private async applyQuantFeedbackLoop(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
     console.log('[QUANT FEEDBACK] Starting feedback loop analysis...');
@@ -531,6 +670,12 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     const feedbackActions: string[] = [];
     const assetsToFlag: string[] = [];
     
+    // Determine if portfolio is ETF-heavy to use appropriate thresholds
+    const etfCount = assets.filter(a => a.assetType === 'etf' || this.isETFSymbol(a.symbol)).length;
+    const isETFHeavy = etfCount > assets.length / 2;
+    
+    console.log(`[QUANT FEEDBACK] Portfolio type: ${isETFHeavy ? 'ETF-heavy' : 'Stock-heavy'} (${etfCount}/${assets.length} ETFs)`);
+    
     // Step 1: Identify underperforming assets based on quant metrics
     const assetAnalysis = assets.map(asset => {
       const metrics = asset.quantMetrics;
@@ -538,33 +683,37 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       const issues: string[] = [];
       let riskScore = 0; // Higher = more issues
       
+      // Use appropriate thresholds based on asset type
+      const isETF = asset.assetType === 'etf' || this.isETFSymbol(asset.symbol);
+      const thresholds = isETF ? ETF_QUANT_THRESHOLDS : QUANT_FEEDBACK_THRESHOLDS;
+      
       if (metrics) {
         // Check Sharpe Ratio
-        if (metrics.sharpeRatio < QUANT_FEEDBACK_THRESHOLDS.minSharpeRatio) {
-          issues.push(`Low Sharpe (${metrics.sharpeRatio.toFixed(2)})`);
+        if (metrics.sharpeRatio < thresholds.minSharpeRatio) {
+          issues.push(`Low Sharpe (${metrics.sharpeRatio.toFixed(2)}) for ${isETF ? 'ETF' : 'stock'}`);
           riskScore += 2;
         }
         
-        // Check Volatility
-        if (metrics.volatility > QUANT_FEEDBACK_THRESHOLDS.maxVolatility) {
-          issues.push(`High Volatility (${metrics.volatility.toFixed(1)}%)`);
-          riskScore += 2;
+        // Check Volatility - ETFs should have lower volatility
+        if (metrics.volatility > thresholds.maxVolatility) {
+          issues.push(`High Volatility (${metrics.volatility.toFixed(1)}%) for ${isETF ? 'ETF' : 'stock'}`);
+          riskScore += isETF ? 3 : 2; // Penalize high-vol ETFs more
         }
         
         // Check Max Drawdown
-        if (metrics.maxDrawdown < QUANT_FEEDBACK_THRESHOLDS.maxDrawdown) {
+        if (metrics.maxDrawdown < thresholds.maxDrawdown) {
           issues.push(`Large Drawdown (${metrics.maxDrawdown.toFixed(1)}%)`);
           riskScore += 3;
         }
         
         // Check RSI extremes
-        if (metrics.rsi > QUANT_FEEDBACK_THRESHOLDS.rsiOverbought) {
+        if (metrics.rsi > thresholds.rsiOverbought) {
           issues.push(`Overbought RSI (${metrics.rsi.toFixed(0)})`);
           riskScore += 1;
         }
         
         // Check confidence
-        if (metrics.confidence < QUANT_FEEDBACK_THRESHOLDS.minConfidence) {
+        if (metrics.confidence < thresholds.minConfidence) {
           issues.push(`Low Confidence (${metrics.confidence.toFixed(0)}%)`);
           riskScore += 1;
         }
@@ -574,8 +723,16 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
           issues.push('Sell Signal');
           riskScore += 2;
         }
+        
+        // ETF-specific checks
+        if (isETF) {
+          // Prefer diversified ETFs - penalize concentrated sector ETFs with poor metrics
+          if (metrics.volatility > 30 && metrics.sharpeRatio < 0.5) {
+            issues.push('High-risk sector ETF');
+            riskScore += 1;
+          }
+        }
       }
-      
       // Check composite score
       if (score < QUANT_FEEDBACK_THRESHOLDS.minCompositeScore) {
         issues.push(`Low Score (${score})`);
@@ -653,8 +810,16 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     }> = [];
     
     assetAnalysis.filter(a => a.needsAttention).forEach(analysis => {
-      const alternatives = DEFENSIVE_ALTERNATIVES[analysis.sector] || DEFENSIVE_ALTERNATIVES['Default'];
-      const availableAlternatives = alternatives.filter(
+      // Find the asset to determine its type
+      const asset = assets.find(a => a.symbol === analysis.symbol);
+      const isETF = asset?.assetType === 'etf' || this.isETFSymbol(analysis.symbol);
+      
+      // Use appropriate alternatives based on asset type
+      const alternativesList = isETF 
+        ? (ETF_ALTERNATIVES[analysis.sector] || ETF_ALTERNATIVES['Default'])
+        : (DEFENSIVE_ALTERNATIVES[analysis.sector] || DEFENSIVE_ALTERNATIVES['Default']);
+      
+      const availableAlternatives = alternativesList.filter(
         alt => !assets.some(a => a.symbol === alt)
       );
       
@@ -702,20 +867,24 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
 
   async *generatePortfolioStream(userPrompt: string): AsyncGenerator<StreamUpdate> {
     try {
-      yield { type: 'progress', step: 'analyzing', message: 'Analyzing investment goals...' };
+      // Auto-detect asset type from prompt
+      const assetType = this.detectAssetType(userPrompt);
+      const assetTypeLabel = assetType === 'etfs' ? 'ETF' : assetType === 'stocks' ? 'stock' : 'mixed';
+      
+      yield { type: 'progress', step: 'analyzing', message: `Analyzing goals... (detected: ${assetTypeLabel} portfolio)` };
 
       // Use streaming AI for faster perceived response
       let portfolioStructure: GeneratedPortfolio | null = null;
       let streamedContent = '';
       
-      yield { type: 'progress', step: 'generating', message: 'AI generating portfolio...' };
+      yield { type: 'progress', step: 'generating', message: `AI generating ${assetTypeLabel} portfolio...` };
       
-      // Stream the AI response for faster feedback
-      for await (const chunk of this.streamPortfolioGeneration(userPrompt)) {
+      // Stream the AI response for faster feedback with asset type
+      for await (const chunk of this.streamPortfolioGeneration(userPrompt, assetType)) {
         streamedContent += chunk;
         // Yield progress updates periodically
         if (streamedContent.length % 500 === 0) {
-          yield { type: 'progress', step: 'generating', message: `Generating... (${Math.floor(streamedContent.length / 100)}%)` };
+          yield { type: 'progress', step: 'generating', message: `Generating ${assetTypeLabel}... (${Math.floor(streamedContent.length / 100)}%)` };
         }
       }
       
@@ -736,11 +905,11 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
 
       yield { type: 'progress', step: 'fetching', message: 'Fetching market data...' };
 
-      // Fast parallel data fetching with timeout
+      // Fast parallel data fetching with shorter timeout (20s)
       const enrichedPortfolio = await Promise.race([
         this.enrichWithMarketDataFast(portfolioStructure),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Market data fetch timeout')), 30000)
+          setTimeout(() => reject(new Error('Market data fetch timeout')), 20000)
         )
       ]);
       
@@ -757,12 +926,12 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
 
       // Apply quant feedback loop to improve recommendations
-      yield { type: 'progress', step: 'feedback', message: 'Applying quant feedback loop...' };
+      yield { type: 'progress', step: 'feedback', message: 'Applying quant feedback...' };
       const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
       
-      // Generate AI descriptions for each asset
-      yield { type: 'progress', step: 'descriptions', message: 'Generating AI descriptions...' };
-      const portfolioWithDescriptions = await this.generateAssetDescriptions(feedbackImprovedPortfolio, userPrompt);
+      // Use fast descriptions (no AI call) for better performance
+      yield { type: 'progress', step: 'descriptions', message: 'Finalizing portfolio...' };
+      const portfolioWithDescriptions = this.generateFastDescriptions(feedbackImprovedPortfolio);
       
       yield { 
         type: 'complete', 
@@ -782,13 +951,37 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
   /**
    * Stream portfolio generation using the OpenRouter streaming API
    */
-  private async *streamPortfolioGeneration(userPrompt: string): AsyncGenerator<string> {
+  private async *streamPortfolioGeneration(userPrompt: string, assetType: AssetType = 'mixed'): AsyncGenerator<string> {
+    // Build asset-type-specific system prompt
+    const systemPrompt = this.buildSystemPromptForAssetType(assetType);
+    const userPromptWithType = this.buildUserPromptForAssetType(userPrompt, assetType);
+    
     const messages: OpenRouterMessage[] = [
       {
         role: 'system',
-        content: `You are a CFA charterholder and risk-conscious portfolio manager. Generate a JSON portfolio with CAPITAL PRESERVATION as the primary goal.
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: userPromptWithType
+      }
+    ];
 
-OUTPUT ONLY VALID JSON - NO OTHER TEXT:
+    for await (const chunk of openRouterService.chatStream(messages, this.vibeModel, {
+      temperature: 0.7,
+      max_tokens: 2500, // Reduced from 3000 for faster response
+    })) {
+      if (!chunk.done) {
+        yield chunk.content;
+      }
+    }
+  }
+
+  /**
+   * Build system prompt based on asset type
+   */
+  private buildSystemPromptForAssetType(assetType: AssetType): string {
+    const baseJsonFormat = `OUTPUT ONLY VALID JSON - NO OTHER TEXT:
 {
   "title": "Portfolio Name",
   "description": "Brief description",
@@ -797,14 +990,56 @@ OUTPUT ONLY VALID JSON - NO OTHER TEXT:
   "timeHorizon": "X years",
   "rebalanceFrequency": "Quarterly|Monthly|Annual",
   "assets": [
-    {"symbol": "AAPL", "name": "Apple Inc.", "allocation": 15.0, "rationale": "Why this stock", "sector": "Technology"}
+    {"symbol": "TICKER", "name": "Full Name", "allocation": 15.0, "rationale": "Why this asset", "sector": "Category", "assetType": "stock|etf"}
   ],
   "expectedReturn": "X-Y% annually",
   "volatility": "X-Y%",
   "reasoning": "Overall reasoning including risk mitigation"
-}
+}`;
 
-RISK PROTECTION RULES (CRITICAL):
+    if (assetType === 'etfs') {
+      return `You are a CFA charterholder and ETF specialist portfolio manager. Generate a JSON ETF portfolio with DIVERSIFICATION and LOW COSTS as primary goals.
+
+${baseJsonFormat}
+
+ETF PORTFOLIO RULES (CRITICAL):
+- Use ONLY ETFs (Exchange-Traded Funds) - NO individual stocks
+- POPULAR ETFs to consider:
+  * Broad Market: VTI, SPY, VOO, IVV, ITOT, SCHB
+  * Technology: QQQ, VGT, XLK, SMH, SOXX
+  * Healthcare: XLV, VHT, IBB, XBI
+  * Financial: XLF, VFH, KRE
+  * Energy: XLE, VDE, ICLN, TAN
+  * International: VEA, VWO, IEFA, EEM, VT, VXUS
+  * Bonds: BND, AGG, TLT, LQD, TIP
+  * Dividend: VIG, SCHD, DVY, VYM, DGRO
+  * Growth: VUG, IWF, MGK
+  * Value: VTV, IWD, VLUE
+  * Small Cap: IWM, VB, IJR
+  * Real Estate: VNQ, XLRE, IYR
+  * Commodities: GLD, SLV, IAU
+- Include at least 15-20% in bond ETFs for stability
+- Core position should be broad market ETFs (30-50%)
+- NO single ETF should exceed 25% allocation
+- Include 6-12 ETFs for proper diversification
+- Consider expense ratios (prefer low-cost ETFs)
+- Mix asset classes: US equities, international, bonds, alternatives
+
+RULES:
+- 6-12 ETFs only (NO stocks)
+- Allocations must sum to 100
+- Use real ETF ticker symbols
+- Set assetType to "etf" for all assets
+- Output ONLY the JSON object`;
+    }
+
+    if (assetType === 'stocks') {
+      return `You are a CFA charterholder and risk-conscious portfolio manager. Generate a JSON stock portfolio with CAPITAL PRESERVATION as the primary goal.
+
+${baseJsonFormat}
+
+STOCK PORTFOLIO RULES (CRITICAL):
+- Use ONLY individual stocks - NO ETFs
 - ALWAYS include at least 15% in defensive/stable stocks (utilities, consumer staples, healthcare)
 - NO single stock should exceed 20% allocation
 - Include mix of growth AND value stocks for balance
@@ -815,27 +1050,78 @@ RISK PROTECTION RULES (CRITICAL):
 - Prioritize quality companies with strong balance sheets
 
 RULES:
-- 8-12 liquid US stocks only
+- 8-12 liquid US stocks only (NO ETFs)
 - Allocations must sum to 100
 - Use real ticker symbols
-- Output ONLY the JSON object`
-      },
-      {
-        role: 'user',
-        content: `Create a RISK-PROTECTED portfolio for: ${userPrompt}
-
-Important: The portfolio MUST minimize probability of loss while still achieving reasonable returns. Prioritize capital preservation.`
-      }
-    ];
-
-    for await (const chunk of openRouterService.chatStream(messages, this.vibeModel, {
-      temperature: 0.7,
-      max_tokens: 3000,
-    })) {
-      if (!chunk.done) {
-        yield chunk.content;
-      }
+- Set assetType to "stock" for all assets
+- Output ONLY the JSON object`;
     }
+
+    // Mixed portfolio (default)
+    return `You are a CFA charterholder and portfolio manager specializing in core-satellite strategies. Generate a JSON mixed portfolio combining ETFs and stocks.
+
+${baseJsonFormat}
+
+MIXED PORTFOLIO RULES (CRITICAL):
+- Create a CORE-SATELLITE structure:
+  * CORE (50-70%): Broad market ETFs for stability and diversification
+  * SATELLITE (30-50%): Individual stocks for alpha generation
+- CORE ETFs to consider: VTI, SPY, VOO, VEA, BND, AGG, VIG
+- SATELLITE stocks: High-conviction picks with strong fundamentals
+- NO single position should exceed 15% allocation
+- Include at least 10-15% in bond ETFs for stability
+- Mix of 4-6 ETFs and 4-8 stocks
+- Consider correlation between positions
+- Balance growth and income generating assets
+
+ETF SUGGESTIONS:
+- Broad Market: VTI, SPY, VOO
+- International: VEA, VWO
+- Bonds: BND, AGG
+- Dividend: VIG, SCHD
+
+RULES:
+- Mix of ETFs and stocks (total 8-14 positions)
+- Clearly indicate assetType as "etf" or "stock" for each
+- Allocations must sum to 100
+- Use real ticker symbols
+- Output ONLY the JSON object`;
+  }
+
+  /**
+   * Build user prompt based on asset type
+   */
+  private buildUserPromptForAssetType(userPrompt: string, assetType: AssetType): string {
+    if (assetType === 'etfs') {
+      return `Create a diversified ETF-ONLY portfolio for: ${userPrompt}
+
+Important: 
+- Use ONLY ETFs (Exchange-Traded Funds), NO individual stocks
+- Focus on low-cost, liquid ETFs from major providers (Vanguard, iShares, SPDR, Schwab)
+- Include broad market exposure as the core
+- Add bond/fixed income ETFs for stability
+- The portfolio should be easy to maintain with minimal trading`;
+    }
+
+    if (assetType === 'stocks') {
+      return `Create a RISK-PROTECTED stock portfolio for: ${userPrompt}
+
+Important: 
+- Use ONLY individual stocks, NO ETFs
+- The portfolio MUST minimize probability of loss while still achieving reasonable returns
+- Prioritize capital preservation with quality companies
+- Include defensive sectors for stability`;
+    }
+
+    // Mixed
+    return `Create a CORE-SATELLITE mixed portfolio for: ${userPrompt}
+
+Important: 
+- Use BOTH ETFs (as core holdings) AND individual stocks (as satellites)
+- ETFs should form 50-70% of the portfolio for diversification
+- Individual stocks should be high-conviction picks for alpha
+- Balance stability with growth potential
+- Include some bond exposure for risk management`;
   }
 
   /**
@@ -1153,29 +1439,30 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     const startTime = Date.now();
     
     try {
-      // All data fetching in parallel with individual timeouts
+      // All data fetching in parallel with aggressive timeouts for speed
       const [pricesResult, quantResult, fundamentalsResult, sentimentResult, analystResult] = await Promise.allSettled([
-        // Core data with 15s timeout
+        // Core data with 8s timeout (prices are critical)
         Promise.race([
           marketDataService.getCurrentPricesBatch(symbols),
-          new Promise<Record<string, number>>((_, reject) => setTimeout(() => reject('timeout'), 15000))
+          new Promise<Record<string, number>>((_, reject) => setTimeout(() => reject('timeout'), 8000))
         ]),
+        // Quant metrics with 10s timeout
         Promise.race([
           marketDataService.getQuantMetricsBatch(symbols),
-          new Promise<any[]>((_, reject) => setTimeout(() => reject('timeout'), 15000))
+          new Promise<any[]>((_, reject) => setTimeout(() => reject('timeout'), 10000))
         ]),
-        // Optional data with 10s timeout - fail silently
+        // Optional data with 5s timeout - fail silently for speed
         Promise.race([
           fundamentalDataService.getBatchFundamentals(symbols),
-          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 10000))
+          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 5000))
         ]),
         Promise.race([
           newsService.getBatchSentiment(symbols),
-          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 8000))
+          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 4000))
         ]),
         Promise.race([
           newsService.getBatchAnalystRatings(symbols),
-          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 8000))
+          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 4000))
         ]),
       ]);
 
@@ -1203,10 +1490,14 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
           upside = ((analyst.targetPriceMean - price) / price) * 100;
         }
         
-        const compositeScore = this.calculateCompositeScore(metrics, fundamentals, sentiment, analyst, upside);
+        // Determine if this is an ETF (from AI response or detected)
+        const isETF = asset.assetType === 'etf' || this.isETFSymbol(asset.symbol);
+        
+        const compositeScore = this.calculateCompositeScore(metrics, fundamentals, sentiment, analyst, upside, isETF);
         
         return {
           ...asset,
+          assetType: (isETF ? 'etf' : 'stock') as 'etf' | 'stock', // Ensure assetType is set with proper type
           currentPrice: price || undefined,
           sentiment: sentiment ? {
             overallSentiment: sentiment.overallSentiment,
@@ -1273,74 +1564,109 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   // Calculate a composite score (0-100) based on all available data
+  // ETFs use different weighting since they don't have individual fundamentals
   private calculateCompositeScore(
     metrics: any,
     fundamentals: any,
     sentiment: any,
     analyst: any,
-    upside: number | null
+    upside: number | null,
+    isETF: boolean = false
   ): number {
     let score = 50; // Start at neutral
     let factors = 0;
 
-    // Technical/Quant metrics (weight: 25%)
+    // Weight adjustments for ETFs vs Stocks
+    // ETFs: More weight on technicals and less on fundamentals (since ETF fundamentals are aggregates)
+    const weights = isETF 
+      ? { technical: 0.35, fundamental: 0.15, sentiment: 0.20, analyst: 0.30 }
+      : { technical: 0.25, fundamental: 0.30, sentiment: 0.20, analyst: 0.25 };
+
+    // Technical/Quant metrics
     if (metrics && metrics.signal !== 'INSUFFICIENT DATA') {
       factors++;
       let techScore = 50;
       
-      // Sharpe ratio contribution
-      if (metrics.sharpe_ratio > 1.5) techScore += 15;
-      else if (metrics.sharpe_ratio > 1) techScore += 10;
-      else if (metrics.sharpe_ratio > 0.5) techScore += 5;
+      // Sharpe ratio contribution - adjusted thresholds for ETFs
+      const sharpeThresholds = isETF 
+        ? { excellent: 1.2, good: 0.8, ok: 0.4 }
+        : { excellent: 1.5, good: 1.0, ok: 0.5 };
+      
+      if (metrics.sharpe_ratio > sharpeThresholds.excellent) techScore += 15;
+      else if (metrics.sharpe_ratio > sharpeThresholds.good) techScore += 10;
+      else if (metrics.sharpe_ratio > sharpeThresholds.ok) techScore += 5;
       else if (metrics.sharpe_ratio < 0) techScore -= 10;
       
+      // Volatility bonus for ETFs with low volatility (diversification benefit)
+      if (isETF && metrics.volatility < 15) {
+        techScore += 5;
+      } else if (isETF && metrics.volatility > 30) {
+        techScore -= 5; // Penalize high-vol ETFs
+      }
+      
       // RSI (favor middle ground, penalize extremes)
-      if (metrics.rsi >= 30 && metrics.rsi <= 70) techScore += 5;
-      else if (metrics.rsi < 30) techScore += 10; // Oversold = opportunity
+      const rsiThresholds = isETF 
+        ? { oversold: 25, overbought: 75 }
+        : { oversold: 30, overbought: 70 };
+      
+      if (metrics.rsi >= rsiThresholds.oversold && metrics.rsi <= rsiThresholds.overbought) techScore += 5;
+      else if (metrics.rsi < rsiThresholds.oversold) techScore += 10; // Oversold = opportunity
       else techScore -= 5; // Overbought
       
       // Signal
       if (metrics.signal?.toLowerCase().includes('buy')) techScore += 10;
       else if (metrics.signal?.toLowerCase().includes('sell')) techScore -= 10;
       
-      score += (techScore - 50) * 0.25;
+      score += (techScore - 50) * weights.technical;
     }
 
-    // Fundamental metrics (weight: 30%)
+    // Fundamental metrics (less weight for ETFs)
     if (fundamentals) {
       factors++;
       let fundScore = 50;
       
-      // ROE
-      if (fundamentals.returnOnEquity !== null) {
-        if (fundamentals.returnOnEquity > 0.20) fundScore += 10;
-        else if (fundamentals.returnOnEquity > 0.15) fundScore += 5;
-        else if (fundamentals.returnOnEquity < 0.05) fundScore -= 10;
+      if (!isETF) {
+        // Individual stock fundamentals
+        // ROE
+        if (fundamentals.returnOnEquity !== null) {
+          if (fundamentals.returnOnEquity > 0.20) fundScore += 10;
+          else if (fundamentals.returnOnEquity > 0.15) fundScore += 5;
+          else if (fundamentals.returnOnEquity < 0.05) fundScore -= 10;
+        }
+        
+        // Revenue growth
+        if (fundamentals.revenueGrowthYoY !== null) {
+          if (fundamentals.revenueGrowthYoY > 0.15) fundScore += 10;
+          else if (fundamentals.revenueGrowthYoY > 0.05) fundScore += 5;
+          else if (fundamentals.revenueGrowthYoY < 0) fundScore -= 10;
+        }
+        
+        // Debt/Equity
+        if (fundamentals.debtToEquity !== null) {
+          if (fundamentals.debtToEquity < 0.5) fundScore += 5;
+          else if (fundamentals.debtToEquity > 2) fundScore -= 10;
+        }
+        
+        // Profit margin
+        if (fundamentals.profitMargin !== null) {
+          if (fundamentals.profitMargin > 0.15) fundScore += 5;
+          else if (fundamentals.profitMargin < 0) fundScore -= 10;
+        }
+      } else {
+        // ETF fundamentals - focus on dividend yield and P/E for income/value ETFs
+        if (fundamentals.dividendYield !== null && fundamentals.dividendYield > 0.02) {
+          fundScore += 10; // Dividend-paying ETF bonus
+        }
+        // For ETFs, a reasonable P/E suggests value
+        if (fundamentals.peRatio !== null && fundamentals.peRatio > 0 && fundamentals.peRatio < 25) {
+          fundScore += 5;
+        }
       }
       
-      // Revenue growth
-      if (fundamentals.revenueGrowthYoY !== null) {
-        if (fundamentals.revenueGrowthYoY > 0.15) fundScore += 10;
-        else if (fundamentals.revenueGrowthYoY > 0.05) fundScore += 5;
-        else if (fundamentals.revenueGrowthYoY < 0) fundScore -= 10;
-      }
-      
-      // Debt/Equity
-      if (fundamentals.debtToEquity !== null) {
-        if (fundamentals.debtToEquity < 0.5) fundScore += 5;
-        else if (fundamentals.debtToEquity > 2) fundScore -= 10;
-      }
-      
-      // Profit margin
-      if (fundamentals.profitMargin !== null) {
-        if (fundamentals.profitMargin > 0.15) fundScore += 5;
-        else if (fundamentals.profitMargin < 0) fundScore -= 10;
-      }
-      
-      score += (fundScore - 50) * 0.30;
+      score += (fundScore - 50) * weights.fundamental;
     }
 
-    // Sentiment (weight: 20%)
+    // Sentiment
     if (sentiment) {
       factors++;
       let sentScore = 50;
@@ -1351,10 +1677,10 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       // News buzz bonus (being talked about is generally good)
       if (sentiment.buzzScore > 50) sentScore += 5;
       
-      score += (sentScore - 50) * 0.20;
+      score += (sentScore - 50) * weights.sentiment;
     }
 
-    // Analyst ratings (weight: 25%)
+    // Analyst ratings
     if (analyst && analyst.numberOfAnalysts > 0) {
       factors++;
       let analystScore = 50;
@@ -1373,7 +1699,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         else if (upside < -10) analystScore -= 10;
       }
       
-      score += (analystScore - 50) * 0.25;
+      score += (analystScore - 50) * weights.analyst;
     }
 
     // Normalize to 0-100 range
@@ -1993,7 +2319,44 @@ Provide:
       max_tokens: 2000
     });
   }
+
+  /**
+   * Check if a symbol is likely an ETF based on known ETF symbols
+   */
+  private isETFSymbol(symbol: string): boolean {
+    const allETFs = new Set([
+      ...POPULAR_ETFS.broad,
+      ...POPULAR_ETFS.technology,
+      ...POPULAR_ETFS.healthcare,
+      ...POPULAR_ETFS.financial,
+      ...POPULAR_ETFS.energy,
+      ...POPULAR_ETFS.consumer,
+      ...POPULAR_ETFS.industrial,
+      ...POPULAR_ETFS.realestate,
+      ...POPULAR_ETFS.utilities,
+      ...POPULAR_ETFS.materials,
+      ...POPULAR_ETFS.bonds,
+      ...POPULAR_ETFS.international,
+      ...POPULAR_ETFS.dividend,
+      ...POPULAR_ETFS.growth,
+      ...POPULAR_ETFS.value,
+      ...POPULAR_ETFS.smallcap,
+      ...POPULAR_ETFS.clean_energy,
+      ...POPULAR_ETFS.ai_tech,
+      ...POPULAR_ETFS.commodity,
+    ]);
+    return allETFs.has(symbol.toUpperCase());
+  }
+
+  /**
+   * Enhance portfolio with detailed AI descriptions (optional - call after portfolio is ready)
+   * This is an expensive operation so it's separate from the main generation flow
+   */
+  async enhanceWithAIDescriptions(portfolio: GeneratedPortfolio, userContext: string): Promise<GeneratedPortfolio> {
+    console.log('[AI ENHANCE] Generating detailed AI descriptions...');
+    return this.generateAssetDescriptions(portfolio, userContext);
+  }
 }
 
 export const portfolioAgent = new PortfolioAgentService();
-export type { GeneratedPortfolio, PortfolioAsset, TechnicalAnalysis, MonteCarloResult, BacktestResult };
+export type { GeneratedPortfolio, PortfolioAsset, TechnicalAnalysis, MonteCarloResult, BacktestResult, AssetType };

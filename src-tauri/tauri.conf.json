@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "flowfolio",
+  "productName": "FlowFolio",
   "version": "0.1.0",
   "identifier": "com.evintleovonzko.flowfolio",
   "build": {
@@ -12,13 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "flowfolio",
-        "width": 800,
-        "height": 600
+        "title": "FlowFolio - AI-Powered Vibe-Based Investing",
+        "width": 1200,
+        "height": 800
       }
     ],
     "security": {
-      "csp": "default-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: https://*.openrouter.ai https://*.alphavantage.co https://*.finnhub.io https://*.yahoo.com https://*.duckduckgo.com https://*.tavily.com https://*.brave.com; object-src blob:; base-uri 'self'; form-action 'self';"
+      "csp": "default-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: https://*.openrouter.ai https://*.alphavantage.co https://*.finnhub.io https://*.yahoo.com https://*.duckduckgo.com https://*.tavily.com https://*.brave.com https://*.alpaca.markets; object-src blob:; base-uri 'self'; form-action 'self';"
     }
   },
   "bundle": {
@@ -30,6 +30,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "resources": [
+      "../.env.encrypted"
     ]
   }
 }

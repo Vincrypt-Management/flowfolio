@@ -14,7 +14,6 @@ import {
   Activity, 
   CheckCircle2, 
   XCircle,
-  BarChart3,
   PieChart,
   Calendar,
   ArrowRight,
@@ -109,6 +108,9 @@ function App() {
   // Market overview state
   const [marketPrices, setMarketPrices] = useState<Record<string, number>>({});
   const [isLoadingMarket, setIsLoadingMarket] = useState(false);
+  
+  // Portfolio to load into VibeStudio (from SavedPortfoliosTab)
+  const [portfolioToLoad, setPortfolioToLoad] = useState<any>(null);
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -459,7 +461,7 @@ function App() {
       <div className="sidebar-header">
         <div className="logo-area">
           <div className="logo-icon-wrapper">
-            <BarChart3 className="logo-icon" size={24} />
+            <img src="/logo.png" alt="FlowFolio" className="logo-image" />
           </div>
           {!isSidebarCollapsed && <span className="logo-text">FlowFolio</span>}
         </div>
@@ -688,12 +690,16 @@ function App() {
 
         {activeTab === "vibe-studio" && (
           <div className="animate-fade-in">
-            <VibeStudio />
+            <VibeStudio 
+              initialPortfolio={portfolioToLoad}
+              onPortfolioLoaded={() => setPortfolioToLoad(null)}
+            />
           </div>
         )}
 
         {activeTab === "saved-portfolios" && (
-          <SavedPortfoliosTab onLoadPortfolio={() => {
+          <SavedPortfoliosTab onLoadPortfolio={(portfolio) => {
+            setPortfolioToLoad(portfolio);
             setActiveTab("vibe-studio");
           }} />
         )}
