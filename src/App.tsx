@@ -673,7 +673,7 @@ function App() {
         )}
 
         {activeTab === "data" && (
-          <DataSourcesPage onSyncComplete={loadCacheStats} />
+          <DataSourcesPage />
         )}
 
         {activeTab === "rankings" && (

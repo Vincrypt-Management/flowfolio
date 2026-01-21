@@ -20,9 +20,24 @@
   color: var(--primary);
 }
 
-.data-sources-page .header-actions {
+.data-sources-page .header-meta {
   display: flex;
+  align-items: center;
+}
+
+.refresh-indicator {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+}
+
+.refresh-indicator svg {
+  color: var(--primary);
 }
 
 /* Connection Banner */
@@ -371,23 +386,40 @@
   margin-left: auto;
 }
 
-.cache-actions {
-  display: flex;
-  gap: 0.75rem;
+.cache-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  text-align: center;
 }
 
-.cache-actions .btn-primary,
-.cache-actions .btn-secondary {
-  flex: 1;
+/* Status Pill */
+.banner-status {
+  flex-shrink: 0;
 }
 
-.btn-danger {
-  color: var(--error) !important;
-  border-color: var(--error) !important;
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.btn-danger:hover {
-  background: rgba(239, 68, 68, 0.1) !important;
+.status-pill.online {
+  background: rgba(0, 229, 153, 0.15);
+  color: var(--success);
+}
+
+.status-pill.offline {
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
 /* Advanced Section */
@@ -578,10 +610,6 @@
 @media (max-width: 480px) {
   .data-sources-page .stats-grid {
     grid-template-columns: 1fr;
-  }
-  
-  .cache-actions {
-    flex-direction: column;
   }
   
   .health-grid {

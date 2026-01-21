@@ -13,7 +13,6 @@ import {
   Zap,
   Clock,
   TrendingUp,
-  Trash2,
   Settings,
   ChevronDown,
   ChevronUp
@@ -66,20 +65,12 @@ interface HealthReport {
   error_rate: number;
 }
 
-interface DataSourcesPageProps {
-  onSyncComplete?: () => void;
-}
-
-export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
+export function DataSourcesPage() {
   const [connectionResult, setConnectionResult] = useState<ConnectionTestResult | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
-    return localStorage.getItem('flowfolio_last_sync');
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [alpacaConfigured, setAlpacaConfigured] = useState(false);
@@ -94,11 +85,41 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
     { name: 'Alpha Vantage', configured: connectionResult?.providers?.alphavantage ?? false, tier: 'free', rateLimit: '5/min', description: 'Technical indicators and fundamentals.' },
   ];
 
-  const loadData = useCallback(async () => {
+  // Test connection and load all data
+  const loadAllData = useCallback(async () => {
+    setIsLoading(true);
     try {
+      // Test connection first (this also returns provider status)
+      try {
+        const result = await invoke<ConnectionTestResult>('test_data_connection');
+        setConnectionResult(result);
+      } catch (error) {
+        console.error('Connection test failed:', error);
+        setConnectionResult({
+          status: 'failed',
+          test_symbol: 'AAPL',
+          price: 0,
+          metrics_ok: false,
+          signal: 'FAILED',
+          cache_stats: { memory_prices: 0, memory_quant: 0 },
+          providers: {
+            alpaca: false,
+            finnhub: false,
+            fmp: false,
+            polygon: false,
+            alphavantage: false,
+            yahoo: false,
+          }
+        });
+      }
+
       // Load cache stats
-      const stats = await invoke<CacheStats>('get_cache_stats');
-      setCacheStats(stats);
+      try {
+        const stats = await invoke<CacheStats>('get_cache_stats');
+        setCacheStats(stats);
+      } catch {
+        // Cache stats may not be available
+      }
 
       // Load health report
       try {
@@ -123,83 +144,21 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
       } catch {
         setAlpacaConfigured(false);
       }
+
+      setLastRefresh(new Date());
     } catch (error) {
       console.error('Failed to load data source info:', error);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
+  // Auto-load on mount and refresh every 30 seconds
   useEffect(() => {
-    loadData();
-    // Refresh every 30 seconds
-    const interval = setInterval(loadData, 30000);
+    loadAllData();
+    const interval = setInterval(loadAllData, 30000);
     return () => clearInterval(interval);
-  }, [loadData]);
-
-  const testConnection = async () => {
-    setIsTestingConnection(true);
-    try {
-      const result = await invoke<ConnectionTestResult>('test_data_connection');
-      setConnectionResult(result);
-    } catch (error) {
-      console.error('Connection test failed:', error);
-      setConnectionResult({
-        status: 'failed',
-        test_symbol: 'AAPL',
-        price: 0,
-        metrics_ok: false,
-        signal: 'FAILED',
-        cache_stats: { memory_prices: 0, memory_quant: 0 },
-        providers: {
-          alpaca: false,
-          finnhub: false,
-          fmp: false,
-          polygon: false,
-          alphavantage: false,
-          yahoo: false,
-        }
-      });
-    } finally {
-      setIsTestingConnection(false);
-    }
-  };
-
-  const syncData = async () => {
-    setIsSyncing(true);
-    try {
-      // Prefetch common symbols
-      const defaultSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'V', 
-                             'JNJ', 'UNH', 'HD', 'PG', 'MA', 'DIS', 'ADBE', 'CRM', 'NFLX', 'PYPL'];
-      await invoke('prefetch_symbols', { symbols: defaultSymbols });
-      
-      const now = new Date().toISOString();
-      setLastSyncTime(now);
-      localStorage.setItem('flowfolio_last_sync', now);
-      
-      // Reload stats
-      await loadData();
-      onSyncComplete?.();
-    } catch (error) {
-      console.error('Sync failed:', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const clearCache = async () => {
-    if (!confirm('Are you sure you want to clear all cached data? This will require re-fetching market data.')) {
-      return;
-    }
-    
-    setIsClearing(true);
-    try {
-      await invoke('clear_all_caches');
-      await loadData();
-    } catch (error) {
-      console.error('Failed to clear cache:', error);
-    } finally {
-      setIsClearing(false);
-    }
-  };
+  }, [loadAllData]);
 
   const getStatusColor = (configured: boolean) => configured ? 'var(--success)' : 'var(--text-dim)';
   const getStatusIcon = (configured: boolean) => configured ? <CheckCircle2 size={16} /> : <XCircle size={16} />;
@@ -210,6 +169,14 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
     return `${hours}h ${minutes}m`;
   };
 
+  const formatLastRefresh = () => {
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - lastRefresh.getTime()) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return lastRefresh.toLocaleTimeString();
+  };
+
   return (
     <div className="data-sources-page animate-fade-in">
       <header className="page-header">
@@ -218,46 +185,57 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
             <Database size={28} />
             Data Sources
           </h1>
-          <p className="page-subtitle">Manage market data providers and cache</p>
+          <p className="page-subtitle">Market data providers and system status</p>
         </div>
-        <div className="header-actions">
-          <button 
-            className="btn-secondary"
-            onClick={loadData}
-            title="Refresh stats"
-          >
-            <RefreshCw size={16} />
-          </button>
+        <div className="header-meta">
+          {isLoading ? (
+            <span className="refresh-indicator">
+              <RefreshCw size={14} className="spinning" />
+              Refreshing...
+            </span>
+          ) : (
+            <span className="refresh-indicator">
+              <Clock size={14} />
+              Updated {formatLastRefresh()}
+            </span>
+          )}
         </div>
       </header>
 
       {/* Connection Status Banner */}
       <div className={`connection-banner ${connectionResult?.status === 'connected' ? 'connected' : connectionResult?.status === 'failed' ? 'failed' : 'unknown'}`}>
         <div className="banner-icon">
-          {connectionResult?.status === 'connected' ? <Wifi size={24} /> : connectionResult?.status === 'failed' ? <WifiOff size={24} /> : <Activity size={24} />}
+          {isLoading ? (
+            <RefreshCw size={24} className="spinning" />
+          ) : connectionResult?.status === 'connected' ? (
+            <Wifi size={24} />
+          ) : connectionResult?.status === 'failed' ? (
+            <WifiOff size={24} />
+          ) : (
+            <Activity size={24} />
+          )}
         </div>
         <div className="banner-content">
           <h3>
-            {connectionResult?.status === 'connected' 
-              ? 'All Systems Operational' 
-              : connectionResult?.status === 'failed' 
-                ? 'Connection Issues Detected' 
-                : 'Connection Status Unknown'}
+            {isLoading 
+              ? 'Checking Connection...'
+              : connectionResult?.status === 'connected' 
+                ? 'All Systems Operational' 
+                : connectionResult?.status === 'failed' 
+                  ? 'Connection Issues Detected' 
+                  : 'Initializing...'}
           </h3>
           <p>
             {connectionResult 
-              ? `Test: ${connectionResult.test_symbol} @ $${connectionResult.price.toFixed(2)} | Signal: ${connectionResult.signal}`
-              : 'Run a connection test to verify data sources'}
+              ? `${connectionResult.test_symbol} @ $${connectionResult.price.toFixed(2)} | Signal: ${connectionResult.signal}`
+              : 'Verifying data source connections...'}
           </p>
         </div>
-        <button 
-          className="btn-primary"
-          onClick={testConnection}
-          disabled={isTestingConnection}
-        >
-          {isTestingConnection ? <RefreshCw size={16} className="spinning" /> : <Zap size={16} />}
-          {isTestingConnection ? 'Testing...' : 'Test Connection'}
-        </button>
+        <div className="banner-status">
+          <span className={`status-pill ${connectionResult?.status === 'connected' ? 'online' : 'offline'}`}>
+            {connectionResult?.status === 'connected' ? 'Online' : 'Checking'}
+          </span>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -277,17 +255,17 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon"><Clock size={20} /></div>
-          <div className="stat-content">
-            <span className="stat-value">{lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : 'Never'}</span>
-            <span className="stat-label">Last Sync</span>
-          </div>
-        </div>
-        <div className="stat-card">
           <div className="stat-icon"><Activity size={20} /></div>
           <div className="stat-content">
             <span className="stat-value">{healthReport ? `${(healthReport.cache_hit_rate * 100).toFixed(0)}%` : '--'}</span>
             <span className="stat-label">Cache Hit Rate</span>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon"><Clock size={20} /></div>
+          <div className="stat-content">
+            <span className="stat-value">{healthReport ? `${healthReport.avg_response_time_ms.toFixed(0)}ms` : '--'}</span>
+            <span className="stat-label">Avg Response</span>
           </div>
         </div>
       </div>
@@ -362,9 +340,9 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
           </div>
         </div>
 
-        {/* Cache Management Card */}
+        {/* Cache Info Card */}
         <div className="card cache-card">
-          <h3><HardDrive size={18} /> Cache Management</h3>
+          <h3><HardDrive size={18} /> Cache Status</h3>
           
           <div className="cache-info">
             <div className="cache-tier">
@@ -372,35 +350,20 @@ export function DataSourcesPage({ onSyncComplete }: DataSourcesPageProps) {
               <span className="tier-stats">
                 {(cacheStats?.memory_prices ?? 0) + (cacheStats?.memory_quant ?? 0)} entries
               </span>
-              <span className="tier-ttl">TTL: 2-5 minutes</span>
+              <span className="tier-ttl">TTL: 2-5 min</span>
             </div>
             <div className="cache-tier">
               <span className="tier-name">SQLite Cache</span>
               <span className="tier-stats">
                 {cacheStats?.db_stats ? `${cacheStats.db_stats[0] + cacheStats.db_stats[1] + cacheStats.db_stats[2]} entries` : 'N/A'}
               </span>
-              <span className="tier-ttl">TTL: 1-24 hours</span>
+              <span className="tier-ttl">TTL: 1-24 hr</span>
             </div>
           </div>
 
-          <div className="cache-actions">
-            <button 
-              className="btn-primary"
-              onClick={syncData}
-              disabled={isSyncing}
-            >
-              {isSyncing ? <RefreshCw size={16} className="spinning" /> : <RefreshCw size={16} />}
-              {isSyncing ? 'Syncing...' : 'Sync Data'}
-            </button>
-            <button 
-              className="btn-secondary btn-danger"
-              onClick={clearCache}
-              disabled={isClearing}
-            >
-              <Trash2 size={16} />
-              {isClearing ? 'Clearing...' : 'Clear Cache'}
-            </button>
-          </div>
+          <p className="cache-note">
+            Data is automatically cached and refreshed. No manual sync required.
+          </p>
         </div>
       </div>
 
