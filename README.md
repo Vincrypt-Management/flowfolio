@@ -1,17 +1,19 @@
 # Vibe Invest (Flowfolio)
 
-**Privacy-first desktop investment planning and portfolio management**
+**Privacy-first investment planning and portfolio management for Desktop, iOS & Android**
 
 [![Tauri](https://img.shields.io/badge/Tauri-2.x-24C8D8?logo=tauri)](https://tauri.app/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-CE422B?logo=rust)](https://www.rust-lang.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![iOS](https://img.shields.io/badge/iOS-14+-000000?logo=apple)](https://developer.apple.com/)
+[![Android](https://img.shields.io/badge/Android-7.0+-3DDC84?logo=android)](https://developer.android.com/)
 
 ---
 
 ## 🎯 Overview
 
-Vibe Invest is a **desktop-native investment application** that helps you:
+Vibe Invest is a **cross-platform investment application** that helps you:
 - Create vibe-based investment strategies with factor-driven allocation
 - Generate explainable rankings with factor drill-down
 - Get monthly buy lists based on target allocations
@@ -19,6 +21,8 @@ Vibe Invest is a **desktop-native investment application** that helps you:
 - Maintain an investment journal for reflections and decisions
 
 **Privacy Promise:** All data stored locally. No cloud dependencies. Zero telemetry.
+
+**Platforms:** Windows, macOS, Linux, iOS, Android
 
 ---
 
@@ -79,13 +83,31 @@ npm run tauri dev
 ### Production Build
 
 ```bash
-# Build application
+# Build desktop application
 npm run tauri build
 
 # Output location:
 # - macOS: src-tauri/target/release/bundle/macos/
 # - Windows: src-tauri/target/release/bundle/msi/
 # - Linux: src-tauri/target/release/bundle/appimage/
+```
+
+### Mobile Development
+
+See [MOBILE_SETUP.md](MOBILE_SETUP.md) for detailed mobile setup instructions.
+
+```bash
+# Initialize mobile targets (one-time setup)
+npm run android:init    # Android
+npm run ios:init        # iOS (macOS only)
+
+# Run on mobile
+npm run android:dev     # Android device/emulator
+npm run ios:dev         # iOS simulator
+
+# Build for mobile
+npm run android:build   # Android APK/AAB
+npm run ios:build       # iOS IPA
 ```
 
 ---

@@ -12,7 +12,13 @@
     "preview": "vite preview",
     "preview:landing": "vite preview --config vite.landing.config.ts --outDir dist-landing",
     "tauri": "tauri",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build",
+    "ios:init": "tauri ios init",
+    "ios:dev": "tauri ios dev",
+    "ios:build": "tauri ios build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -1,8 +1,8 @@
 [package]
 name = "flowfolio"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "FlowFolio - AI-Powered Vibe-Based Investing"
+authors = ["evintleovonzko"]
 edition = "2021"
 default-run = "flowfolio"
 
@@ -64,3 +64,10 @@ arc-swap = "1.7"                                         # Lock-free Arc swappin
 aes-gcm = "0.10"                                         # AES-256-GCM encryption (layer 1)
 chacha20poly1305 = "0.10"                                # ChaCha20-Poly1305 encryption (layer 2)
 base64 = "0.22"                                          # Base64 encoding
+
+# Mobile platform support
+[target.'cfg(target_os = "android")'.dependencies]
+# Android-specific dependencies if needed
+
+[target.'cfg(target_os = "ios")'.dependencies]
+# iOS-specific dependencies if needed

@@ -14,7 +14,9 @@
       {
         "title": "FlowFolio - AI-Powered Vibe-Based Investing",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "minWidth": 375,
+        "minHeight": 667
       }
     ],
     "security": {
@@ -31,6 +33,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "iOS": {
+      "developmentTeam": "",
+      "minimumSystemVersion": "14.0"
+    },
     "resources": [
       "../.env.encrypted"
     ]
