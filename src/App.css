@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-:root {
+:root,
+:root.dark,
+[data-theme="dark"] {
   /* Token Terminal x Augment Code Hybrid Palette */
   
   /* Backgrounds - Deep, Technical Dark Mode */
@@ -45,6 +47,40 @@
   --sidebar-width-collapsed: 64px;
   
   --transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Light Theme */
+:root.light,
+[data-theme="light"] {
+  /* Backgrounds - Clean, Minimal Light Mode */
+  --bg-app: #fafafa;        /* Off-White */
+  --bg-sidebar: #ffffff;    /* Pure White */
+  --bg-card: #ffffff;       /* White */
+  --bg-hover: #f4f4f5;      /* Zinc 100 */
+  --bg-active: #e4e4e7;     /* Zinc 200 */
+  
+  /* Accents - Slightly darker for contrast */
+  --primary: #00b377;       /* Darker Green for light mode */
+  --primary-hover: #009966;
+  --primary-dim: rgba(0, 179, 119, 0.1);
+  
+  --accent: #4f46e5;        /* Indigo */
+  --accent-hover: #4338ca;
+  --accent-dim: rgba(79, 70, 229, 0.1);
+  
+  /* Text */
+  --text-main: #18181b;     /* Zinc 900 */
+  --text-muted: #71717a;    /* Zinc 500 */
+  --text-dim: #a1a1aa;      /* Zinc 400 */
+  
+  /* Borders */
+  --border: #e4e4e7;        /* Zinc 200 */
+  --border-light: #d4d4d8;  /* Zinc 300 */
+  
+  /* Functional */
+  --success: #00b377;
+  --error: #dc2626;
+  --warning: #d97706;
 }
 
 * {
@@ -244,6 +280,14 @@ body {
   margin-top: auto;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  align-items: center;
 }
 
 .status-badge {

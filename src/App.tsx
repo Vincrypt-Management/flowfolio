@@ -6,10 +6,12 @@ import { BacktestTab } from "./BacktestTab";
 import { JournalTab } from "./JournalTab";
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { SavedPortfoliosTab } from "./components/SavedPortfoliosTab";
+import { ThemeToggle } from "./components/ThemeToggle";
+import { DataSourcesPage } from "./components/DataSourcesPage";
 import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
-import { DEFAULT_SYMBOLS, EXTENDED_SYMBOLS } from "./shared/constants";
+import { DEFAULT_SYMBOLS } from "./shared/constants";
 import { saveFile } from "./shared/utils/fileSystem";
 import { 
   LayoutDashboard, 
@@ -17,8 +19,6 @@ import {
   FileText, 
   Database, 
   Activity, 
-  CheckCircle2, 
-  XCircle,
   PieChart,
   Calendar,
   ArrowRight,
@@ -69,8 +69,6 @@ function App() {
   const [templates, setTemplates] = useState<string[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [connectionStatus, setConnectionStatus] = useState<string>("");
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Rankings state
@@ -78,11 +76,6 @@ function App() {
   const [scores, setScores] = useState<SymbolScore[]>([]);
   const [isScoring, setIsScoring] = useState(false);
   const [selectedScore, setSelectedScore] = useState<SymbolScore | null>(null);
-  
-  // Data sync state
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const [cachedSymbolsCount, setCachedSymbolsCount] = useState(0);
   
   // Universe state
   const [universes, setUniverses] = useState<Universe[]>([]);
@@ -154,14 +147,8 @@ function App() {
   }
 
   async function loadCacheStats() {
-    try {
-      const stats = await invoke<{ memory_prices: number; memory_quant: number }>("get_cache_stats");
-      if (isMountedRef.current) {
-        setCachedSymbolsCount(stats.memory_prices + stats.memory_quant);
-      }
-    } catch (error) {
-      logger.error("Failed to load cache stats:", error);
-    }
+    // Cache stats are now loaded directly by the DataSourcesPage component
+    // This function is kept for backwards compatibility
   }
 
   async function loadUniverses() {
@@ -309,48 +296,6 @@ function App() {
     } catch (error) {
       if (isMountedRef.current) {
         alert("Error loading template: " + error);
-      }
-    }
-  }
-
-  async function testConnection() {
-    setIsTestingConnection(true);
-    setConnectionStatus("Testing connection...");
-    
-    try {
-      const result = await invoke<string>("test_data_connection");
-      if (isMountedRef.current) {
-        setConnectionStatus("✅ " + result);
-      }
-    } catch (error) {
-      if (isMountedRef.current) {
-        setConnectionStatus("❌ " + error);
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsTestingConnection(false);
-      }
-    }
-  }
-
-  async function syncData() {
-    setIsSyncing(true);
-    try {
-      // Prefetch symbols from the current plan or default list
-      const symbolsToSync = plan?.universe?.exchanges?.length 
-        ? EXTENDED_SYMBOLS
-        : DEFAULT_SYMBOLS;
-      
-      await invoke("prefetch_symbols", { symbols: symbolsToSync });
-      if (isMountedRef.current) {
-        setLastSyncTime(new Date().toISOString());
-        await loadCacheStats();
-      }
-    } catch (error) {
-      logger.error("Sync failed:", error);
-    } finally {
-      if (isMountedRef.current) {
-        setIsSyncing(false);
       }
     }
   }
@@ -547,6 +492,7 @@ function App() {
       </nav>
 
       <div className="sidebar-footer">
+        <ThemeToggle compact={isSidebarCollapsed} />
         <div className={`status-badge ${isSidebarCollapsed ? "collapsed" : ""}`}>
           <div className={`status-dot ${status.includes("running") || status === "Healthy" ? "online" : "offline"}`}></div>
           {!isSidebarCollapsed && <span>{status.includes("running") || status === "Healthy" ? "System Online" : status}</span>}
@@ -727,68 +673,7 @@ function App() {
         )}
 
         {activeTab === "data" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Data Sources</h1>
-              <p className="page-subtitle">Manage your market data connections</p>
-            </header>
-
-            <div className="dashboard-grid">
-              <div className="card">
-                <h3>Alpha Vantage</h3>
-                <div className="stat-row">
-                  <span className="stat-label">Provider</span>
-                  <span className="stat-value">Alpha Vantage (Free Tier)</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Quota</span>
-                  <span className="stat-value">25 requests/day</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Status</span>
-                  <span className="stat-value">Ready</span>
-                </div>
-                
-                <div style={{ marginTop: '1.5rem' }}>
-                  <button 
-                    className="btn-primary" 
-                    onClick={testConnection}
-                    disabled={isTestingConnection}
-                  >
-                    {isTestingConnection ? "Testing..." : "Test Connection"}
-                  </button>
-                </div>
-                
-                {connectionStatus && (
-                  <div className={`connection-status ${connectionStatus.startsWith("✅") ? "success" : "error"}`}>
-                    {connectionStatus.startsWith("✅") ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                    {connectionStatus.replace(/^[✅❌]\s*/, "")}
-                  </div>
-                )}
-              </div>
-
-              <div className="card">
-                <h3>Data Sync Status</h3>
-                <div className="stat-row">
-                  <span className="stat-label">Last sync</span>
-                  <span className="stat-value">{lastSyncTime ? new Date(lastSyncTime).toLocaleString() : "Never"}</span>
-                </div>
-                <div className="stat-row">
-                  <span className="stat-label">Cached symbols</span>
-                  <span className="stat-value">{cachedSymbolsCount}</span>
-                </div>
-                <div style={{ marginTop: '1.5rem' }}>
-                  <button 
-                    className="btn-primary" 
-                    onClick={syncData}
-                    disabled={isSyncing}
-                  >
-                    {isSyncing ? "Syncing..." : "Sync Now"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <DataSourcesPage onSyncComplete={loadCacheStats} />
         )}
 
         {activeTab === "rankings" && (
