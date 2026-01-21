@@ -22,14 +22,22 @@ use modules::{
         PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
         BuyList, RebalanceReport,
         review::{ReviewGenerator, YearlyReview},
-        optimizer::{PortfolioOptimizer, PortfolioOptimizationReport, OptimizationThresholds},
+        PortfolioOptimizer, PortfolioOptimizationReport,
     },
     backtest::{BacktestEngine, BacktestConfig, BacktestResult},
     journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
     quant_analysis::{QuantMetrics, QuantAnalyzer, DashboardData, HistoricalPrice},
-    progress::{ProgressEvent, PROGRESS_MANAGER, generate_operation_id, ProgressDetail},
+    progress::{ProgressEvent, generate_operation_id, ProgressDetail},
 };
-use services::{EnhancedMarketDataService, enhanced_market_service::CacheStats};
+use modules::portfolio::optimizer::OptimizationThresholds;
+use services::{
+    EnhancedMarketDataService, 
+    enhanced_market_service::CacheStats,
+    OpenRouterService,
+    AlpacaService,
+    FundamentalDataService,
+    openrouter_service::OpenRouterMessage,
+};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,10 +45,19 @@ use std::path::PathBuf;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
-// Global enhanced market data service instance (initialized without DB, upgraded on setup)
+// Global service instances
 lazy_static::lazy_static! {
     static ref ENHANCED_MARKET_SERVICE: Arc<Mutex<EnhancedMarketDataService>> = 
         Arc::new(Mutex::new(EnhancedMarketDataService::new_without_db()));
+    
+    static ref OPENROUTER_SERVICE: Arc<OpenRouterService> = 
+        Arc::new(OpenRouterService::new());
+    
+    static ref ALPACA_SERVICE: Arc<AlpacaService> = 
+        Arc::new(AlpacaService::new());
+    
+    static ref FUNDAMENTAL_SERVICE: Arc<FundamentalDataService> = 
+        Arc::new(FundamentalDataService::new());
     
     // Flag to track if database is initialized
     static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> = 
@@ -209,11 +226,29 @@ fn get_template(name: String) -> Result<VibePlanScript, String> {
         .ok_or_else(|| format!("Template '{}' not found", name))
 }
 
-/// Compile a prompt into a VibePlan
+/// Compile a prompt into a VibePlan using AI
 #[tauri::command]
-fn compile_plan(prompt: String) -> Result<VibePlanScript, String> {
-    PlanCompiler::from_prompt(&prompt)
-        .map_err(|e| e.to_string())
+async fn compile_plan(prompt: String) -> Result<VibePlanScript, String> {
+    // Check if OpenRouter is configured
+    if !OPENROUTER_SERVICE.is_configured() {
+        eprintln!("[WARN] [compile_plan] OpenRouter not configured, using fallback template");
+        return PlanCompiler::from_prompt(&prompt).map_err(|e| e.to_string());
+    }
+    
+    eprintln!("[INFO] [compile_plan] Compiling plan from prompt using AI...");
+    
+    // Use AI to compile the plan
+    let plan_json = OPENROUTER_SERVICE.compile_plan_from_prompt(&prompt).await?;
+    
+    // Convert JSON to VibePlanScript
+    let plan: VibePlanScript = serde_json::from_value(plan_json)
+        .map_err(|e| format!("Failed to convert AI response to plan: {}", e))?;
+    
+    // Validate the plan
+    PlanCompiler::validate(&plan).map_err(|e| format!("Invalid plan from AI: {}", e))?;
+    
+    eprintln!("[INFO] [compile_plan] Successfully compiled plan: {}", plan.name);
+    Ok(plan)
 }
 
 /// Validate a VibePlan
@@ -1643,6 +1678,98 @@ async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Ve
     }
 }
 
+// ==================== AI / OPENROUTER COMMANDS ====================
+
+/// Chat with AI assistant (proxied through backend)
+#[tauri::command]
+async fn ai_chat(
+    messages: Vec<OpenRouterMessage>,
+    model: Option<String>,
+    temperature: Option<f64>,
+    max_tokens: Option<u32>,
+) -> Result<String, String> {
+    OPENROUTER_SERVICE.chat(messages, model, temperature, max_tokens).await
+}
+
+/// Generate portfolio insight using AI
+#[tauri::command]
+async fn ai_generate_portfolio_insight(portfolio_data: serde_json::Value) -> Result<String, String> {
+    OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data).await
+}
+
+/// Chat with AI assistant (simple conversation)
+#[tauri::command]
+async fn ai_chat_assistant(
+    message: String,
+    history: Vec<OpenRouterMessage>,
+) -> Result<String, String> {
+    OPENROUTER_SERVICE.chat_with_assistant(message, history).await
+}
+
+/// Check if AI service is configured
+#[tauri::command]
+fn ai_is_configured() -> bool {
+    OPENROUTER_SERVICE.is_configured()
+}
+
+// ==================== ALPACA TRADING COMMANDS ====================
+
+/// Get Alpaca account info (proxied through backend)
+#[tauri::command]
+async fn alpaca_get_account() -> Result<serde_json::Value, String> {
+    let account = ALPACA_SERVICE.get_account().await?;
+    serde_json::to_value(account).map_err(|e| e.to_string())
+}
+
+/// Get Alpaca positions (proxied through backend)
+#[tauri::command]
+async fn alpaca_get_positions() -> Result<serde_json::Value, String> {
+    let positions = ALPACA_SERVICE.get_positions().await?;
+    serde_json::to_value(positions).map_err(|e| e.to_string())
+}
+
+/// Get Alpaca orders (proxied through backend)
+#[tauri::command]
+async fn alpaca_get_orders(status: Option<String>) -> Result<serde_json::Value, String> {
+    let orders = ALPACA_SERVICE.get_orders(status.as_deref()).await?;
+    serde_json::to_value(orders).map_err(|e| e.to_string())
+}
+
+/// Get Alpaca trading mode info
+#[tauri::command]
+fn alpaca_get_trading_mode() -> serde_json::Value {
+    ALPACA_SERVICE.get_trading_mode()
+}
+
+/// Check if Alpaca is configured
+#[tauri::command]
+fn alpaca_is_configured() -> bool {
+    ALPACA_SERVICE.is_configured()
+}
+
+// ==================== FUNDAMENTAL DATA COMMANDS ====================
+
+/// Get fundamental metrics for a symbol (proxied through backend)
+#[tauri::command]
+async fn get_fundamentals(symbol: String) -> Result<serde_json::Value, String> {
+    let data = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await?;
+    serde_json::to_value(data).map_err(|e| e.to_string())
+}
+
+/// Get fundamental metrics for multiple symbols
+#[tauri::command]
+async fn get_fundamentals_batch(symbols: Vec<String>) -> Result<serde_json::Value, String> {
+    let data = FUNDAMENTAL_SERVICE.get_batch_fundamentals(symbols).await;
+    serde_json::to_value(data).map_err(|e| e.to_string())
+}
+
+/// Clear fundamental data cache
+#[tauri::command]
+async fn clear_fundamentals_cache() -> Result<(), String> {
+    FUNDAMENTAL_SERVICE.clear_cache().await;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging for observability
@@ -1724,6 +1851,21 @@ pub fn run() {
             get_historical_prices,
             // Database status
             get_database_status,
+            // AI / OpenRouter (backend-proxied)
+            ai_chat,
+            ai_generate_portfolio_insight,
+            ai_chat_assistant,
+            ai_is_configured,
+            // Alpaca Trading (backend-proxied)
+            alpaca_get_account,
+            alpaca_get_positions,
+            alpaca_get_orders,
+            alpaca_get_trading_mode,
+            alpaca_is_configured,
+            // Fundamental Data (backend-proxied)
+            get_fundamentals,
+            get_fundamentals_batch,
+            clear_fundamentals_cache,
         ])
         .setup(|app| {
             // Initialize local database for caching

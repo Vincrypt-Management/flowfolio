@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use sqlx::{Pool, Sqlite};
-use serde::{Serialize, Deserialize};
 
 /// Enhanced market data service with database caching and multi-source provider
 /// Industrial-grade features: circuit breaker, retry logic, health monitoring

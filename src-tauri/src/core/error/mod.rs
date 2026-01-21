@@ -1,4 +1,2 @@
 // Core Error Module
-// Re-exports error types from the modules directory
-
-pub use crate::modules::error::*;
+// Error types available through modules::error

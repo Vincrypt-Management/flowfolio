@@ -22,6 +22,7 @@ import {
   SortDesc,
 } from 'lucide-react';
 import './SavedPortfoliosTab.css';
+import { saveFile } from '../shared/utils/fileSystem';
 
 interface SavedPortfolioInfo {
   id: string;
@@ -116,13 +117,13 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
   async function handleExportPortfolio(id: string) {
     try {
       const portfolio = await invoke<GeneratedPortfolio>('load_generated_portfolio', { id });
-      const blob = new Blob([JSON.stringify(portfolio, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${portfolio.title?.replace(/\s+/g, '_') || 'portfolio'}_${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `${portfolio.title?.replace(/\s+/g, '_') || 'portfolio'}_${new Date().toISOString().split('T')[0]}.json`;
+      
+      await saveFile(
+        JSON.stringify(portfolio, null, 2),
+        filename,
+        'application/json'
+      );
     } catch (err) {
       alert('Failed to export portfolio: ' + err);
     }

@@ -1,7 +1,8 @@
 // Fundamental Analysis Service
 // Fetches company financials, earnings, and fundamental metrics
+// ALL API calls are proxied through the Tauri backend for security
 
-import { globalRateLimiter } from './rateLimiter';
+import { invoke } from '@tauri-apps/api/core';
 import { localCacheService } from './localCache';
 
 export interface FundamentalMetrics {
@@ -76,15 +77,42 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
+// Backend response type (snake_case)
+interface BackendFundamentals {
+  symbol: string;
+  company_name: string;
+  sector: string;
+  industry: string;
+  market_cap: number;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  peg_ratio: number | null;
+  price_to_book: number | null;
+  price_to_sales: number | null;
+  ev_to_ebitda: number | null;
+  profit_margin: number | null;
+  operating_margin: number | null;
+  return_on_assets: number | null;
+  return_on_equity: number | null;
+  revenue_growth_yoy: number | null;
+  earnings_growth_yoy: number | null;
+  debt_to_equity: number | null;
+  current_ratio: number | null;
+  quick_ratio: number | null;
+  free_cash_flow: number | null;
+  dividend_yield: number | null;
+  payout_ratio: number | null;
+  eps: number | null;
+  beta: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  source: string;
+  last_updated: string;
+}
+
 class FundamentalDataService {
-  // NOTE: Using Alpha Vantage cautiously (5/min free limit, has paid tiers)
-  // Consider alternatives: Yahoo Finance (free), FMP (250/day free)
-  private alphaVantageKey = import.meta.env.VITE_ALPHAVANTAGE_API_KEY;
-  // private polygonKey = import.meta.env.VITE_POLYGON_API_KEY; // Reserved for future use
-  // private finnhubKey = import.meta.env.VITE_FINNHUB_API_KEY; // Reserved for future use
-  
   private cache: Map<string, CacheEntry<FundamentalMetrics>> = new Map();
-  private readonly CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours (increased from 24) - fundamentals rarely change
+  private readonly CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours - fundamentals rarely change
   private readonly PERSISTENT_CACHE_KEY = 'flowfolio_fundamentals_cache';
 
   private getCachedData(symbol: string): FundamentalMetrics | null {
@@ -128,161 +156,43 @@ class FundamentalDataService {
     }
   }
 
-  // Fetch from Yahoo Finance with global rate limiting
-  private async fetchFromYahoo(symbol: string): Promise<FundamentalMetrics> {
-    // Wait for rate limiter slot
-    await globalRateLimiter.waitForSlot();
-    
-    console.log(`Fetching fundamentals for ${symbol} from Yahoo Finance...`);
-    
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=defaultKeyStatistics,financialData,summaryDetail,price`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Yahoo Finance API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (!data.quoteSummary?.result?.[0]) {
-      throw new Error('Invalid Yahoo Finance response');
-    }
-    
-    const result = data.quoteSummary.result[0];
-    const keyStats = result.defaultKeyStatistics || {};
-    const financialData = result.financialData || {};
-    const summaryDetail = result.summaryDetail || {};
-    const priceData = result.price || {};
-    
-    const fundamentals: FundamentalMetrics = {
-      symbol,
-      companyName: priceData.longName || priceData.shortName || symbol,
-      sector: priceData.sector || 'Unknown',
-      industry: priceData.industry || 'Unknown',
-      marketCap: priceData.marketCap?.raw || 0,
-      
-      // Valuation
-      peRatio: summaryDetail.trailingPE?.raw || null,
-      forwardPE: summaryDetail.forwardPE?.raw || null,
-      pegRatio: keyStats.pegRatio?.raw || null,
-      priceToBook: keyStats.priceToBook?.raw || null,
-      priceToSales: summaryDetail.priceToSalesTrailing12Months?.raw || null,
-      evToEbitda: keyStats.enterpriseToEbitda?.raw || null,
-      
-      // Profitability
-      profitMargin: financialData.profitMargins?.raw || null,
-      operatingMargin: financialData.operatingMargins?.raw || null,
-      returnOnAssets: financialData.returnOnAssets?.raw || null,
-      returnOnEquity: financialData.returnOnEquity?.raw || null,
-      
-      // Growth
-      revenueGrowthYoY: financialData.revenueGrowth?.raw || null,
-      earningsGrowthYoY: financialData.earningsGrowth?.raw || null,
-      revenueGrowthQoQ: null, // Not available in this endpoint
-      
-      // Financial health
-      debtToEquity: financialData.debtToEquity?.raw || null,
-      currentRatio: financialData.currentRatio?.raw || null,
-      quickRatio: financialData.quickRatio?.raw || null,
-      freeCashFlow: financialData.freeCashflow?.raw || null,
-      
-      // Dividends
-      dividendYield: summaryDetail.dividendYield?.raw || null,
-      payoutRatio: summaryDetail.payoutRatio?.raw || null,
-      
-      // Additional
-      eps: keyStats.trailingEps?.raw || null,
-      beta: keyStats.beta?.raw || null,
-      fiftyTwoWeekHigh: summaryDetail.fiftyTwoWeekHigh?.raw || null,
-      fiftyTwoWeekLow: summaryDetail.fiftyTwoWeekLow?.raw || null,
-      
-      source: 'yahoo',
-      lastUpdated: new Date().toISOString()
-    };
-    
-    return fundamentals;
-  }
-
-  // Fetch from Alpha Vantage (backup only - 5/min free limit, has paid tiers)
-  // CAUTION: This service has paid tiers - use Yahoo Finance as primary
-  private async fetchFromAlphaVantage(symbol: string): Promise<FundamentalMetrics> {
-    if (!this.alphaVantageKey) {
-      throw new Error('Alpha Vantage API key not configured');
-    }
-    
-    console.log(`Fetching fundamentals for ${symbol} from Alpha Vantage (rate limited)...`);
-    
-    // Use global rate limiter to respect free tier limits
-    await globalRateLimiter.waitForSlot();
-    
-    const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${this.alphaVantageKey}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Alpha Vantage API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.Note || data['Error Message']) {
-      throw new Error(data.Note || data['Error Message']);
-    }
-    
-    const fundamentals: FundamentalMetrics = {
-      symbol,
-      companyName: data.Name || symbol,
-      sector: data.Sector || 'Unknown',
-      industry: data.Industry || 'Unknown',
-      marketCap: parseFloat(data.MarketCapitalization) || 0,
-      
-      // Valuation
-      peRatio: parseFloat(data.PERatio) || null,
-      forwardPE: parseFloat(data.ForwardPE) || null,
-      pegRatio: parseFloat(data.PEGRatio) || null,
-      priceToBook: parseFloat(data.PriceToBookRatio) || null,
-      priceToSales: parseFloat(data.PriceToSalesRatioTTM) || null,
-      evToEbitda: parseFloat(data.EVToEBITDA) || null,
-      
-      // Profitability
-      profitMargin: parseFloat(data.ProfitMargin) || null,
-      operatingMargin: parseFloat(data.OperatingMarginTTM) || null,
-      returnOnAssets: parseFloat(data.ReturnOnAssetsTTM) || null,
-      returnOnEquity: parseFloat(data.ReturnOnEquityTTM) || null,
-      
-      // Growth
-      revenueGrowthYoY: parseFloat(data.QuarterlyRevenueGrowthYOY) || null,
-      earningsGrowthYoY: parseFloat(data.QuarterlyEarningsGrowthYOY) || null,
+  // Convert backend response to frontend format
+  private convertToFrontendFormat(backend: BackendFundamentals): FundamentalMetrics {
+    return {
+      symbol: backend.symbol,
+      companyName: backend.company_name,
+      sector: backend.sector,
+      industry: backend.industry,
+      marketCap: backend.market_cap,
+      peRatio: backend.pe_ratio,
+      forwardPE: backend.forward_pe,
+      pegRatio: backend.peg_ratio,
+      priceToBook: backend.price_to_book,
+      priceToSales: backend.price_to_sales,
+      evToEbitda: backend.ev_to_ebitda,
+      profitMargin: backend.profit_margin,
+      operatingMargin: backend.operating_margin,
+      returnOnAssets: backend.return_on_assets,
+      returnOnEquity: backend.return_on_equity,
+      revenueGrowthYoY: backend.revenue_growth_yoy,
+      earningsGrowthYoY: backend.earnings_growth_yoy,
       revenueGrowthQoQ: null,
-      
-      // Financial health
-      debtToEquity: parseFloat(data.DebtToEquity) || null,
-      currentRatio: parseFloat(data.CurrentRatio) || null,
-      quickRatio: parseFloat(data.QuickRatio) || null,
-      freeCashFlow: null,
-      
-      // Dividends
-      dividendYield: parseFloat(data.DividendYield) || null,
-      payoutRatio: parseFloat(data.PayoutRatio) || null,
-      
-      // Additional
-      eps: parseFloat(data.EPS) || null,
-      beta: parseFloat(data.Beta) || null,
-      fiftyTwoWeekHigh: parseFloat(data['52WeekHigh']) || null,
-      fiftyTwoWeekLow: parseFloat(data['52WeekLow']) || null,
-      
-      source: 'alphavantage',
-      lastUpdated: new Date().toISOString()
+      debtToEquity: backend.debt_to_equity,
+      currentRatio: backend.current_ratio,
+      quickRatio: backend.quick_ratio,
+      freeCashFlow: backend.free_cash_flow,
+      dividendYield: backend.dividend_yield,
+      payoutRatio: backend.payout_ratio,
+      eps: backend.eps,
+      beta: backend.beta,
+      fiftyTwoWeekHigh: backend.fifty_two_week_high,
+      fiftyTwoWeekLow: backend.fifty_two_week_low,
+      source: backend.source as 'yahoo' | 'alphavantage' | 'polygon' | 'finnhub',
+      lastUpdated: backend.last_updated,
     };
-    
-    return fundamentals;
   }
 
-  // Main method with fallback chain
+  // Main method - fetches from backend
   async getFundamentals(symbol: string): Promise<FundamentalMetrics> {
     // 1. Check IndexedDB cache first (persistent across sessions)
     try {
@@ -299,74 +209,49 @@ class FundamentalDataService {
     const cached = this.getCachedData(symbol);
     if (cached) return cached;
     
-    // 3. Fetch from network with prioritized free sources
-    const providers = [
-      { name: 'yahoo', fetcher: () => this.fetchFromYahoo(symbol) }, // Free, no limits
-      { name: 'alphavantage', fetcher: () => this.fetchFromAlphaVantage(symbol) } // 5/min free (use sparingly)
-    ];
+    // 3. Fetch from backend (which handles all API calls securely)
+    console.log(`🔄 Fetching fundamentals for ${symbol} from backend...`);
     
-    let lastError: Error | null = null;
-    
-    for (const provider of providers) {
-      try {
-        console.log(`🔄 Trying ${provider.name} for ${symbol} fundamentals...`);
-        const data = await provider.fetcher();
-        
-        // Cache successful result in memory/localStorage
-        this.setCachedData(symbol, data);
-        
-        // Also cache in IndexedDB for persistence
-        localCacheService.setFundamentals(symbol, data).catch(e => {
-          console.warn('Failed to cache in IndexedDB:', e);
-        });
-        
-        console.log(`Successfully fetched ${symbol} fundamentals from ${provider.name}`);
-        
-        return data;
-      } catch (error: any) {
-        lastError = error;
-        console.warn(`${provider.name} failed for ${symbol}:`, error.message);
-        
-        // Wait before trying next provider
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+    try {
+      const backendData = await invoke<BackendFundamentals>('get_fundamentals', { symbol });
+      const data = this.convertToFrontendFormat(backendData);
+      
+      // Cache the result
+      this.setCachedData(symbol, data);
+      
+      // Also cache in IndexedDB for persistence
+      localCacheService.setFundamentals(symbol, data).catch(e => {
+        console.warn('Failed to cache in IndexedDB:', e);
+      });
+      
+      console.log(`✅ Successfully fetched ${symbol} fundamentals from ${data.source}`);
+      return data;
+    } catch (error) {
+      console.error(`Failed to fetch fundamentals for ${symbol}:`, error);
+      throw error;
     }
-    
-    throw lastError || new Error(`Failed to fetch fundamentals for ${symbol}`);
   }
 
   // Batch fetch with concurrency control
   async getBatchFundamentals(symbols: string[]): Promise<Record<string, FundamentalMetrics>> {
-    const results: Record<string, FundamentalMetrics> = {};
-    const concurrency = 2; // Conservative to avoid rate limits
-    
     console.log(`🔄 Fetching fundamentals for ${symbols.length} symbols...`);
     
-    for (let i = 0; i < symbols.length; i += concurrency) {
-      const batch = symbols.slice(i, i + concurrency);
+    try {
+      const backendData = await invoke<Record<string, BackendFundamentals>>('get_fundamentals_batch', { symbols });
+      const results: Record<string, FundamentalMetrics> = {};
       
-      const promises = batch.map(async (symbol) => {
-        try {
-          const data = await this.getFundamentals(symbol);
-          results[symbol] = data;
-          return { symbol, success: true };
-        } catch (error) {
-          console.error(`Failed to fetch fundamentals for ${symbol}:`, error);
-          return { symbol, success: false };
-        }
-      });
-      
-      await Promise.allSettled(promises);
-      
-      // Delay between batches
-      if (i + concurrency < symbols.length) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      for (const [symbol, data] of Object.entries(backendData)) {
+        const converted = this.convertToFrontendFormat(data);
+        results[symbol] = converted;
+        this.setCachedData(symbol, converted);
       }
+      
+      console.log(`✅ Fetched fundamentals for ${Object.keys(results).length}/${symbols.length} symbols`);
+      return results;
+    } catch (error) {
+      console.error('Failed to fetch batch fundamentals:', error);
+      return {};
     }
-    
-    console.log(`Fetched fundamentals for ${Object.keys(results).length}/${symbols.length} symbols`);
-    
-    return results;
   }
 
   // Clear cache

@@ -134,3 +134,8 @@ export const EVENTS = {
   CIRCUIT_OPEN: 'circuit:open',
   CIRCUIT_CLOSE: 'circuit:close',
 } as const;
+
+// ============ Default Data ============
+
+export const DEFAULT_SYMBOLS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"];
+export const EXTENDED_SYMBOLS = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "JPM", "V", "JNJ"];

@@ -6,6 +6,11 @@ import { BacktestTab } from "./BacktestTab";
 import { JournalTab } from "./JournalTab";
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { SavedPortfoliosTab } from "./components/SavedPortfoliosTab";
+import { logger } from "./core/logger";
+import { VibePlan } from "./shared/types";
+import { GeneratedPortfolio } from "./services/portfolioAgent";
+import { DEFAULT_SYMBOLS, EXTENDED_SYMBOLS } from "./shared/constants";
+import { saveFile } from "./shared/utils/fileSystem";
 import { 
   LayoutDashboard, 
   Sparkles, 
@@ -33,23 +38,6 @@ import {
 import "./App.css";
 import "./styles/optimizer.css";
 import "./styles/liveProgress.css";
-
-interface VibePlan {
-  name: string;
-  universe: {
-    exchanges: string[];
-    regions: string[];
-    sectors: string[];
-    exclude_list: string[];
-  };
-  filters: any[];
-  ranking: {
-    factors: Array<{ name: string; weight: number }>;
-  };
-  portfolio: any;
-  cadence: any;
-  risk: any;
-}
 
 interface SymbolScore {
   symbol: string;
@@ -86,7 +74,7 @@ function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Rankings state
-  const [rankingsSymbols, setRankingsSymbols] = useState<string>("AAPL,MSFT,GOOGL,AMZN,META");
+  const [rankingsSymbols, setRankingsSymbols] = useState<string>(DEFAULT_SYMBOLS.join(","));
   const [scores, setScores] = useState<SymbolScore[]>([]);
   const [isScoring, setIsScoring] = useState(false);
   const [selectedScore, setSelectedScore] = useState<SymbolScore | null>(null);
@@ -110,7 +98,7 @@ function App() {
   const [isLoadingMarket, setIsLoadingMarket] = useState(false);
   
   // Portfolio to load into VibeStudio (from SavedPortfoliosTab)
-  const [portfolioToLoad, setPortfolioToLoad] = useState<any>(null);
+  const [portfolioToLoad, setPortfolioToLoad] = useState<GeneratedPortfolio | null>(null);
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -150,7 +138,7 @@ function App() {
         setTemplates(templateList);
       }
     } catch (error) {
-      console.error("Failed to load templates:", error);
+      logger.error("Failed to load templates:", error);
     }
   }
 
@@ -161,7 +149,7 @@ function App() {
         setPlan(defaultPlan);
       }
     } catch (error) {
-      console.error("Failed to load default plan:", error);
+      logger.error("Failed to load default plan:", error);
     }
   }
 
@@ -172,7 +160,7 @@ function App() {
         setCachedSymbolsCount(stats.memory_prices + stats.memory_quant);
       }
     } catch (error) {
-      console.error("Failed to load cache stats:", error);
+      logger.error("Failed to load cache stats:", error);
     }
   }
 
@@ -183,7 +171,7 @@ function App() {
         setUniverses(universeList);
       }
     } catch (error) {
-      console.error("Failed to load universes:", error);
+      logger.error("Failed to load universes:", error);
     }
   }
 
@@ -194,7 +182,7 @@ function App() {
         setSavedPlans(plans);
       }
     } catch (error) {
-      console.error("Failed to load saved plans:", error);
+      logger.error("Failed to load saved plans:", error);
     }
   }
 
@@ -203,13 +191,12 @@ function App() {
       setIsLoadingMarket(true);
     }
     try {
-      const symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"];
-      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
+      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols: DEFAULT_SYMBOLS });
       if (isMountedRef.current) {
         setMarketPrices(prices);
       }
     } catch (error) {
-      console.error("Failed to load market prices:", error);
+      logger.error("Failed to load market prices:", error);
     } finally {
       if (isMountedRef.current) {
         setIsLoadingMarket(false);
@@ -284,14 +271,8 @@ function App() {
         journalEntries: []
       });
       
-      // Download as file
-      const blob = new Blob([bundleJson], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `flowfolio-export-${new Date().toISOString().split("T")[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `flowfolio-export-${new Date().toISOString().split("T")[0]}.json`;
+      await saveFile(bundleJson, filename, "application/json");
     } catch (error) {
       if (isMountedRef.current) {
         alert("Error exporting data: " + error);
@@ -357,8 +338,8 @@ function App() {
     try {
       // Prefetch symbols from the current plan or default list
       const symbolsToSync = plan?.universe?.exchanges?.length 
-        ? ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "JPM", "V", "JNJ"]
-        : ["AAPL", "MSFT", "GOOGL", "AMZN", "META"];
+        ? EXTENDED_SYMBOLS
+        : DEFAULT_SYMBOLS;
       
       await invoke("prefetch_symbols", { symbols: symbolsToSync });
       if (isMountedRef.current) {
@@ -366,7 +347,7 @@ function App() {
         await loadCacheStats();
       }
     } catch (error) {
-      console.error("Sync failed:", error);
+      logger.error("Sync failed:", error);
     } finally {
       if (isMountedRef.current) {
         setIsSyncing(false);
@@ -617,7 +598,7 @@ function App() {
                     </div>
                     <div className="stat-row">
                       <span className="stat-label">Rebalance</span>
-                      <span className="stat-value">{plan.cadence.quarterly_rebalance ? "Quarterly" : "Manual"}</span>
+                      <span className="stat-value">{plan.cadence.frequency === 'quarterly' ? "Quarterly" : "Manual"}</span>
                     </div>
                   </div>
                 ) : (

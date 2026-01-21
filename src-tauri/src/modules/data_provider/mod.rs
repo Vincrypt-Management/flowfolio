@@ -3,8 +3,7 @@ pub mod multi_source_provider;
 pub mod optimized_client;
 pub mod free_sources;
 
-pub use multi_source_provider::{MultiSourceProvider, MarketDataResult, StockQuote, HistoricalPrice};
-pub use free_sources::{FreeDataProviders, CompanyFundamentals, EconomicIndicator};
+pub use multi_source_provider::{MultiSourceProvider, HistoricalPrice};
 
 use anyhow::Result;
 use reqwest::Client;

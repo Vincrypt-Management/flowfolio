@@ -1,5 +1,6 @@
 // Industrial-Grade Integrated Market Data Service
 // Features: Circuit breaker, request deduplication, multi-tier caching, metrics
+// ALL API calls are proxied through the Tauri backend for security
 import { invokeWithResilience, apiClient } from './apiClient';
 import { localCacheService } from './localCache';
 
@@ -96,7 +97,7 @@ class MarketDataService {
 
   /**
    * Get current prices for multiple symbols via backend
-   * Uses: Local cache -> Backend (with circuit breaker) -> Frontend fallback
+   * Uses: Local cache -> Backend (with circuit breaker)
    */
   async getCurrentPricesBatch(symbols: string[]): Promise<Record<string, number>> {
     // 1. Check local IndexedDB cache first
@@ -128,14 +129,10 @@ class MarketDataService {
         return { ...cached, ...result };
       }
       
-      // Fallback to frontend fetching
-      console.warn('Backend returned no prices, falling back to frontend...');
-      const fallback = await this.fetchPricesFrontend(missingSymbols);
-      return { ...cached, ...fallback };
+      return cached;
     } catch (error) {
       console.error('Backend price fetch failed:', error);
-      const fallback = await this.fetchPricesFrontend(missingSymbols);
-      return { ...cached, ...fallback };
+      return cached;
     }
   }
 
@@ -180,8 +177,7 @@ class MarketDataService {
       return price;
     } catch (error) {
       console.error(`Failed to fetch current price for ${symbol}:`, error);
-      const prices = await this.fetchPricesFrontend([symbol]);
-      return prices[symbol] || 0;
+      return 0;
     }
   }
 
@@ -261,70 +257,6 @@ class MarketDataService {
    */
   getClientMetrics() {
     return apiClient.getMetrics();
-  }
-
-  // ================== FRONTEND FALLBACK ==================
-
-  /**
-   * Frontend fallback for fetching prices (when backend unavailable)
-   */
-  private async fetchPricesFrontend(symbols: string[]): Promise<Record<string, number>> {
-    const results: Record<string, number> = {};
-    
-    // Check localStorage cache first
-    for (const symbol of symbols) {
-      const cacheKey = `price_cache_${symbol}`;
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        try {
-          const { price, timestamp } = JSON.parse(cached);
-          // Use cache if less than 1 hour old
-          if (Date.now() - timestamp < 60 * 60 * 1000) {
-            results[symbol] = price;
-            continue;
-          }
-        } catch {}
-      }
-    }
-
-    // Fetch remaining from Yahoo Finance
-    const symbolsToFetch = symbols.filter(s => !results[s]);
-    
-    for (let i = 0; i < symbolsToFetch.length; i += 5) {
-      const batch = symbolsToFetch.slice(i, i + 5);
-      
-      await Promise.all(batch.map(async (symbol) => {
-        try {
-          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
-          const response = await fetch(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-            }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
-            if (price) {
-              results[symbol] = price;
-              localStorage.setItem(`price_cache_${symbol}`, JSON.stringify({ 
-                price, 
-                timestamp: Date.now() 
-              }));
-            }
-          }
-        } catch (e) {
-          console.warn(`Failed to fetch price for ${symbol}:`, e);
-        }
-      }));
-
-      // Rate limiting delay
-      if (i + 5 < symbolsToFetch.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-
-    return results;
   }
 
   // ================== LEGACY API (for backwards compatibility) ==================
@@ -432,41 +364,13 @@ class MarketDataService {
     }
   }
 
-  // Alpaca account methods (if still needed directly)
+  // Alpaca account methods - now proxied through backend
   async getAlpacaAccount() {
-    const alpacaKey = import.meta.env.VITE_ALPACA_API_KEY;
-    const alpacaSecret = import.meta.env.VITE_ALPACA_API_SECRET;
-    const isPaper = import.meta.env.VITE_ALPACA_PAPER_TRADING === 'true';
-    
-    const baseUrl = isPaper 
-      ? 'https://paper-api.alpaca.markets'
-      : 'https://api.alpaca.markets';
-    
-    const response = await fetch(`${baseUrl}/v2/account`, {
-      headers: {
-        'APCA-API-KEY-ID': alpacaKey,
-        'APCA-API-SECRET-KEY': alpacaSecret,
-      },
-    });
-    return await response.json();
+    return await invokeWithResilience('alpaca_get_account', {});
   }
 
   async getAlpacaPositions() {
-    const alpacaKey = import.meta.env.VITE_ALPACA_API_KEY;
-    const alpacaSecret = import.meta.env.VITE_ALPACA_API_SECRET;
-    const isPaper = import.meta.env.VITE_ALPACA_PAPER_TRADING === 'true';
-    
-    const baseUrl = isPaper 
-      ? 'https://paper-api.alpaca.markets'
-      : 'https://api.alpaca.markets';
-    
-    const response = await fetch(`${baseUrl}/v2/positions`, {
-      headers: {
-        'APCA-API-KEY-ID': alpacaKey,
-        'APCA-API-SECRET-KEY': alpacaSecret,
-      },
-    });
-    return await response.json();
+    return await invokeWithResilience('alpaca_get_positions', {});
   }
 }
 
