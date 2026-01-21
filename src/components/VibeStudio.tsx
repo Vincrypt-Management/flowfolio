@@ -191,19 +191,35 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
     setChatHistory([]);
     setStreamingMessage('');
 
-    // Initialize progress steps
+    // Initialize progress steps for 3-iteration agent loop with fundamental analysis
     const steps: ProgressStep[] = [
       { id: 'analyzing', label: 'Analyzing your investment goals', status: 'pending' },
-      { id: 'generating', label: 'Generating portfolio structure', status: 'pending' },
-      { id: 'fetching', label: 'Fetching all market data (prices, metrics)', status: 'pending' },
-      { id: 'quantitative', label: 'Running quantitative analysis', status: 'pending' },
-      { id: 'feedback', label: 'Applying quant feedback loop', status: 'pending' },
-      { id: 'complete', label: 'Finalizing portfolio', status: 'pending' },
+      { id: 'generating', label: 'AI generating portfolio structure', status: 'pending' },
+      { id: 'structure', label: 'Portfolio structure created', status: 'pending' },
+      { id: 'fetching', label: 'Fetching market data', status: 'pending' },
+      { id: 'enriched', label: 'Market data integrated', status: 'pending' },
+      { id: 'fundamentals', label: 'Running fundamental analysis', status: 'pending' },
+      { id: 'fundamentals-complete', label: 'Fundamental analysis complete', status: 'pending' },
+      { id: 'iteration-1', label: 'Agent Loop 1/3: Evaluating', status: 'pending' },
+      { id: 'iteration-1-drop', label: 'Loop 1: Identifying weak performers', status: 'pending' },
+      { id: 'iteration-1-replace', label: 'Loop 1: Finding replacements', status: 'pending' },
+      { id: 'iteration-1-complete', label: 'Loop 1: Complete', status: 'pending' },
+      { id: 'iteration-2', label: 'Agent Loop 2/3: Re-evaluating', status: 'pending' },
+      { id: 'iteration-2-drop', label: 'Loop 2: Identifying weak performers', status: 'pending' },
+      { id: 'iteration-2-replace', label: 'Loop 2: Finding replacements', status: 'pending' },
+      { id: 'iteration-2-complete', label: 'Loop 2: Complete', status: 'pending' },
+      { id: 'iteration-3', label: 'Agent Loop 3/3: Final optimization', status: 'pending' },
+      { id: 'iteration-3-complete', label: 'Loop 3: Complete', status: 'pending' },
+      { id: 'finalizing', label: 'Finalizing portfolio', status: 'pending' },
+      { id: 'complete', label: 'Portfolio ready', status: 'pending' },
     ];
     setProgressSteps(steps);
 
+    // Track completed steps
+    const completedSteps = new Set<string>();
+
     try {
-      console.log('[INFO] Streaming portfolio generation for:', prompt);
+      console.log('[INFO] Streaming portfolio generation with 3-iteration agent loop for:', prompt);
 
       // Use streaming API - asset type is auto-detected from prompt
       const stream = portfolioAgent.generatePortfolioStream(prompt);
@@ -216,9 +232,29 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
         
         if (update.type === 'progress' && update.step) {
           setStreamingMessage(update.message || '');
-          updateProgress(update.step, 'active', update.message);
+          
+          // Mark step as active (or completed if message starts with ✓)
+          const isCompleted = update.message?.startsWith('✓');
+          
+          if (isCompleted) {
+            completedSteps.add(update.step);
+            updateProgress(update.step, 'completed', update.message);
+          } else {
+            updateProgress(update.step, 'active', update.message);
+          }
+          
+          // Mark all previous steps as completed
+          setProgressSteps(prev => prev.map((step, idx) => {
+            const currentIdx = prev.findIndex(s => s.id === update.step);
+            if (idx < currentIdx && step.status !== 'completed') {
+              completedSteps.add(step.id);
+              return { ...step, status: 'completed' };
+            }
+            return step;
+          }));
         } else if (update.type === 'data' && update.data) {
           if (update.step) {
+            completedSteps.add(update.step);
             updateProgress(update.step, 'completed', update.message);
           }
           // Merge streaming data into portfolio
@@ -228,7 +264,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
           } as GeneratedPortfolio));
         } else if (update.type === 'complete' && update.data) {
           // Mark all as complete
-          steps.forEach(step => updateProgress(step.id, 'completed'));
+          setProgressSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
           setGeneratedPortfolio(update.data as GeneratedPortfolio);
           setStreamingMessage('');
         } else if (update.type === 'error') {
@@ -237,7 +273,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
       }
 
       if (isMountedRef.current) {
-        console.log('[INFO] Portfolio generation completed');
+        console.log('[INFO] Portfolio generation completed with 3 agent iterations');
       }
     } catch (err) {
       if (isMountedRef.current) {

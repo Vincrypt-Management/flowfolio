@@ -49,6 +49,7 @@ interface TickerData {
   symbol: string;
   timestamp: string;
   currentPrice?: number;
+  assetType?: 'stock' | 'etf' | 'bond';
   quantMetrics?: {
     sharpeRatio: number;
     sortinoRatio: number;
@@ -84,6 +85,20 @@ interface TickerData {
     valueScore: number;
     qualityScore: number;
     growthScore: number;
+  };
+  etfFundamentals?: {
+    aum: number | null;
+    expenseRatio: number | null;
+    inceptionDate: string | null;
+    indexTracked: string | null;
+    numberOfHoldings: number | null;
+    topHoldings: string[] | null;
+    category: string | null;
+    strategy: string | null;
+    distributionYield: number | null;
+    avgDailyVolume: number | null;
+    bidAskSpread: number | null;
+    premiumDiscount: number | null;
   };
   sentiment?: {
     overallSentiment: string;
@@ -501,95 +516,166 @@ export default function TickerAnalysis({
             )}
 
             {/* Fundamentals */}
-            {data.fundamentals && (
+            {(data.fundamentals || data.etfFundamentals) && (
               <div className="ta-section">
                 <div className="ta-section-header">
                   <BarChart3 size={18} />
-                  <h3>Fundamentals</h3>
+                  <h3>Fundamentals {data.assetType === 'etf' ? '(ETF)' : ''}</h3>
                 </div>
                 
-                <div className="ta-metrics-list">
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">Market Cap</span>
-                    <span className="ta-metric-value">{formatCurrency(data.fundamentals.marketCap)}</span>
+                {/* ETF-specific Fundamentals */}
+                {data.assetType === 'etf' || data.etfFundamentals ? (
+                  <div className="ta-metrics-list">
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">AUM</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.aum ? formatCurrency(data.etfFundamentals.aum) : 
+                         data.fundamentals?.marketCap && data.fundamentals.marketCap > 0 ? formatCurrency(data.fundamentals.marketCap) : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Expense Ratio</span>
+                      <span className={`ta-metric-value ${data.etfFundamentals?.expenseRatio && data.etfFundamentals.expenseRatio < 0.2 ? 'positive' : data.etfFundamentals?.expenseRatio && data.etfFundamentals.expenseRatio > 0.5 ? 'negative' : ''}`}>
+                        {data.etfFundamentals?.expenseRatio ? `${data.etfFundamentals.expenseRatio.toFixed(2)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Distribution Yield</span>
+                      <span className={`ta-metric-value ${data.etfFundamentals?.distributionYield && data.etfFundamentals.distributionYield > 2 ? 'positive' : ''}`}>
+                        {data.etfFundamentals?.distributionYield ? `${data.etfFundamentals.distributionYield.toFixed(2)}%` :
+                         data.fundamentals?.dividendYield ? `${(data.fundamentals.dividendYield * 100).toFixed(2)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Category</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.category || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Index Tracked</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.indexTracked || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name"># of Holdings</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.numberOfHoldings || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Strategy</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.strategy || 'Passive Index'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Inception Date</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.inceptionDate || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Avg Daily Volume</span>
+                      <span className="ta-metric-value">
+                        {data.etfFundamentals?.avgDailyVolume ? `${(data.etfFundamentals.avgDailyVolume / 1000000).toFixed(2)}M` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Premium/Discount</span>
+                      <span className={`ta-metric-value ${data.etfFundamentals?.premiumDiscount && Math.abs(data.etfFundamentals.premiumDiscount) < 0.1 ? 'positive' : 'negative'}`}>
+                        {data.etfFundamentals?.premiumDiscount ? `${data.etfFundamentals.premiumDiscount > 0 ? '+' : ''}${data.etfFundamentals.premiumDiscount.toFixed(2)}%` : 'N/A'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">P/E Ratio</span>
-                    <span className={`ta-metric-value ${data.fundamentals.peRatio && data.fundamentals.peRatio < 20 ? 'positive' : data.fundamentals.peRatio && data.fundamentals.peRatio > 35 ? 'negative' : ''}`}>
-                      {data.fundamentals.peRatio?.toFixed(1) ?? 'N/A'}
-                    </span>
+                ) : (
+                  // Stock Fundamentals
+                  <div className="ta-metrics-list">
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Market Cap</span>
+                      <span className="ta-metric-value">{data.fundamentals?.marketCap && data.fundamentals.marketCap > 0 ? formatCurrency(data.fundamentals.marketCap) : 'N/A'}</span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">P/E Ratio</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.peRatio && data.fundamentals.peRatio < 20 ? 'positive' : data.fundamentals?.peRatio && data.fundamentals.peRatio > 35 ? 'negative' : ''}`}>
+                        {data.fundamentals?.peRatio?.toFixed(1) ?? 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Forward P/E</span>
+                      <span className="ta-metric-value">{data.fundamentals?.forwardPE?.toFixed(1) ?? 'N/A'}</span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">P/B Ratio</span>
+                      <span className="ta-metric-value">{data.fundamentals?.priceToBook?.toFixed(2) ?? 'N/A'}</span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">EPS</span>
+                      <span className="ta-metric-value">${data.fundamentals?.eps?.toFixed(2) ?? 'N/A'}</span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">ROE</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.returnOnEquity && data.fundamentals.returnOnEquity > 0.15 ? 'positive' : ''}`}>
+                        {data.fundamentals?.returnOnEquity ? `${(data.fundamentals.returnOnEquity * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Profit Margin</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.profitMargin && data.fundamentals.profitMargin > 0.15 ? 'positive' : ''}`}>
+                        {data.fundamentals?.profitMargin ? `${(data.fundamentals.profitMargin * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Revenue Growth</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY > 0 ? 'positive' : 'negative'}`}>
+                        {data.fundamentals?.revenueGrowthYoY ? `${data.fundamentals.revenueGrowthYoY > 0 ? '+' : ''}${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Debt/Equity</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.debtToEquity && data.fundamentals.debtToEquity < 0.5 ? 'positive' : data.fundamentals?.debtToEquity && data.fundamentals.debtToEquity > 1.5 ? 'negative' : ''}`}>
+                        {data.fundamentals?.debtToEquity?.toFixed(2) ?? 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Dividend Yield</span>
+                      <span className="ta-metric-value">
+                        {data.fundamentals?.dividendYield ? `${(data.fundamentals.dividendYield * 100).toFixed(2)}%` : 'N/A'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">Forward P/E</span>
-                    <span className="ta-metric-value">{data.fundamentals.forwardPE?.toFixed(1) ?? 'N/A'}</span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">P/B Ratio</span>
-                    <span className="ta-metric-value">{data.fundamentals.priceToBook?.toFixed(2) ?? 'N/A'}</span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">EPS</span>
-                    <span className="ta-metric-value">${data.fundamentals.eps?.toFixed(2) ?? 'N/A'}</span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">ROE</span>
-                    <span className={`ta-metric-value ${data.fundamentals.returnOnEquity && data.fundamentals.returnOnEquity > 0.15 ? 'positive' : ''}`}>
-                      {data.fundamentals.returnOnEquity ? `${(data.fundamentals.returnOnEquity * 100).toFixed(1)}%` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">Profit Margin</span>
-                    <span className={`ta-metric-value ${data.fundamentals.profitMargin && data.fundamentals.profitMargin > 0.15 ? 'positive' : ''}`}>
-                      {data.fundamentals.profitMargin ? `${(data.fundamentals.profitMargin * 100).toFixed(1)}%` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">Revenue Growth</span>
-                    <span className={`ta-metric-value ${data.fundamentals.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY > 0 ? 'positive' : 'negative'}`}>
-                      {data.fundamentals.revenueGrowthYoY ? `${data.fundamentals.revenueGrowthYoY > 0 ? '+' : ''}${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">Debt/Equity</span>
-                    <span className={`ta-metric-value ${data.fundamentals.debtToEquity && data.fundamentals.debtToEquity < 0.5 ? 'positive' : data.fundamentals.debtToEquity && data.fundamentals.debtToEquity > 1.5 ? 'negative' : ''}`}>
-                      {data.fundamentals.debtToEquity?.toFixed(2) ?? 'N/A'}
-                    </span>
-                  </div>
-                  <div className="ta-metric-item">
-                    <span className="ta-metric-name">Dividend Yield</span>
-                    <span className="ta-metric-value">
-                      {data.fundamentals.dividendYield ? `${(data.fundamentals.dividendYield * 100).toFixed(2)}%` : 'N/A'}
-                    </span>
-                  </div>
-                </div>
+                )}
 
-                {/* Factor Scores */}
-                <div className="ta-subsection">
-                  <h4>Factor Scores</h4>
-                  <div className="ta-factor-list">
-                    <div className="ta-factor-item">
-                      <span className="ta-factor-name">Value</span>
-                      <div className="ta-factor-bar">
-                        <div className="ta-factor-fill" style={{ width: `${data.fundamentals.valueScore}%`, background: getScoreColor(data.fundamentals.valueScore) }} />
+                {/* Factor Scores - show for all assets */}
+                {data.fundamentals && (
+                  <div className="ta-subsection">
+                    <h4>Factor Scores</h4>
+                    <div className="ta-factor-list">
+                      <div className="ta-factor-item">
+                        <span className="ta-factor-name">Value</span>
+                        <div className="ta-factor-bar">
+                          <div className="ta-factor-fill" style={{ width: `${data.fundamentals.valueScore}%`, background: getScoreColor(data.fundamentals.valueScore) }} />
+                        </div>
+                        <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.valueScore) }}>{data.fundamentals.valueScore.toFixed(0)}</span>
                       </div>
-                      <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.valueScore) }}>{data.fundamentals.valueScore.toFixed(0)}</span>
-                    </div>
-                    <div className="ta-factor-item">
-                      <span className="ta-factor-name">Quality</span>
-                      <div className="ta-factor-bar">
-                        <div className="ta-factor-fill" style={{ width: `${data.fundamentals.qualityScore}%`, background: getScoreColor(data.fundamentals.qualityScore) }} />
+                      <div className="ta-factor-item">
+                        <span className="ta-factor-name">Quality</span>
+                        <div className="ta-factor-bar">
+                          <div className="ta-factor-fill" style={{ width: `${data.fundamentals.qualityScore}%`, background: getScoreColor(data.fundamentals.qualityScore) }} />
+                        </div>
+                        <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.qualityScore) }}>{data.fundamentals.qualityScore.toFixed(0)}</span>
                       </div>
-                      <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.qualityScore) }}>{data.fundamentals.qualityScore.toFixed(0)}</span>
-                    </div>
-                    <div className="ta-factor-item">
-                      <span className="ta-factor-name">Growth</span>
-                      <div className="ta-factor-bar">
-                        <div className="ta-factor-fill" style={{ width: `${data.fundamentals.growthScore}%`, background: getScoreColor(data.fundamentals.growthScore) }} />
+                      <div className="ta-factor-item">
+                        <span className="ta-factor-name">Growth</span>
+                        <div className="ta-factor-bar">
+                          <div className="ta-factor-fill" style={{ width: `${data.fundamentals.growthScore}%`, background: getScoreColor(data.fundamentals.growthScore) }} />
+                        </div>
+                        <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.growthScore) }}>{data.fundamentals.growthScore.toFixed(0)}</span>
                       </div>
-                      <span className="ta-factor-score" style={{ color: getScoreColor(data.fundamentals.growthScore) }}>{data.fundamentals.growthScore.toFixed(0)}</span>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

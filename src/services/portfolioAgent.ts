@@ -2,6 +2,7 @@ import { openRouterService, OpenRouterMessage } from './openrouter';
 import { marketDataService, HistoricalData } from './marketData';
 import { fundamentalDataService } from './fundamentalData';
 import { newsService } from './newsService';
+import { comprehensiveFundamentalsService } from './comprehensiveFundamentals';
 import type { MarketInsight } from './webSearch';
 // FundamentalMetrics type is used in the PortfolioAsset interface
 
@@ -17,6 +18,297 @@ const RISK_PROTECTION_CONFIG = {
   hedgeAllocationOnHighRisk: 10, // Allocation to add for hedging if risk is high
 };
 
+// ==================== BOND ANALYSIS INTERFACES ====================
+
+interface BondCashFlowTerms {
+  couponType: 'fixed' | 'floating' | 'zero' | 'step-up' | 'inflation-linked';
+  couponRate?: number; // Annual coupon rate (%)
+  paymentFrequency: 'monthly' | 'quarterly' | 'semi-annual' | 'annual';
+  maturityDate: string; // ISO date
+  yearsToMaturity: number;
+  seniority: 'senior_secured' | 'senior_unsecured' | 'subordinated' | 'junior';
+  embeddedOptions?: {
+    callable?: { callDate: string; callPrice: number };
+    puttable?: { putDate: string; putPrice: number };
+    convertible?: { conversionRatio: number; conversionPrice: number };
+  };
+}
+
+interface BondCreditAnalysis {
+  // Credit rating and outlook
+  creditRating: string; // e.g., 'AAA', 'BBB+', 'BB-'
+  ratingAgency: 'S&P' | 'Moody\'s' | 'Fitch' | 'Multiple';
+  ratingOutlook: 'positive' | 'stable' | 'negative' | 'watch';
+  
+  // Leverage metrics
+  debtToEBITDA?: number;
+  totalDebtToCapital?: number;
+  netDebtToEBITDA?: number;
+  
+  // Coverage ratios
+  interestCoverage?: number; // EBIT / Interest Expense
+  fixedChargeCoverage?: number;
+  debtServiceCoverage?: number; // For munis
+  
+  // Cash flow metrics
+  freeCashFlow?: number;
+  cashAndEquivalents?: number;
+  revolverAvailability?: number;
+  nearTermMaturities?: number; // Debt due within 1 year
+  
+  // Covenant protection
+  covenantStrength: 'strong' | 'moderate' | 'weak' | 'covenant-lite';
+  keyCovenants?: string[];
+  collateralType?: string;
+  
+  // Government-specific (for sovereign/muni bonds)
+  debtToGDP?: number;
+  fiscalBalance?: number; // % of GDP
+  fxReserves?: number; // For EM
+  currentAccountBalance?: number;
+}
+
+interface BondReturnMetrics {
+  // Yield metrics
+  yieldToMaturity: number; // YTM (%)
+  yieldToWorst: number; // YTW (%)
+  yieldToCall?: number; // For callable bonds
+  currentYield: number;
+  
+  // Spread analysis
+  spreadVsBenchmark: number; // bps over Treasury/Swaps
+  benchmarkUsed: 'Treasury' | 'Swaps' | 'SOFR';
+  optionAdjustedSpread?: number; // OAS for bonds with options
+  zSpread?: number;
+  
+  // Price metrics
+  cleanPrice: number;
+  dirtyPrice: number; // Including accrued interest
+  accruedInterest: number;
+  priceVsPar: 'premium' | 'par' | 'discount';
+  discountPremiumPct: number;
+}
+
+interface BondRiskMetrics {
+  // Duration and convexity
+  modifiedDuration: number;
+  effectiveDuration: number;
+  macaulayDuration: number;
+  convexity: number;
+  
+  // Curve risk
+  keyRateDurations?: Record<string, number>; // e.g., { '2Y': 0.5, '5Y': 1.2, '10Y': 2.1 }
+  curveExposure: 'short-end' | 'belly' | 'long-end' | 'barbell' | 'bullet';
+  
+  // Other bond risks
+  reinvestmentRisk: 'low' | 'medium' | 'high';
+  liquidityScore: number; // 1-100
+  bidAskSpread: number; // bps
+  avgDailyVolume?: number;
+  
+  // Inflation risk
+  inflationType: 'nominal' | 'inflation-linked';
+  breakEvenInflation?: number; // For TIPS comparison
+  realYield?: number;
+}
+
+interface BondTaxTreatment {
+  taxStatus: 'taxable' | 'tax-exempt' | 'partially-exempt';
+  federalTaxExempt: boolean;
+  stateTaxExempt: boolean;
+  municipalBondState?: string;
+  withholdingRate?: number; // For foreign investors
+  taxEquivalentYield?: number; // For munis, given tax bracket
+  qualifiedDividend: boolean;
+  oID?: boolean; // Original Issue Discount
+}
+
+interface BondFundamentals {
+  cashFlowTerms: BondCashFlowTerms;
+  creditAnalysis: BondCreditAnalysis;
+  returnMetrics: BondReturnMetrics;
+  riskMetrics: BondRiskMetrics;
+  taxTreatment: BondTaxTreatment;
+}
+
+// ==================== STOCK FUNDAMENTAL ANALYSIS ====================
+
+interface StockFundamentals {
+  // Valuation metrics
+  valuation: {
+    peRatio: number | null;
+    forwardPE: number | null;
+    pegRatio: number | null;
+    priceToBook: number | null;
+    priceToSales: number | null;
+    priceToFreeCashFlow: number | null;
+    evToEBITDA: number | null;
+    evToRevenue: number | null;
+  };
+  
+  // Profitability
+  profitability: {
+    grossMargin: number | null;
+    operatingMargin: number | null;
+    netProfitMargin: number | null;
+    returnOnEquity: number | null;
+    returnOnAssets: number | null;
+    returnOnInvestedCapital: number | null;
+  };
+  
+  // Growth metrics
+  growth: {
+    revenueGrowthYoY: number | null;
+    revenueGrowth3Y: number | null;
+    epsGrowthYoY: number | null;
+    epsGrowth3Y: number | null;
+    freeCashFlowGrowth: number | null;
+    bookValueGrowth: number | null;
+  };
+  
+  // Financial health
+  financialHealth: {
+    currentRatio: number | null;
+    quickRatio: number | null;
+    debtToEquity: number | null;
+    debtToAssets: number | null;
+    interestCoverage: number | null;
+    altmanZScore: number | null; // Bankruptcy predictor
+    piotroskiFScore: number | null; // Financial strength (0-9)
+  };
+  
+  // Cash flow analysis
+  cashFlow: {
+    operatingCashFlow: number | null;
+    freeCashFlow: number | null;
+    freeCashFlowYield: number | null;
+    capexToRevenue: number | null;
+    cashConversionCycle: number | null;
+  };
+  
+  // Dividend analysis
+  dividend: {
+    dividendYield: number | null;
+    payoutRatio: number | null;
+    dividendGrowth5Y: number | null;
+    yearsOfDividendGrowth: number | null;
+    exDividendDate: string | null;
+    dividendSafety: 'very_safe' | 'safe' | 'moderate' | 'at_risk' | 'cutting' | null;
+  };
+  
+  // Quality metrics
+  quality: {
+    earningsQuality: number | null; // Accruals ratio
+    revenueConsistency: number | null;
+    marginStability: number | null;
+    capexEfficiency: number | null;
+  };
+  
+  // Tax considerations for stocks
+  taxConsiderations: {
+    qualifiedDividends: boolean;
+    foreignTaxCredit: boolean;
+    potentialCapitalGains: 'short-term' | 'long-term' | null;
+    taxLossHarvestingCandidate: boolean;
+    k1Required: boolean; // For MLPs, partnerships
+  };
+}
+
+// ==================== ETF FUNDAMENTAL ANALYSIS ====================
+
+interface ETFFundamentals {
+  // Fund basics
+  fundInfo: {
+    assetClass: 'equity' | 'fixed_income' | 'commodity' | 'currency' | 'multi_asset' | 'alternative';
+    strategy: 'passive_index' | 'active' | 'smart_beta' | 'thematic' | 'leveraged' | 'inverse';
+    indexTracked?: string;
+    fundFamily: string;
+    inceptionDate: string;
+    aum: number; // Assets under management
+  };
+  
+  // Cost analysis
+  costs: {
+    expenseRatio: number;
+    tradingCost: number; // Estimated bid-ask spread cost
+    totalCostOfOwnership: number; // Expense ratio + trading costs
+    premiumDiscount: number; // NAV vs market price (%)
+    trackingError: number; // vs benchmark
+    trackingDifference: number; // Annual underperformance vs index
+  };
+  
+  // Holdings analysis
+  holdings: {
+    numberOfHoldings: number;
+    top10Weight: number; // Concentration in top 10
+    turnoverRate: number; // Annual portfolio turnover
+    sectorWeights: Record<string, number>;
+    geographicExposure: Record<string, number>;
+    marketCapBreakdown: {
+      large: number;
+      mid: number;
+      small: number;
+      micro: number;
+    };
+  };
+  
+  // Underlying metrics (weighted average of holdings)
+  underlyingMetrics: {
+    weightedAvgPE: number | null;
+    weightedAvgPB: number | null;
+    weightedAvgDividendYield: number | null;
+    weightedAvgROE: number | null;
+    weightedAvgEarningsGrowth: number | null;
+    
+    // For bond ETFs
+    weightedAvgYTM?: number;
+    weightedAvgDuration?: number;
+    weightedAvgCreditQuality?: string;
+    weightedAvgMaturity?: number;
+  };
+  
+  // Risk metrics
+  riskMetrics: {
+    standardDeviation: number;
+    beta: number;
+    r2: number; // Correlation to benchmark
+    sharpeRatio: number;
+    sortinoRatio: number;
+    maxDrawdown: number;
+    
+    // For bond ETFs
+    interestRateSensitivity?: 'low' | 'medium' | 'high';
+    creditRiskLevel?: 'investment_grade' | 'mixed' | 'high_yield';
+  };
+  
+  // Liquidity
+  liquidity: {
+    avgDailyVolume: number;
+    avgDailyDollarVolume: number;
+    bidAskSpread: number; // bps
+    impliedLiquidity: number; // Based on underlying holdings
+  };
+  
+  // Tax efficiency
+  taxEfficiency: {
+    taxCostRatio: number; // Historical tax drag
+    capitalGainsDistributions: 'none' | 'minimal' | 'moderate' | 'high';
+    qualifiedDividendPct: number;
+    taxStatus: 'taxable' | 'tax-advantaged';
+    recommendedAccountType: 'taxable' | 'tax_deferred' | 'either';
+  };
+  
+  // ESG (if applicable)
+  esg?: {
+    esgScore: number;
+    carbonFootprint: number;
+    sustainabilityRating: string;
+    exclusions: string[];
+  };
+}
+
+// ==================== PORTFOLIO ASSET INTERFACE ====================
+
 interface PortfolioAsset {
   symbol: string;
   name: string;
@@ -24,9 +316,10 @@ interface PortfolioAsset {
   rationale: string;
   currentPrice?: number;
   sector?: string;
-  assetType?: 'stock' | 'etf'; // New field to indicate asset type
+  assetType?: 'stock' | 'etf' | 'bond' | 'reit' | 'commodity';
   analystRating?: string;
   technicalSignal?: string;
+  
   // AI-generated detailed description
   aiDescription?: {
     summary: string;           // 2-3 sentence summary of why this asset
@@ -38,6 +331,8 @@ interface PortfolioAsset {
     recommendedAction: 'strong_buy' | 'buy' | 'hold' | 'reduce' | 'sell';
     targetAllocation?: string; // e.g., "10-15% of portfolio"
   };
+  
+  // Technical/Quant metrics (short-term)
   quantMetrics?: {
     sharpeRatio: number;
     volatility: number;
@@ -60,7 +355,10 @@ interface PortfolioAsset {
     gainToLossRatio?: number;
     winRate?: number;
   };
+  
   dailyReturns?: number[]; // For correlation analysis
+  
+  // Legacy fundamentals (for backward compatibility)
   fundamentals?: {
     peRatio: number | null;
     forwardPE: number | null;
@@ -74,12 +372,23 @@ interface PortfolioAsset {
     eps: number | null;
     beta: number | null;
   };
+  
+  // NEW: Comprehensive fundamental analysis by asset type
+  stockFundamentals?: StockFundamentals;
+  etfFundamentals?: ETFFundamentals;
+  bondFundamentals?: BondFundamentals;
+  
+  // Fundamental score (0-100) based on comprehensive analysis
+  fundamentalScore?: number;
+  fundamentalGrade?: 'A' | 'B' | 'C' | 'D' | 'F';
+  
   sentiment?: {
     overallSentiment: 'bullish' | 'bearish' | 'neutral';
     sentimentScore: number;
     newsCount: number;
     buzzScore: number;
   };
+  
   analystData?: {
     consensusRating: string;
     targetPriceMean: number | null;
@@ -88,8 +397,10 @@ interface PortfolioAsset {
     numberOfAnalysts: number;
     upside: number | null; // percentage upside to target
   };
+  
   compositeScore?: number; // 0-100 overall score
   marketInsights?: MarketInsight[]; // Web search insights
+  
   // Quant Feedback Loop analysis
   quantFeedback?: {
     issues: string[];
@@ -182,6 +493,7 @@ interface StreamUpdate {
   message?: string;
   data?: Partial<GeneratedPortfolio>;
   error?: string;
+  progress?: number; // 0-100 percentage
 }
 
 // Quant feedback thresholds for recommendation improvement (STOCK defaults)
@@ -871,20 +1183,20 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       const assetType = this.detectAssetType(userPrompt);
       const assetTypeLabel = assetType === 'etfs' ? 'ETF' : assetType === 'stocks' ? 'stock' : 'mixed';
       
-      yield { type: 'progress', step: 'analyzing', message: `Analyzing goals... (detected: ${assetTypeLabel} portfolio)` };
+      yield { type: 'progress', step: 'analyzing', message: `Analyzing goals... (detected: ${assetTypeLabel} portfolio)`, progress: 5 };
 
       // Use streaming AI for faster perceived response
       let portfolioStructure: GeneratedPortfolio | null = null;
       let streamedContent = '';
       
-      yield { type: 'progress', step: 'generating', message: `AI generating ${assetTypeLabel} portfolio...` };
+      yield { type: 'progress', step: 'generating', message: `AI generating ${assetTypeLabel} portfolio...`, progress: 10 };
       
       // Stream the AI response for faster feedback with asset type
       for await (const chunk of this.streamPortfolioGeneration(userPrompt, assetType)) {
         streamedContent += chunk;
         // Yield progress updates periodically
         if (streamedContent.length % 500 === 0) {
-          yield { type: 'progress', step: 'generating', message: `Generating ${assetTypeLabel}... (${Math.floor(streamedContent.length / 100)}%)` };
+          yield { type: 'progress', step: 'generating', message: `Generating ${assetTypeLabel}... (${Math.floor(streamedContent.length / 100)}%)`, progress: 15 };
         }
       }
       
@@ -899,14 +1211,15 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       yield { 
         type: 'data', 
         step: 'structure', 
-        message: 'Portfolio structure created',
-        data: portfolioStructure 
+        message: '✓ Portfolio structure created',
+        data: portfolioStructure,
+        progress: 20
       };
 
-      yield { type: 'progress', step: 'fetching', message: 'Fetching market data...' };
+      yield { type: 'progress', step: 'fetching', message: 'Fetching market data...', progress: 25 };
 
       // Fast parallel data fetching with shorter timeout (20s)
-      const enrichedPortfolio = await Promise.race([
+      let currentPortfolio = await Promise.race([
         this.enrichWithMarketDataFast(portfolioStructure),
         new Promise<never>((_, reject) => 
           setTimeout(() => reject(new Error('Market data fetch timeout')), 20000)
@@ -916,28 +1229,143 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       yield { 
         type: 'data', 
         step: 'enriched', 
-        message: 'Market data integrated',
-        data: enrichedPortfolio 
+        message: '✓ Market data integrated',
+        data: currentPortfolio,
+        progress: 30
       };
 
-      yield { type: 'progress', step: 'quantitative', message: 'Running quant analysis...' };
-
-      // Fast optimization (no AI)
-      const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
-
-      // Apply quant feedback loop to improve recommendations
-      yield { type: 'progress', step: 'feedback', message: 'Applying quant feedback...' };
-      const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
+      // === FUNDAMENTAL ANALYSIS STEP ===
+      yield { type: 'progress', step: 'fundamentals', message: 'Running comprehensive fundamental analysis...', progress: 35 };
       
-      // Use fast descriptions (no AI call) for better performance
-      yield { type: 'progress', step: 'descriptions', message: 'Finalizing portfolio...' };
-      const portfolioWithDescriptions = this.generateFastDescriptions(feedbackImprovedPortfolio);
+      currentPortfolio = await this.enrichWithFundamentalAnalysis(currentPortfolio);
+      
+      yield { 
+        type: 'data', 
+        step: 'fundamentals-complete', 
+        message: '✓ Fundamental analysis complete',
+        data: currentPortfolio,
+        progress: 40
+      };
+
+      // === 3-ITERATION AGENT LOOP ===
+      const MAX_ITERATIONS = 3;
+      const MIN_ASSETS_TO_KEEP = 6; // Keep at least 6 assets
+      
+      for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+        const iterationProgress = 30 + (iteration * 20); // 50, 70, 90
+        
+        yield { 
+          type: 'progress', 
+          step: `iteration-${iteration}`, 
+          message: `Agent Loop ${iteration}/${MAX_ITERATIONS}: Evaluating portfolio...`,
+          progress: iterationProgress - 15
+        };
+
+        // Step 1: Run quant analysis on current portfolio
+        const optimizedPortfolio = this.optimizePortfolioFast(currentPortfolio);
+        const evaluatedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
+        
+        // Step 2: Identify worst performers
+        const assetsWithScores = evaluatedPortfolio.assets.map(asset => ({
+          ...asset,
+          performanceScore: this.calculatePerformanceScore(asset),
+        })).sort((a, b) => a.performanceScore - b.performanceScore);
+        
+        // Step 3: Determine how many to drop (drop bottom 20%, min 1, max 3 per iteration)
+        const numToDrop = Math.min(
+          3,
+          Math.max(1, Math.floor(assetsWithScores.length * 0.2))
+        );
+        
+        // Only drop if we have enough assets left
+        const canDrop = assetsWithScores.length - numToDrop >= MIN_ASSETS_TO_KEEP;
+        
+        if (canDrop && iteration < MAX_ITERATIONS) {
+          const worstPerformers = assetsWithScores.slice(0, numToDrop);
+          const keepAssets = assetsWithScores.slice(numToDrop);
+          
+          const droppedSymbols = worstPerformers.map(a => a.symbol);
+          
+          yield { 
+            type: 'progress', 
+            step: `iteration-${iteration}-drop`, 
+            message: `Agent Loop ${iteration}/${MAX_ITERATIONS}: Dropping ${droppedSymbols.join(', ')} (poor performance)`,
+            progress: iterationProgress - 10
+          };
+          
+          // Step 4: Generate replacements
+          yield { 
+            type: 'progress', 
+            step: `iteration-${iteration}-replace`, 
+            message: `Agent Loop ${iteration}/${MAX_ITERATIONS}: Finding replacements...`,
+            progress: iterationProgress - 5
+          };
+          
+          const replacements = await this.generateReplacementAssets(
+            worstPerformers,
+            keepAssets,
+            userPrompt,
+            assetType
+          );
+          
+          // Step 5: Fetch market data for replacements
+          if (replacements.length > 0) {
+            const replacementSymbols = replacements.map(r => r.symbol);
+            const enrichedReplacements = await this.enrichReplacementAssets(replacements);
+            
+            // Rebuild portfolio with new assets
+            const newAssets = [...keepAssets, ...enrichedReplacements];
+            
+            // Rebalance allocations
+            const totalAllocation = newAssets.reduce((sum, a) => sum + a.allocation, 0);
+            const rebalancedAssets = newAssets.map(asset => ({
+              ...asset,
+              allocation: (asset.allocation / totalAllocation) * 100,
+            }));
+            
+            currentPortfolio = {
+              ...evaluatedPortfolio,
+              assets: rebalancedAssets,
+            };
+            
+            yield { 
+              type: 'data', 
+              step: `iteration-${iteration}-complete`, 
+              message: `✓ Agent Loop ${iteration}/${MAX_ITERATIONS}: Replaced ${droppedSymbols.join(', ')} with ${replacementSymbols.join(', ')}`,
+              data: currentPortfolio,
+              progress: iterationProgress
+            };
+          } else {
+            currentPortfolio = evaluatedPortfolio;
+            yield { 
+              type: 'progress', 
+              step: `iteration-${iteration}-complete`, 
+              message: `✓ Agent Loop ${iteration}/${MAX_ITERATIONS}: No suitable replacements found, keeping current`,
+              progress: iterationProgress
+            };
+          }
+        } else {
+          // Final iteration or can't drop more - just optimize
+          currentPortfolio = evaluatedPortfolio;
+          yield { 
+            type: 'progress', 
+            step: `iteration-${iteration}-complete`, 
+            message: `✓ Agent Loop ${iteration}/${MAX_ITERATIONS}: Portfolio optimized`,
+            progress: iterationProgress
+          };
+        }
+      }
+      
+      // Final step: Generate descriptions
+      yield { type: 'progress', step: 'finalizing', message: 'Finalizing portfolio...', progress: 95 };
+      const portfolioWithDescriptions = this.generateFastDescriptions(currentPortfolio);
       
       yield { 
         type: 'complete', 
         step: 'complete', 
-        message: 'Portfolio ready',
-        data: portfolioWithDescriptions 
+        message: '✓ Portfolio ready (3 iterations completed)',
+        data: portfolioWithDescriptions,
+        progress: 100
       };
 
     } catch (error) {
@@ -945,6 +1373,205 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
         type: 'error', 
         error: error instanceof Error ? error.message : 'Unknown error occurred' 
       };
+    }
+  }
+
+  /**
+   * Calculate a performance score for an asset based on quant metrics
+   * Higher score = better performance
+   */
+  private calculatePerformanceScore(asset: PortfolioAsset): number {
+    let score = 50; // Base score
+    
+    const metrics = asset.quantMetrics;
+    const isETF = asset.assetType === 'etf' || this.isETFSymbol(asset.symbol);
+    
+    if (metrics) {
+      // Sharpe ratio contribution (0-25 points)
+      score += Math.min(25, Math.max(-25, metrics.sharpeRatio * 20));
+      
+      // Volatility penalty (ETFs penalized more)
+      const volThreshold = isETF ? 20 : 30;
+      if (metrics.volatility > volThreshold) {
+        score -= (metrics.volatility - volThreshold) * (isETF ? 1.5 : 1);
+      }
+      
+      // Drawdown penalty
+      if (metrics.maxDrawdown < -20) {
+        score += metrics.maxDrawdown * 0.5; // Negative contribution
+      }
+      
+      // RSI contribution
+      if (metrics.rsi >= 30 && metrics.rsi <= 70) {
+        score += 5; // Neutral RSI is good
+      } else if (metrics.rsi > 80 || metrics.rsi < 20) {
+        score -= 10; // Extreme RSI is bad
+      }
+      
+      // Confidence contribution
+      score += (metrics.confidence - 50) * 0.2;
+      
+      // Signal contribution
+      const signal = metrics.recommendation?.toLowerCase() || '';
+      if (signal.includes('strong buy')) score += 15;
+      else if (signal.includes('buy')) score += 10;
+      else if (signal.includes('sell')) score -= 15;
+      else if (signal.includes('strong sell')) score -= 20;
+    }
+    
+    // Composite score contribution
+    if (asset.compositeScore) {
+      score += (asset.compositeScore - 50) * 0.3;
+    }
+    
+    // Analyst upside contribution
+    if (asset.analystData?.upside) {
+      score += Math.min(10, asset.analystData.upside * 0.3);
+    }
+    
+    return score;
+  }
+
+  /**
+   * Generate replacement assets for dropped poor performers
+   */
+  private async generateReplacementAssets(
+    droppedAssets: PortfolioAsset[],
+    keepAssets: PortfolioAsset[],
+    userPrompt: string,
+    assetType: AssetType
+  ): Promise<PortfolioAsset[]> {
+    const existingSymbols = new Set(keepAssets.map(a => a.symbol.toUpperCase()));
+    const droppedSymbols = new Set(droppedAssets.map(a => a.symbol.toUpperCase()));
+    
+    // Get total allocation to redistribute
+    const allocationToRedistribute = droppedAssets.reduce((sum, a) => sum + a.allocation, 0);
+    const allocationPerReplacement = allocationToRedistribute / droppedAssets.length;
+    
+    const messages: OpenRouterMessage[] = [
+      {
+        role: 'system',
+        content: `You are a portfolio optimization AI. Generate replacement ${assetType === 'etfs' ? 'ETFs' : assetType === 'stocks' ? 'stocks' : 'assets'} for underperforming holdings.
+
+OUTPUT FORMAT (JSON array only):
+[
+  {
+    "symbol": "SYMBOL",
+    "name": "Full Name",
+    "sector": "Sector",
+    "rationale": "Why this is a better choice",
+    "allocation": ${allocationPerReplacement.toFixed(1)}
+  }
+]
+
+RULES:
+1. Replace with similar sector exposure when possible
+2. Choose high-quality, liquid ${assetType === 'etfs' ? 'ETFs' : 'stocks'}
+3. Do NOT use any of these symbols: ${[...existingSymbols, ...droppedSymbols].join(', ')}
+4. Output ONLY valid JSON array`
+      },
+      {
+        role: 'user',
+        content: `Find ${droppedAssets.length} replacement ${assetType === 'etfs' ? 'ETFs' : 'assets'} for:
+${droppedAssets.map(a => `- ${a.symbol} (${a.sector || 'General'}) - dropped due to poor performance`).join('\n')}
+
+Original investment goal: ${userPrompt}
+
+Suggest better alternatives with similar exposure.`
+      }
+    ];
+
+    try {
+      const response = await openRouterService.chat(messages, this.vibeModel, {
+        temperature: 0.5,
+        max_tokens: 1000,
+      });
+      
+      const replacements = this.parseReplacementAssets(response);
+      
+      // Filter out any that accidentally match existing symbols
+      return replacements.filter(r => 
+        !existingSymbols.has(r.symbol.toUpperCase()) && 
+        !droppedSymbols.has(r.symbol.toUpperCase())
+      );
+    } catch (error) {
+      console.error('[AGENT LOOP] Failed to generate replacements:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Parse replacement assets from AI response
+   */
+  private parseReplacementAssets(response: string): PortfolioAsset[] {
+    try {
+      // Extract JSON array from response
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) return [];
+      
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      return parsed.map((item: any) => ({
+        symbol: item.symbol?.toUpperCase() || '',
+        name: item.name || item.symbol,
+        sector: item.sector || 'General',
+        rationale: item.rationale || 'AI-selected replacement',
+        allocation: item.allocation || 5,
+        assetType: this.isETFSymbol(item.symbol) ? 'etf' : 'stock',
+      })).filter((a: PortfolioAsset) => a.symbol);
+    } catch (error) {
+      console.error('[AGENT LOOP] Failed to parse replacements:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Enrich replacement assets with market data
+   */
+  private async enrichReplacementAssets(assets: PortfolioAsset[]): Promise<PortfolioAsset[]> {
+    const symbols = assets.map(a => a.symbol);
+    
+    try {
+      const [pricesResult, quantResult] = await Promise.allSettled([
+        Promise.race([
+          marketDataService.getCurrentPricesBatch(symbols),
+          new Promise<Record<string, number>>((resolve) => setTimeout(() => resolve({}), 5000))
+        ]),
+        Promise.race([
+          marketDataService.getQuantMetricsBatch(symbols),
+          new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 5000))
+        ]),
+      ]);
+      
+      const pricesMap = pricesResult.status === 'fulfilled' ? pricesResult.value : {};
+      const quantMetrics = quantResult.status === 'fulfilled' ? quantResult.value : [];
+      const metricsMap = new Map(quantMetrics.map((m: any) => [m.symbol, m]));
+      
+      return assets.map(asset => {
+        const metrics = metricsMap.get(asset.symbol);
+        return {
+          ...asset,
+          currentPrice: pricesMap[asset.symbol],
+          quantMetrics: metrics ? {
+            sharpeRatio: metrics.sharpeRatio || 0,
+            volatility: metrics.volatility || 20,
+            expectedReturn: metrics.expectedReturn || 0,
+            maxDrawdown: metrics.maxDrawdown || -15,
+            rsi: metrics.rsi || 50,
+            recommendation: metrics.signal || 'Hold',
+            confidence: metrics.confidence || 50,
+            sortinoRatio: metrics.sortinoRatio,
+            calmarRatio: metrics.calmarRatio,
+            beta: metrics.beta,
+            alpha: metrics.alpha,
+            var95: metrics.var95,
+          } : undefined,
+          compositeScore: metrics ? this.calculateCompositeScore(metrics, null, null, null, null, asset.assetType === 'etf') : 50,
+        };
+      });
+    } catch (error) {
+      console.error('[AGENT LOOP] Failed to enrich replacements:', error);
+      return assets;
     }
   }
 
@@ -1563,6 +2190,100 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     }
   }
 
+  /**
+   * Enrich portfolio with comprehensive fundamental analysis
+   * Provides in-depth analysis for stocks, ETFs, and bonds
+   */
+  private async enrichWithFundamentalAnalysis(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
+    console.log('[FUNDAMENTALS] Starting comprehensive fundamental analysis...');
+    const startTime = Date.now();
+    
+    try {
+      // Prepare symbols with their asset types
+      const symbolsWithTypes = portfolio.assets.map(asset => ({
+        symbol: asset.symbol,
+        assetType: this.determineAssetType(asset) as 'stock' | 'etf' | 'bond',
+      }));
+      
+      // Fetch comprehensive fundamentals in batch
+      const fundamentalsMap = await Promise.race([
+        comprehensiveFundamentalsService.getBatchAnalysis(symbolsWithTypes),
+        new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 15000))
+      ]);
+      
+      // Enrich assets with fundamental data
+      const enrichedAssets = portfolio.assets.map(asset => {
+        const analysis = fundamentalsMap[asset.symbol];
+        
+        if (!analysis) {
+          return asset;
+        }
+        
+        return {
+          ...asset,
+          stockFundamentals: analysis.stockFundamentals,
+          etfFundamentals: analysis.etfFundamentals,
+          bondFundamentals: analysis.bondFundamentals,
+          fundamentalScore: analysis.fundamentalScore,
+          fundamentalGrade: analysis.fundamentalGrade,
+          // Update aiDescription with fundamental insights
+          aiDescription: asset.aiDescription ? {
+            ...asset.aiDescription,
+            strengths: [
+              ...asset.aiDescription.strengths,
+              ...analysis.strengths.slice(0, 2),
+            ].slice(0, 5),
+            risks: [
+              ...asset.aiDescription.risks,
+              ...analysis.riskFactors.slice(0, 2),
+            ].slice(0, 4),
+            investmentThesis: analysis.investmentThesis || asset.aiDescription.investmentThesis,
+          } : undefined,
+        };
+      });
+      
+      console.log(`[FUNDAMENTALS] Analysis complete in ${Date.now() - startTime}ms`);
+      
+      return {
+        ...portfolio,
+        assets: enrichedAssets,
+      };
+    } catch (error) {
+      console.error('[FUNDAMENTALS] Analysis failed:', error);
+      return portfolio;
+    }
+  }
+
+  /**
+   * Determine asset type based on symbol and available data
+   */
+  private determineAssetType(asset: PortfolioAsset): 'stock' | 'etf' | 'bond' {
+    // Check explicit asset type
+    if (asset.assetType === 'etf') return 'etf';
+    if (asset.assetType === 'bond') return 'bond';
+    
+    // Check if it's a known ETF
+    if (this.isETFSymbol(asset.symbol)) return 'etf';
+    
+    // Check for bond indicators
+    if (this.isBondSymbol(asset.symbol)) return 'bond';
+    
+    // Default to stock
+    return 'stock';
+  }
+
+  /**
+   * Check if a symbol is likely a bond or bond-related
+   */
+  private isBondSymbol(symbol: string): boolean {
+    const bondIndicators = [
+      'BND', 'AGG', 'TLT', 'IEF', 'SHY', 'GOVT', 'VCIT', 'VCSH', 'LQD',
+      'HYG', 'JNK', 'TIPS', 'TIP', 'MUB', 'VTEB', 'EMB', 'BWX', 'BNDX',
+      'SCHO', 'SCHR', 'SCHZ', 'IGOV', 'VGSH', 'VGIT', 'VGLT', 'VMBS',
+    ];
+    return bondIndicators.includes(symbol.toUpperCase());
+  }
+
   // Calculate a composite score (0-100) based on all available data
   // ETFs use different weighting since they don't have individual fundamentals
   private calculateCompositeScore(
@@ -1775,7 +2496,13 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       const weight = asset.allocation / 100;
       const metrics = asset.quantMetrics;
       
-      if (metrics && metrics.recommendation !== 'Data pending') {
+      // Check for valid metrics - exclude "Data pending", "INSUFFICIENT DATA", and zero values
+      const hasValidMetrics = metrics && 
+        !metrics.recommendation?.toLowerCase().includes('pending') &&
+        !metrics.recommendation?.toLowerCase().includes('insufficient') &&
+        (metrics.expectedReturn !== 0 || metrics.volatility !== 0);
+      
+      if (hasValidMetrics) {
         totalReturn += metrics.expectedReturn * weight;
         totalVol += metrics.volatility * weight;
         totalVolSq += Math.pow(metrics.volatility * weight, 2);
@@ -1783,8 +2510,56 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       }
     }
 
+    // If no valid metrics, use conservative default assumptions based on asset types
+    if (validMetricsCount === 0 || (totalReturn === 0 && totalVol === 0)) {
+      console.log('[WARN] No valid quant metrics found, using conservative defaults based on asset composition');
+      
+      // Calculate defaults based on asset type composition
+      const n = assets.length;
+      
+      // Calculate weighted allocation for each type
+      let bondAlloc = 0, equityEtfAlloc = 0, stockAlloc = 0;
+      
+      for (const asset of assets) {
+        const isBond = this.isBondSymbol(asset.symbol);
+        const isETF = asset.assetType === 'etf' || this.isETFSymbol(asset.symbol);
+        const weight = asset.allocation / 100;
+        
+        if (isBond) {
+          bondAlloc += weight;
+        } else if (isETF) {
+          equityEtfAlloc += weight;
+        } else {
+          stockAlloc += weight;
+        }
+      }
+      
+      // Normalize to ensure sum = 1
+      const totalAlloc = bondAlloc + equityEtfAlloc + stockAlloc;
+      if (totalAlloc > 0) {
+        bondAlloc /= totalAlloc;
+        equityEtfAlloc /= totalAlloc;
+        stockAlloc /= totalAlloc;
+      }
+      
+      // Historical average returns: bonds ~4%, equity ETFs ~8%, stocks ~10%
+      // Historical volatilities: bonds ~5-6%, equity ETFs ~15-18%, stocks ~18-22%
+      totalReturn = (bondAlloc * 4) + (equityEtfAlloc * 8) + (stockAlloc * 10);
+      totalVol = (bondAlloc * 5) + (equityEtfAlloc * 16) + (stockAlloc * 20);
+      
+      // Apply minimum floors
+      if (totalReturn < 3) totalReturn = 5;
+      if (totalVol < 4) totalVol = 8;
+      
+      totalVolSq = Math.pow(totalVol / 100, 2) * n;
+      
+      console.log(`[INFO] Default estimates: Return=${totalReturn.toFixed(1)}%, Vol=${totalVol.toFixed(1)}% (Bond: ${(bondAlloc*100).toFixed(0)}%, ETF: ${(equityEtfAlloc*100).toFixed(0)}%, Stock: ${(stockAlloc*100).toFixed(0)}%)`);
+    }
+
     // Portfolio volatility (simplified - assumes partial correlation for conservative estimate)
-    let portfolioVolatility = Math.sqrt(totalVolSq) * 0.7 + totalVol * 0.3;
+    let portfolioVolatility = validMetricsCount > 0 
+      ? Math.sqrt(totalVolSq) * 0.7 + totalVol * 0.3
+      : totalVol; // Use direct sum if no individual metrics
     
     // Sharpe ratio with risk-free rate of 4.5%
     const riskFreeRate = 4.5;

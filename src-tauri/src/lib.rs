@@ -1354,9 +1354,16 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
     let quant_result = service.get_quant_metrics(&symbol).await;
     let price_result = service.get_current_price(&symbol).await;
     
+    // Detect if this is an ETF based on common ETF suffixes and known ETFs
+    let is_etf = is_etf_symbol(&symbol);
+    let is_bond_etf = is_bond_etf_symbol(&symbol);
+    
+    let asset_type = if is_etf { "etf" } else { "stock" };
+    
     let mut result = serde_json::json!({
         "symbol": symbol,
         "timestamp": chrono::Utc::now().to_rfc3339(),
+        "assetType": asset_type,
     });
     
     // Add current price
@@ -1374,34 +1381,34 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
         
         result["quantMetrics"] = serde_json::json!({
             "sharpeRatio": sharpe,
-            "sortinoRatio": sharpe * 1.2, // Approximation
+            "sortinoRatio": metrics.sortino_ratio.unwrap_or(sharpe * 1.2),
             "annualizedReturn": annualized_return,
             "volatility": volatility,
             "maxDrawdown": max_drawdown,
             "rsi": rsi,
             "signal": metrics.signal,
             "confidence": metrics.confidence,
-            "beta": 1.0, // Would need market correlation data
-            "alpha": annualized_return - 10.0, // vs market approx
-            "var95": volatility * 1.65 / 100.0 * 10000.0, // 95% VaR for $10k
+            "beta": metrics.beta.unwrap_or(1.0),
+            "alpha": metrics.alpha.unwrap_or(annualized_return - 10.0),
+            "var95": metrics.var_95.unwrap_or(volatility * 1.65 / 100.0 * 10000.0),
             "cvar95": volatility * 2.06 / 100.0 * 10000.0, // CVaR approximation
-            "calmarRatio": if max_drawdown.abs() > 0.01 { 
-                annualized_return / max_drawdown.abs() 
-            } else { 0.0 },
+            "calmarRatio": metrics.calmar_ratio.unwrap_or_else(|| {
+                if max_drawdown.abs() > 0.01 { annualized_return / max_drawdown.abs() } else { 0.0 }
+            }),
             "informationRatio": sharpe * 0.8,
-            "treynorRatio": annualized_return / 1.0, // Assuming beta=1
+            "treynorRatio": annualized_return / metrics.beta.unwrap_or(1.0).max(0.01),
             // Technical indicators
             "rsiSignal": if rsi < 30.0 { "oversold" } else if rsi > 70.0 { "overbought" } else { "neutral" },
             "trendStrength": if rsi > 50.0 { "bullish" } else { "bearish" },
             "momentumScore": ((rsi - 50.0) / 50.0 * 100.0).round(),
         });
         
-        // Generate estimated fundamentals based on quant metrics
-        // These are approximations for display purposes
+        // Generate factor scores based on quant metrics
         let value_score: f64 = 50.0 + (sharpe * 10.0).min(30.0).max(-30.0);
         let quality_score: f64 = 50.0 + (annualized_return / 2.0).min(30.0).max(-30.0);
         let growth_score: f64 = 50.0 + (annualized_return / 3.0).min(25.0).max(-25.0);
         
+        // Generate fundamentals - different for ETFs vs stocks
         result["fundamentals"] = serde_json::json!({
             "peRatio": null,
             "forwardPE": null,
@@ -1413,11 +1420,38 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
             "dividendYield": null,
             "marketCap": 0,
             "eps": null,
-            "beta": 1.0,
+            "beta": metrics.beta.unwrap_or(1.0),
             "valueScore": value_score.max(0.0).min(100.0),
             "qualityScore": quality_score.max(0.0).min(100.0),
             "growthScore": growth_score.max(0.0).min(100.0),
         });
+        
+        // Add ETF-specific fundamentals for ETFs
+        if is_etf {
+            let (category, strategy, index_tracked) = get_etf_info(&symbol, is_bond_etf);
+            
+            // Estimate distribution yield based on asset type
+            let dist_yield = if is_bond_etf {
+                Some(4.0 + (rsi - 50.0) / 25.0) // Bond ETFs: ~3-5% yield
+            } else {
+                Some(1.5 + (rsi - 50.0) / 50.0) // Equity ETFs: ~1-2% yield
+            };
+            
+            result["etfFundamentals"] = serde_json::json!({
+                "aum": null,
+                "expenseRatio": get_estimated_expense_ratio(&symbol),
+                "inceptionDate": null,
+                "indexTracked": index_tracked,
+                "numberOfHoldings": null,
+                "topHoldings": null,
+                "category": category,
+                "strategy": strategy,
+                "distributionYield": dist_yield,
+                "avgDailyVolume": null,
+                "bidAskSpread": null,
+                "premiumDiscount": null,
+            });
+        }
         
         // Generate estimated sentiment based on RSI and signal
         let sentiment_score: f64 = (rsi - 50.0) / 50.0;
@@ -1449,6 +1483,136 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
     }
     
     Ok(result)
+}
+
+/// Check if a symbol is an ETF
+fn is_etf_symbol(symbol: &str) -> bool {
+    let symbol_upper = symbol.to_uppercase();
+    
+    // Common ETF patterns and known ETFs
+    let etf_patterns = [
+        // Bond ETFs
+        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
+        "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
+        "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
+        // Equity ETFs
+        "SPY", "IVV", "VOO", "VTI", "QQQ", "DIA", "IWM", "VGT", "XLK", "XLF",
+        "XLE", "XLV", "XLP", "XLY", "XLI", "XLB", "XLU", "XLRE", "VNQ", "IYR",
+        "VEA", "VWO", "EFA", "EEM", "IEFA", "IEMG", "SCHF", "SCHB", "SCHA",
+        "VIG", "VYM", "SCHD", "DVY", "HDV", "SDY", "VTV", "VUG", "IJH", "IJR",
+        "IWF", "IWD", "IWN", "IWO", "IWP", "IWS", "MDY", "RSP", "MTUM", "QUAL",
+        "USMV", "EFAV", "EEMV", "NOBL", "ARKK", "ARKW", "ARKG", "ARKF", "ARKQ",
+        // Commodity ETFs
+        "GLD", "IAU", "SLV", "USO", "DBC", "PDBC", "GSG", "GLDM",
+    ];
+    
+    etf_patterns.iter().any(|p| symbol_upper == *p) ||
+    symbol_upper.ends_with("ETF") ||
+    symbol_upper.contains("BOND") ||
+    symbol_upper.contains("TREASURY")
+}
+
+/// Check if a symbol is a bond ETF
+fn is_bond_etf_symbol(symbol: &str) -> bool {
+    let symbol_upper = symbol.to_uppercase();
+    
+    let bond_etfs = [
+        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
+        "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
+        "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
+        "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
+    ];
+    
+    bond_etfs.iter().any(|p| symbol_upper == *p) ||
+    symbol_upper.contains("BOND") ||
+    symbol_upper.contains("TREASURY")
+}
+
+/// Get ETF category, strategy, and index tracked
+fn get_etf_info(symbol: &str, is_bond: bool) -> (String, String, Option<String>) {
+    let symbol_upper = symbol.to_uppercase();
+    
+    if is_bond {
+        let category = if symbol_upper.contains("TIP") || symbol_upper == "SCHP" || symbol_upper == "VTIP" {
+            "Inflation-Protected Bonds"
+        } else if symbol_upper == "TLT" || symbol_upper == "VGLT" || symbol_upper == "SPTL" {
+            "Long-Term Treasury"
+        } else if symbol_upper == "IEF" || symbol_upper == "VGIT" {
+            "Intermediate-Term Treasury"
+        } else if symbol_upper == "SHY" || symbol_upper == "SCHO" || symbol_upper == "SPTS" {
+            "Short-Term Treasury"
+        } else if symbol_upper == "LQD" || symbol_upper == "VCIT" || symbol_upper == "IGLB" {
+            "Investment Grade Corporate"
+        } else if symbol_upper == "HYG" || symbol_upper == "JNK" || symbol_upper == "HYMB" {
+            "High Yield"
+        } else if symbol_upper == "BNDX" || symbol_upper == "BWX" || symbol_upper == "EMB" {
+            "International Bond"
+        } else if symbol_upper == "MUB" || symbol_upper == "SUB" || symbol_upper == "CMF" {
+            "Municipal Bond"
+        } else {
+            "Total Bond Market"
+        };
+        
+        return (category.to_string(), "Passive Index".to_string(), Some("Bond Aggregate Index".to_string()));
+    }
+    
+    // Equity ETF categories
+    let (category, index) = if symbol_upper == "SPY" || symbol_upper == "IVV" || symbol_upper == "VOO" {
+        ("U.S. Large Cap", Some("S&P 500"))
+    } else if symbol_upper == "QQQ" {
+        ("U.S. Large Cap Growth", Some("NASDAQ-100"))
+    } else if symbol_upper == "VTI" || symbol_upper == "SCHB" || symbol_upper == "ITOT" {
+        ("U.S. Total Market", Some("CRSP US Total Market Index"))
+    } else if symbol_upper == "IWM" || symbol_upper == "IJR" || symbol_upper == "SCHA" {
+        ("U.S. Small Cap", Some("Russell 2000"))
+    } else if symbol_upper == "VEA" || symbol_upper == "EFA" || symbol_upper == "SCHF" || symbol_upper == "IEFA" {
+        ("International Developed", Some("MSCI EAFE"))
+    } else if symbol_upper == "VWO" || symbol_upper == "EEM" || symbol_upper == "IEMG" {
+        ("Emerging Markets", Some("MSCI Emerging Markets"))
+    } else if symbol_upper.starts_with("XL") {
+        ("U.S. Sector", None)
+    } else if symbol_upper.starts_with("ARK") {
+        ("Thematic Growth", None)
+    } else if symbol_upper == "GLD" || symbol_upper == "IAU" || symbol_upper == "SLV" {
+        ("Precious Metals", None)
+    } else {
+        ("Diversified", None)
+    };
+    
+    (category.to_string(), "Passive Index".to_string(), index.map(|s| s.to_string()))
+}
+
+/// Get estimated expense ratio for an ETF
+fn get_estimated_expense_ratio(symbol: &str) -> Option<f64> {
+    let symbol_upper = symbol.to_uppercase();
+    
+    // Low-cost providers (Vanguard, Schwab, Fidelity)
+    if symbol_upper.starts_with("V") || symbol_upper.starts_with("SCH") || symbol_upper.starts_with("FI") {
+        Some(0.03)
+    }
+    // iShares core ETFs
+    else if symbol_upper == "IVV" || symbol_upper == "IEFA" || symbol_upper == "IEMG" || symbol_upper == "AGG" {
+        Some(0.03)
+    }
+    // Standard ETFs
+    else if symbol_upper == "SPY" || symbol_upper == "QQQ" || symbol_upper == "DIA" {
+        Some(0.09)
+    }
+    // Sector ETFs
+    else if symbol_upper.starts_with("XL") {
+        Some(0.09)
+    }
+    // ARK ETFs
+    else if symbol_upper.starts_with("ARK") {
+        Some(0.75)
+    }
+    // Bond ETFs
+    else if symbol_upper == "BND" || symbol_upper == "AGG" || symbol_upper == "BNDX" {
+        Some(0.03)
+    }
+    else {
+        Some(0.20) // Default moderate expense ratio
+    }
 }
 
 // ==================== HISTORICAL DATA ====================
