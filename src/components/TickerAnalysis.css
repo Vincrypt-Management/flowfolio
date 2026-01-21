@@ -655,3 +655,229 @@
     display: none;
   }
 }
+
+/* Small mobile screens */
+@media (max-width: 480px) {
+  .ticker-analysis-overlay {
+    padding: 0;
+  }
+  
+  .ticker-analysis-modal {
+    border-radius: 0;
+    max-height: 100%;
+  }
+  
+  .ta-header {
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .ta-header-left {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .ta-symbol {
+    font-size: 1.15rem;
+  }
+  
+  .ta-price {
+    font-size: 0.95rem;
+  }
+  
+  .ta-signal {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+  }
+  
+  .ta-ticker-select {
+    font-size: 0.95rem;
+    padding: 0.35rem 0.6rem;
+  }
+  
+  .ta-header-right {
+    gap: 0.25rem;
+  }
+  
+  .ta-btn-icon,
+  .ta-btn-close {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .ta-content {
+    padding: 0.75rem 1rem;
+    max-height: calc(100vh - 60px);
+  }
+  
+  .ta-section {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+  
+  .ta-section-header {
+    margin-bottom: 0.75rem;
+  }
+  
+  .ta-section-header h3 {
+    font-size: 0.85rem;
+  }
+  
+  .ta-score {
+    font-size: 0.75rem;
+  }
+  
+  /* Summary Grid Mobile */
+  .ta-summary-grid {
+    gap: 1rem;
+  }
+  
+  .ta-summary-chart {
+    max-width: 180px;
+  }
+  
+  .ta-summary-stats {
+    gap: 0.35rem;
+  }
+  
+  .ta-stat-row {
+    padding: 0.3rem 0;
+  }
+  
+  .ta-stat-label {
+    font-size: 0.7rem;
+  }
+  
+  .ta-stat-value {
+    font-size: 0.8rem;
+  }
+  
+  /* AI Summary */
+  .ta-ai-summary {
+    padding: 0.6rem 0.75rem;
+  }
+  
+  .ta-ai-summary p {
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  
+  /* Metrics List */
+  .ta-metrics-list {
+    gap: 0.35rem;
+  }
+  
+  .ta-metric-item {
+    padding: 0.4rem 0.6rem;
+  }
+  
+  .ta-metric-name {
+    font-size: 0.7rem;
+  }
+  
+  .ta-metric-value {
+    font-size: 0.8rem;
+    min-width: 50px;
+  }
+  
+  /* Risk Row */
+  .ta-risk-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .ta-risk-item {
+    padding: 0.4rem 0.6rem;
+  }
+  
+  .ta-risk-label {
+    font-size: 0.7rem;
+  }
+  
+  .ta-risk-value {
+    font-size: 0.9rem;
+  }
+  
+  /* Factor List */
+  .ta-factor-list {
+    gap: 0.4rem;
+  }
+  
+  .ta-factor-name {
+    font-size: 0.7rem;
+    min-width: 50px;
+  }
+  
+  .ta-factor-score {
+    font-size: 0.75rem;
+    min-width: 25px;
+  }
+  
+  /* Badges */
+  .ta-sentiment-badge,
+  .ta-analyst-badge {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+  }
+  
+  /* Detail List */
+  .ta-detail-row {
+    font-size: 0.7rem;
+  }
+  
+  .ta-detail-row.highlight {
+    padding: 0.3rem 0.4rem;
+  }
+  
+  /* Lists */
+  .ta-list li {
+    font-size: 0.75rem;
+    gap: 0.35rem;
+  }
+  
+  .ta-list.warnings li {
+    padding: 0.4rem;
+  }
+  
+  /* Actions */
+  .ta-actions {
+    gap: 0.4rem;
+  }
+  
+  .ta-action {
+    padding: 0.5rem 0.6rem;
+  }
+  
+  .ta-action-priority {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
+  }
+  
+  .ta-action-text {
+    font-size: 0.75rem;
+  }
+  
+  .ta-action-timeline {
+    font-size: 0.65rem;
+  }
+  
+  /* Footer */
+  .ta-footer {
+    padding: 0.5rem 0;
+    font-size: 0.65rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  /* Subsection */
+  .ta-subsection {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+  }
+  
+  .ta-subsection h4 {
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+}
