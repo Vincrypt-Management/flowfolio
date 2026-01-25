@@ -881,80 +881,31 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     targetAllocation: string;
   }> {
     try {
-      // Clean the response - remove markdown code blocks
+      // Clean the response
       let cleaned = response.trim();
       cleaned = cleaned.replace(/```json\s*/gi, '');
-      cleaned = cleaned.replace(/```JSON\s*/gi, '');
       cleaned = cleaned.replace(/```\s*/g, '');
-
-      // Find JSON array with balanced brackets
+      
+      // Find JSON array
       const firstBracket = cleaned.indexOf('[');
-      if (firstBracket === -1) {
+      const lastBracket = cleaned.lastIndexOf(']');
+      
+      if (firstBracket === -1 || lastBracket === -1) {
         console.warn('[AI DESCRIPTION] No JSON array found in response');
         return [];
       }
-
-      // Use balanced bracket search
-      let depth = 0;
-      let inString = false;
-      let escapeNext = false;
-
-      for (let i = firstBracket; i < cleaned.length; i++) {
-        const char = cleaned[i];
-
-        if (escapeNext) { escapeNext = false; continue; }
-        if (char === '\\') { escapeNext = true; continue; }
-        if (char === '"' && !escapeNext) { inString = !inString; continue; }
-
-        if (!inString) {
-          if (char === '[') depth++;
-          if (char === ']') {
-            depth--;
-            if (depth === 0) {
-              let jsonStr = cleaned.substring(firstBracket, i + 1);
-              // Apply JSON cleaning
-              jsonStr = this.cleanJSON(jsonStr);
-
-              const parsed = JSON.parse(jsonStr);
-
-              if (!Array.isArray(parsed)) {
-                console.warn('[AI DESCRIPTION] Response is not an array');
-                return [];
-              }
-
-              // Normalize symbols
-              return parsed.map((item: any) => ({
-                ...item,
-                symbol: (item.symbol || '').toString().toUpperCase().trim()
-              }));
-            }
-          }
-        }
-      }
-
-      // Fallback to simple first/last bracket
-      const lastBracket = cleaned.lastIndexOf(']');
-      if (lastBracket === -1 || lastBracket <= firstBracket) {
-        console.warn('[AI DESCRIPTION] Invalid JSON array structure');
-        return [];
-      }
-
-      let jsonStr = cleaned.substring(firstBracket, lastBracket + 1);
-      jsonStr = this.cleanJSON(jsonStr);
+      
+      const jsonStr = cleaned.substring(firstBracket, lastBracket + 1);
       const parsed = JSON.parse(jsonStr);
-
+      
       if (!Array.isArray(parsed)) {
         console.warn('[AI DESCRIPTION] Response is not an array');
         return [];
       }
-
-      return parsed.map((item: any) => ({
-        ...item,
-        symbol: (item.symbol || '').toString().toUpperCase().trim()
-      }));
+      
+      return parsed;
     } catch (error) {
       console.error('[AI DESCRIPTION] Failed to parse descriptions:', error);
-      console.error('[AI DESCRIPTION] Response was:', response.substring(0, 500));
       return [];
     }
   }
@@ -1232,43 +1183,100 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       const assetType = this.detectAssetType(userPrompt);
       const assetTypeLabel = assetType === 'etfs' ? 'ETF' : assetType === 'stocks' ? 'stock' : 'mixed';
       
-      yield { type: 'progress', step: 'analyzing', message: `Analyzing goals... (detected: ${assetTypeLabel} portfolio)`, progress: 5 };
+      // Step 1: Analyzing
+      yield { type: 'progress', step: 'analyzing', message: `Analyzing request (${assetTypeLabel} portfolio)`, progress: 5 };
 
       // Use streaming AI for faster perceived response
       let portfolioStructure: GeneratedPortfolio | null = null;
       let streamedContent = '';
       
-      yield { type: 'progress', step: 'generating', message: `AI generating ${assetTypeLabel} portfolio...`, progress: 10 };
+      // Step 2: Generating AI portfolio
+      yield { type: 'progress', step: 'generating', message: `Generating ${assetTypeLabel} portfolio with AI...`, progress: 8 };
       
       // Stream the AI response for faster feedback with asset type
       for await (const chunk of this.streamPortfolioGeneration(userPrompt, assetType)) {
         streamedContent += chunk;
         // Yield progress updates periodically
         if (streamedContent.length % 500 === 0) {
-          yield { type: 'progress', step: 'generating', message: `Generating ${assetTypeLabel}... (${Math.floor(streamedContent.length / 100)}%)`, progress: 15 };
+          yield { type: 'progress', step: 'generating', message: `AI generating... (${streamedContent.length} chars received)`, progress: 12 };
         }
       }
       
-      // Parse the streamed content
-      try {
-        portfolioStructure = this.parsePortfolioJSON(streamedContent);
-      } catch (parseError) {
-        console.error('[ERROR] Failed to parse streamed portfolio:', parseError);
-        console.error('[ERROR] Raw AI response:', streamedContent);
-        // Include the actual error in the message so user can see what went wrong
-        const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
-        throw new Error(`Failed to parse AI response: ${errorMsg}`);
+      // Parse the streamed content with retry
+      const maxRetries = 3;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            // Add delay before retry (exponential backoff: 2s, 4s, 6s)
+            const delayMs = attempt * 2000;
+            yield { type: 'progress', step: 'retry', message: `Retry ${attempt}/${maxRetries}: Waiting ${delayMs/1000}s...`, progress: 11 };
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            
+            yield { type: 'progress', step: 'retry', message: `Retry ${attempt}/${maxRetries}: Regenerating...`, progress: 12 };
+            streamedContent = '';
+            for await (const chunk of this.streamPortfolioGeneration(userPrompt, assetType)) {
+              streamedContent += chunk;
+              // Yield progress during retry streaming
+              if (streamedContent.length % 300 === 0) {
+                yield { type: 'progress', step: 'retry', message: `Retry ${attempt}/${maxRetries}: Receiving... (${streamedContent.length} chars)`, progress: 13 };
+              }
+            }
+          }
+          
+          // Check for empty content before parsing
+          if (!streamedContent || streamedContent.trim().length === 0) {
+            throw new Error('AI returned empty response - service may be temporarily unavailable');
+          }
+          
+          portfolioStructure = this.parsePortfolioJSON(streamedContent);
+          
+          // If we succeeded on a retry, log it
+          if (attempt > 0) {
+            console.log(`[SUCCESS] Portfolio generated successfully on retry attempt ${attempt}`);
+            yield { type: 'progress', step: 'retry', message: `✓ Retry ${attempt} succeeded`, progress: 18 };
+          }
+          
+          break; // Success, exit retry loop
+        } catch (parseError) {
+          const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown parse error';
+          console.error(`[ERROR] Parse attempt ${attempt + 1}/${maxRetries + 1} failed:`, errorMsg);
+          console.error('[DEBUG] Raw AI response (first 500 chars):', streamedContent?.substring(0, 500) || '(empty)');
+          
+          // Yield error progress to frontend
+          if (attempt < maxRetries) {
+            yield { type: 'progress', step: 'retry', message: `Attempt ${attempt + 1} failed, retrying...`, progress: 10 + attempt };
+          }
+          
+          if (attempt === maxRetries) {
+            // Provide more helpful error message
+            let userFriendlyError = 'AI service returned an invalid response.';
+            if (errorMsg.includes('Empty')) {
+              userFriendlyError = 'AI service returned empty response. The service may be overloaded or temporarily unavailable.';
+            } else if (errorMsg.includes('JSON')) {
+              userFriendlyError = 'AI returned malformed data. This can happen with complex prompts.';
+            }
+            throw new Error(`${userFriendlyError} Please try again or simplify your request. (Technical: ${errorMsg})`);
+          }
+        }
       }
       
+      // Type guard: portfolioStructure must be defined after successful parsing
+      if (!portfolioStructure) {
+        throw new Error('Failed to generate portfolio structure');
+      }
+      
+      // Step 3: Structure created
       yield { 
         type: 'data', 
         step: 'structure', 
-        message: '✓ Portfolio structure created',
+        message: `✓ Portfolio structure created (${portfolioStructure.assets?.length || 0} assets)`,
         data: portfolioStructure,
         progress: 20
       };
 
-      yield { type: 'progress', step: 'fetching', message: 'Fetching market data...', progress: 25 };
+      // Step 4: Fetching market data
+      yield { type: 'progress', step: 'market-data', message: `Fetching market data for ${portfolioStructure.assets?.length || 0} symbols...`, progress: 22 };
 
       // Fast parallel data fetching with shorter timeout (20s)
       let currentPortfolio = await Promise.race([
@@ -1278,39 +1286,43 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
         )
       ]);
       
+      // Step 5: Market data enriched
       yield { 
         type: 'data', 
-        step: 'enriched', 
-        message: '✓ Market data integrated',
+        step: 'market-data', 
+        message: '✓ Market data loaded (prices, metrics)',
         data: currentPortfolio,
-        progress: 30
+        progress: 28
       };
 
-      // === FUNDAMENTAL ANALYSIS STEP ===
-      yield { type: 'progress', step: 'fundamentals', message: 'Running comprehensive fundamental analysis...', progress: 35 };
+      // Step 6: Fundamental analysis
+      yield { type: 'progress', step: 'fundamentals', message: 'Running fundamental analysis...', progress: 32 };
       
       currentPortfolio = await this.enrichWithFundamentalAnalysis(currentPortfolio);
       
+      // Step 7: Fundamentals complete
       yield { 
         type: 'data', 
-        step: 'fundamentals-complete', 
+        step: 'fundamentals', 
         message: '✓ Fundamental analysis complete',
         data: currentPortfolio,
-        progress: 40
+        progress: 38
       };
 
       // === 3-ITERATION AGENT LOOP ===
       const MAX_ITERATIONS = 3;
-      const MIN_ASSETS_TO_KEEP = 6; // Keep at least 6 assets
+      const MIN_ASSETS_TO_KEEP = 6;
       
       for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-        const iterationProgress = 30 + (iteration * 20); // 50, 70, 90
+        // Progress: iteration 1: 40-55, iteration 2: 55-72, iteration 3: 72-90
+        const iterationStart = 40 + ((iteration - 1) * 17);
+        const iterationEnd = iterationStart + 15;
         
         yield { 
           type: 'progress', 
-          step: `iteration-${iteration}`, 
-          message: `Agent Loop ${iteration}/${MAX_ITERATIONS}: Evaluating portfolio...`,
-          progress: iterationProgress - 15
+          step: `loop-${iteration}`, 
+          message: `Loop ${iteration}/3: Evaluating ${currentPortfolio.assets.length} assets...`,
+          progress: iterationStart
         };
 
         // Step 1: Run quant analysis on current portfolio
@@ -1340,17 +1352,17 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
           
           yield { 
             type: 'progress', 
-            step: `iteration-${iteration}-drop`, 
-            message: `Agent Loop ${iteration}/${MAX_ITERATIONS}: Dropping ${droppedSymbols.join(', ')} (poor performance)`,
-            progress: iterationProgress - 10
+            step: `loop-${iteration}`, 
+            message: `Loop ${iteration}/3: Dropping weak performers (${droppedSymbols.join(', ')})`,
+            progress: iterationStart + 5
           };
           
-          // Step 4: Generate replacements
+          // Generate replacements
           yield { 
             type: 'progress', 
-            step: `iteration-${iteration}-replace`, 
-            message: `Agent Loop ${iteration}/${MAX_ITERATIONS}: Finding replacements...`,
-            progress: iterationProgress - 5
+            step: `loop-${iteration}`, 
+            message: `Loop ${iteration}/3: Finding ${droppedSymbols.length} replacements...`,
+            progress: iterationStart + 8
           };
           
           const replacements = await this.generateReplacementAssets(
@@ -1360,7 +1372,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
             assetType
           );
           
-          // Step 5: Fetch market data for replacements
+          // Fetch market data for replacements
           if (replacements.length > 0) {
             const replacementSymbols = replacements.map(r => r.symbol);
             const enrichedReplacements = await this.enrichReplacementAssets(replacements);
@@ -1382,62 +1394,58 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
             
             yield { 
               type: 'data', 
-              step: `iteration-${iteration}-complete`, 
-              message: `✓ Agent Loop ${iteration}/${MAX_ITERATIONS}: Replaced ${droppedSymbols.join(', ')} with ${replacementSymbols.join(', ')}`,
+              step: `loop-${iteration}`, 
+              message: `✓ Loop ${iteration}/3: Replaced ${droppedSymbols.join(', ')} → ${replacementSymbols.join(', ')}`,
               data: currentPortfolio,
-              progress: iterationProgress
+              progress: iterationEnd
             };
           } else {
             currentPortfolio = evaluatedPortfolio;
             yield { 
               type: 'progress', 
-              step: `iteration-${iteration}-complete`, 
-              message: `✓ Agent Loop ${iteration}/${MAX_ITERATIONS}: No suitable replacements found, keeping current`,
-              progress: iterationProgress
+              step: `loop-${iteration}`, 
+              message: `✓ Loop ${iteration}/3: No replacements needed`,
+              progress: iterationEnd
             };
           }
         } else {
           // Final iteration or can't drop more - just optimize
           currentPortfolio = evaluatedPortfolio;
-          yield { 
-            type: 'progress', 
-            step: `iteration-${iteration}-complete`, 
-            message: `✓ Agent Loop ${iteration}/${MAX_ITERATIONS}: Portfolio optimized`,
-            progress: iterationProgress
-          };
+          if (iteration === MAX_ITERATIONS) {
+            yield { 
+              type: 'data', 
+              step: `loop-${iteration}`, 
+              message: `✓ Loop ${iteration}/3: Final optimization complete`,
+              data: currentPortfolio,
+              progress: iterationEnd
+            };
+          } else {
+            yield { 
+              type: 'progress', 
+              step: `loop-${iteration}`, 
+              message: `✓ Loop ${iteration}/3: Optimized (min assets reached)`,
+              progress: iterationEnd
+            };
+          }
         }
       }
       
       // Final step: Generate descriptions
-      yield { type: 'progress', step: 'finalizing', message: 'Finalizing portfolio...', progress: 95 };
+      yield { type: 'progress', step: 'finalizing', message: 'Finalizing portfolio...', progress: 92 };
       const portfolioWithDescriptions = this.generateFastDescriptions(currentPortfolio);
       
       yield { 
         type: 'complete', 
         step: 'complete', 
-        message: '✓ Portfolio ready (3 iterations completed)',
+        message: `✓ Portfolio ready with ${portfolioWithDescriptions.assets.length} assets`,
         data: portfolioWithDescriptions,
         progress: 100
       };
 
     } catch (error) {
-      // Log the full error for debugging
-      console.error('[PORTFOLIO AGENT] Full error:', error);
-      console.error('[PORTFOLIO AGENT] Error type:', typeof error);
-      console.error('[PORTFOLIO AGENT] Error constructor:', error?.constructor?.name);
-
-      let errorMessage = 'Unknown error occurred';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
-      } else if (error && typeof error === 'object') {
-        errorMessage = JSON.stringify(error);
-      }
-
-      yield {
-        type: 'error',
-        error: errorMessage
+      yield { 
+        type: 'error', 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
       };
     }
   }
@@ -1571,72 +1579,22 @@ Suggest better alternatives with similar exposure.`
    */
   private parseReplacementAssets(response: string): PortfolioAsset[] {
     try {
-      // Clean markdown and extract JSON array
-      let cleaned = response.trim();
-      cleaned = cleaned.replace(/```json\s*/gi, '');
-      cleaned = cleaned.replace(/```JSON\s*/gi, '');
-      cleaned = cleaned.replace(/```\s*/g, '');
-
-      // Try to find array with balanced brackets
-      const firstBracket = cleaned.indexOf('[');
-      if (firstBracket === -1) return [];
-
-      let depth = 0;
-      let inString = false;
-      let escapeNext = false;
-
-      for (let i = firstBracket; i < cleaned.length; i++) {
-        const char = cleaned[i];
-
-        if (escapeNext) { escapeNext = false; continue; }
-        if (char === '\\') { escapeNext = true; continue; }
-        if (char === '"' && !escapeNext) { inString = !inString; continue; }
-
-        if (!inString) {
-          if (char === '[') depth++;
-          if (char === ']') {
-            depth--;
-            if (depth === 0) {
-              let jsonStr = cleaned.substring(firstBracket, i + 1);
-              // Apply same cleaning as main parser
-              jsonStr = this.cleanJSON(jsonStr);
-
-              const parsed = JSON.parse(jsonStr);
-
-              return parsed.map((item: any) => ({
-                symbol: (item.symbol || item.ticker || '').toString().toUpperCase().trim(),
-                name: item.name || item.symbol,
-                sector: item.sector || 'General',
-                rationale: item.rationale || 'AI-selected replacement',
-                allocation: typeof item.allocation === 'string'
-                  ? parseFloat(item.allocation.replace('%', ''))
-                  : (item.allocation || 5),
-                assetType: this.isETFSymbol(item.symbol) ? 'etf' : 'stock',
-              })).filter((a: PortfolioAsset) => a.symbol && a.symbol.length > 0);
-            }
-          }
-        }
-      }
-
-      // Fallback to simple regex if balanced search fails
-      const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+      // Extract JSON array from response
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
       if (!jsonMatch) return [];
-
-      const parsed = JSON.parse(this.cleanJSON(jsonMatch[0]));
-
+      
+      const parsed = JSON.parse(jsonMatch[0]);
+      
       return parsed.map((item: any) => ({
-        symbol: (item.symbol || item.ticker || '').toString().toUpperCase().trim(),
+        symbol: item.symbol?.toUpperCase() || '',
         name: item.name || item.symbol,
         sector: item.sector || 'General',
         rationale: item.rationale || 'AI-selected replacement',
-        allocation: typeof item.allocation === 'string'
-          ? parseFloat(item.allocation.replace('%', ''))
-          : (item.allocation || 5),
+        allocation: item.allocation || 5,
         assetType: this.isETFSymbol(item.symbol) ? 'etf' : 'stock',
-      })).filter((a: PortfolioAsset) => a.symbol && a.symbol.length > 0);
+      })).filter((a: PortfolioAsset) => a.symbol);
     } catch (error) {
       console.error('[AGENT LOOP] Failed to parse replacements:', error);
-      console.error('[AGENT LOOP] Response was:', response.substring(0, 500));
       return [];
     }
   }
@@ -1714,9 +1672,7 @@ Suggest better alternatives with similar exposure.`
       temperature: 0.7,
       max_tokens: 2500, // Reduced from 3000 for faster response
     })) {
-      // Yield content whether streaming or final response
-      // The done flag indicates completion, not whether content should be skipped
-      if (chunk.content) {
+      if (!chunk.done) {
         yield chunk.content;
       }
     }
@@ -1872,253 +1828,67 @@ Important:
   /**
    * Parse portfolio JSON with error handling
    */
-  /**
-   * Robust JSON extraction from messy AI model output.
-   * Handles markdown code blocks, explanatory text, malformed JSON, etc.
-   */
-  private extractJSON(content: string): string {
-    let text = content.trim();
-
-    // Log original content for debugging (first 500 chars)
-    console.log('[JSON PARSER] Input length:', text.length);
-    console.log('[JSON PARSER] First 500 chars:', text.substring(0, 500));
-
-    // Strategy 1: Extract from markdown code blocks (various formats)
-    const codeBlockPatterns = [
-      /```json\s*([\s\S]*?)```/gi,
-      /```JSON\s*([\s\S]*?)```/gi,
-      /```javascript\s*([\s\S]*?)```/gi,
-      /```js\s*([\s\S]*?)```/gi,
-      /```typescript\s*([\s\S]*?)```/gi,
-      /```ts\s*([\s\S]*?)```/gi,
-      /```\s*([\s\S]*?)```/gi,
-    ];
-
-    for (const pattern of codeBlockPatterns) {
-      const matches = [...text.matchAll(pattern)];
-      for (const match of matches) {
-        const extracted = match[1].trim();
-        if (extracted.startsWith('{') || extracted.startsWith('[')) {
-          console.log('[JSON PARSER] Found JSON in code block');
-          return extracted;
-        }
-      }
-    }
-
-    // Strategy 2: Remove all code block markers and try again
-    text = text.replace(/```json\s*/gi, '');
-    text = text.replace(/```JSON\s*/gi, '');
-    text = text.replace(/```javascript\s*/gi, '');
-    text = text.replace(/```typescript\s*/gi, '');
-    text = text.replace(/```\s*/g, '');
-
-    // Strategy 3: Find balanced braces for objects
-    const firstBrace = text.indexOf('{');
-    if (firstBrace !== -1) {
-      let depth = 0;
-      let inString = false;
-      let escapeNext = false;
-
-      for (let i = firstBrace; i < text.length; i++) {
-        const char = text[i];
-
-        if (escapeNext) {
-          escapeNext = false;
-          continue;
-        }
-
-        if (char === '\\') {
-          escapeNext = true;
-          continue;
-        }
-
-        if (char === '"' && !escapeNext) {
-          inString = !inString;
-          continue;
-        }
-
-        if (!inString) {
-          if (char === '{') depth++;
-          if (char === '}') {
-            depth--;
-            if (depth === 0) {
-              const extracted = text.substring(firstBrace, i + 1);
-              console.log('[JSON PARSER] Found balanced JSON object, length:', extracted.length);
-              return extracted;
-            }
-          }
-        }
-      }
-    }
-
-    // Strategy 4: Fall back to simple first/last brace (less reliable)
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      console.log('[JSON PARSER] Using first/last brace fallback');
-      return text.substring(firstBrace, lastBrace + 1);
-    }
-
-    // Strategy 5: Try to find array
-    const firstBracket = text.indexOf('[');
-    const lastBracket = text.lastIndexOf(']');
-    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-      console.log('[JSON PARSER] Found array structure');
-      return text.substring(firstBracket, lastBracket + 1);
-    }
-
-    throw new Error('No JSON structure found in response');
-  }
-
-  /**
-   * Clean and fix common JSON issues from AI models
-   */
-  private cleanJSON(jsonStr: string): string {
-    let cleaned = jsonStr;
-
-    // Remove BOM and other invisible characters
-    cleaned = cleaned.replace(/^\uFEFF/, '');
-    cleaned = cleaned.replace(/[\u200B-\u200D\uFEFF]/g, '');
-
-    // Fix trailing commas (common AI mistake)
-    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
-
-    // Fix missing commas between array elements or object properties
-    cleaned = cleaned.replace(/}(\s*){/g, '},{');
-    cleaned = cleaned.replace(/](\s*)\[/g, '],[');
-    cleaned = cleaned.replace(/"(\s*)"/g, '","');
-
-    // Handle NaN and Infinity
-    cleaned = cleaned.replace(/:\s*NaN\b/g, ': 0');
-    cleaned = cleaned.replace(/:\s*-?Infinity\b/g, ': 0');
-    cleaned = cleaned.replace(/:\s*undefined\b/g, ': null');
-
-    // Fix unquoted property names (common in some models)
-    // This regex matches property names that aren't quoted
-    cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
-
-    // Fix single quotes to double quotes (but be careful with apostrophes in strings)
-    // Only replace single quotes that look like string delimiters
-    cleaned = cleaned.replace(/'([^']*)'(\s*[,}\]:])/g, '"$1"$2');
-    cleaned = cleaned.replace(/([{,\[]\s*)'([^']*)'/g, '$1"$2"');
-
-    // Remove JavaScript-style comments
-    cleaned = cleaned.replace(/\/\/.*$/gm, '');
-    cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
-
-    // Fix escaped newlines in strings
-    cleaned = cleaned.replace(/\\n/g, ' ');
-    cleaned = cleaned.replace(/\n/g, ' ');
-
-    // Remove control characters except for whitespace
-    cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-
-    return cleaned;
-  }
-
   private parsePortfolioJSON(content: string): GeneratedPortfolio {
-    // Step 1: Extract JSON from the content
-    let jsonStr: string;
-    try {
-      jsonStr = this.extractJSON(content);
-    } catch (extractError) {
-      console.error('[JSON PARSER] Extraction failed:', extractError);
-      console.error('[JSON PARSER] Full content:', content);
-      throw new Error(`Failed to extract JSON: ${extractError}`);
+    // Check for empty or undefined content
+    if (!content || content.trim().length === 0) {
+      throw new Error('Empty AI response received');
     }
-
-    // Step 2: Clean the JSON
-    jsonStr = this.cleanJSON(jsonStr);
-    console.log('[JSON PARSER] Cleaned JSON (first 500):', jsonStr.substring(0, 500));
-
-    // Step 3: Try to parse
-    let portfolio: any;
+    
+    // Clean the response
+    let cleanedResponse = content.trim();
+    cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '');
+    cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
+    // Remove any text before the first { and after the last }
+    cleanedResponse = cleanedResponse.replace(/^[^{]*/, '');
+    cleanedResponse = cleanedResponse.replace(/[^}]*$/, '');
+    
+    const firstBrace = cleanedResponse.indexOf('{');
+    const lastBrace = cleanedResponse.lastIndexOf('}');
+    
+    if (firstBrace === -1 || lastBrace === -1) {
+      throw new Error(`No JSON object found in response (length: ${content.length})`);
+    }
+    
+    let jsonStr = cleanedResponse.substring(firstBrace, lastBrace + 1);
+    
+    // Fix common JSON issues from LLMs
+    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1'); // Trailing commas
+    jsonStr = jsonStr.replace(/:\s*NaN/g, ': 0');
+    jsonStr = jsonStr.replace(/:\s*Infinity/g, ': 100');
+    jsonStr = jsonStr.replace(/:\s*-Infinity/g, ': 0');
+    jsonStr = jsonStr.replace(/:\s*undefined/g, ': null');
+    // Fix unescaped quotes inside strings (common LLM issue)
+    jsonStr = jsonStr.replace(/:\s*"([^"]*)"([^,}\]]*)"([^"]*)",/g, ': "$1\'$2\'$3",');
+    
+    let portfolio;
     try {
       portfolio = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error('[JSON PARSER] Parse failed:', parseError);
-      console.error('[JSON PARSER] Attempted to parse:', jsonStr.substring(0, 1000));
-
-      // Step 3b: Try more aggressive cleaning
-      try {
-        // Sometimes models output nested objects, try to find the portfolio inside
-        const portfolioMatch = jsonStr.match(/"portfolio"\s*:\s*(\{[\s\S]*\})/);
-        if (portfolioMatch) {
-          portfolio = JSON.parse(portfolioMatch[1]);
-          console.log('[JSON PARSER] Found nested portfolio object');
-        } else {
-          throw parseError;
-        }
-      } catch {
-        // Step 3c: Last resort - try to extract just assets array
-        const assetsMatch = jsonStr.match(/"assets"\s*:\s*(\[[\s\S]*?\])/);
-        if (assetsMatch) {
-          try {
-            const assets = JSON.parse(assetsMatch[1]);
-            portfolio = {
-              title: 'AI Generated Portfolio',
-              description: 'Portfolio generated from AI response',
-              strategy: 'balanced',
-              assets: assets
-            };
-            console.log('[JSON PARSER] Reconstructed portfolio from assets array');
-          } catch {
-            throw new Error(`JSON parse failed: ${parseError}. Cleaned input: ${jsonStr.substring(0, 500)}...`);
-          }
-        } else {
-          throw new Error(`JSON parse failed: ${parseError}. Cleaned input: ${jsonStr.substring(0, 500)}...`);
-        }
-      }
+    } catch (jsonError) {
+      const errMsg = jsonError instanceof Error ? jsonError.message : 'Unknown JSON error';
+      throw new Error(`JSON parse error: ${errMsg} (content length: ${jsonStr.length})`);
     }
-
-    // Step 4: Validate and normalize structure
-    if (!portfolio.title) {
-      portfolio.title = 'AI Generated Portfolio';
+    
+    // Validate and normalize
+    if (!portfolio.title || !portfolio.assets || !Array.isArray(portfolio.assets)) {
+      const missing = [];
+      if (!portfolio.title) missing.push('title');
+      if (!portfolio.assets) missing.push('assets');
+      else if (!Array.isArray(portfolio.assets)) missing.push('assets (not array)');
+      throw new Error(`Invalid portfolio structure - missing: ${missing.join(', ')}`);
     }
-
-    if (!portfolio.assets || !Array.isArray(portfolio.assets)) {
-      // Try to find assets in alternative locations
-      if (portfolio.holdings && Array.isArray(portfolio.holdings)) {
-        portfolio.assets = portfolio.holdings;
-      } else if (portfolio.positions && Array.isArray(portfolio.positions)) {
-        portfolio.assets = portfolio.positions;
-      } else {
-        console.error('[JSON PARSER] Portfolio structure:', JSON.stringify(portfolio, null, 2).substring(0, 1000));
-        throw new Error('Invalid portfolio structure: missing assets array');
-      }
+    
+    if (portfolio.assets.length === 0) {
+      throw new Error('Portfolio has no assets');
     }
-
-    // Step 5: Normalize allocations
-    const totalAllocation = portfolio.assets.reduce((sum: number, a: any) => {
-      const allocation = typeof a.allocation === 'string'
-        ? parseFloat(a.allocation.replace('%', ''))
-        : (a.allocation || a.weight || a.percentage || 0);
-      return sum + allocation;
-    }, 0);
-
+    
+    const totalAllocation = portfolio.assets.reduce((sum: number, a: Record<string, unknown>) => sum + (Number(a.allocation) || 0), 0);
     if (totalAllocation > 0 && Math.abs(totalAllocation - 100) > 1) {
-      portfolio.assets = portfolio.assets.map((a: any) => {
-        const allocation = typeof a.allocation === 'string'
-          ? parseFloat(a.allocation.replace('%', ''))
-          : (a.allocation || a.weight || a.percentage || 0);
-        return {
-          ...a,
-          allocation: parseFloat(((allocation / totalAllocation) * 100).toFixed(2))
-        };
-      });
+      portfolio.assets = portfolio.assets.map((a: Record<string, unknown>) => ({
+        ...a,
+        allocation: parseFloat(((Number(a.allocation) / totalAllocation) * 100).toFixed(2))
+      }));
     }
-
-    // Step 6: Normalize asset symbols (uppercase, trim)
-    portfolio.assets = portfolio.assets.map((a: any) => ({
-      ...a,
-      symbol: (a.symbol || a.ticker || '').toString().toUpperCase().trim(),
-      allocation: a.allocation || 0
-    }));
-
-    // Filter out any assets without valid symbols
-    portfolio.assets = portfolio.assets.filter((a: any) => a.symbol && a.symbol.length > 0);
-
-    console.log('[JSON PARSER] Successfully parsed portfolio with', portfolio.assets.length, 'assets');
-
+    
     return portfolio;
   }
 

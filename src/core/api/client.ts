@@ -6,7 +6,7 @@ import { API_CONFIG, FEATURES } from '../../shared/constants';
 // Check if running in Tauri context
 const isTauri = () => {
   return typeof window !== 'undefined' &&
-         window.__TAURI_INTERNALS__ !== undefined;
+         '__TAURI_INTERNALS__' in window;
 };
 
 // Dynamic import for Tauri invoke (only when available)

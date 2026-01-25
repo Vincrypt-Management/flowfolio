@@ -97,10 +97,16 @@ impl OpenRouterService {
         max_tokens: Option<u32>,
     ) -> Result<String, String> {
         let api_key = self.api_key.as_ref()
-            .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
+            .ok_or_else(|| "OpenRouter API key not configured. Set VITE_OPENROUTER_API_KEY in .env file.".to_string())?;
 
+        // Validate API key format (should start with sk-)
+        if !api_key.starts_with("sk-") {
+            eprintln!("[WARN] [openrouter] API key may be invalid (doesn't start with sk-)");
+        }
+
+        let model_name = model.unwrap_or_else(|| self.default_model.clone());
         let request = OpenRouterRequest {
-            model: model.unwrap_or_else(|| self.default_model.clone()),
+            model: model_name.clone(),
             messages,
             temperature: temperature.or(Some(0.7)),
             max_tokens: max_tokens.or(Some(4000)),
@@ -108,7 +114,8 @@ impl OpenRouterService {
             stream: Some(false),
         };
 
-        eprintln!("[INFO] [openrouter] Sending chat request to model: {}", request.model);
+        eprintln!("[INFO] [openrouter] Sending chat request to model: {} (max_tokens: {:?})", 
+            model_name, request.max_tokens);
 
         let response = self.client
             .post(format!("{}/chat/completions", self.api_url))
@@ -119,22 +126,51 @@ impl OpenRouterService {
             .json(&request)
             .send()
             .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+            .map_err(|e| {
+                eprintln!("[ERROR] [openrouter] Request failed: {}", e);
+                format!("Request failed: {}. Check your internet connection.", e)
+            })?;
 
-        if !response.status().is_success() {
-            let status = response.status();
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(format!("OpenRouter API error {}: {}", status, error_text));
+            eprintln!("[ERROR] [openrouter] API error {}: {}", status, error_text);
+            
+            // Provide more helpful error messages
+            let user_error = match status.as_u16() {
+                401 => "Invalid API key. Please check your VITE_OPENROUTER_API_KEY.".to_string(),
+                402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
+                429 => "Rate limited. Please wait a moment and try again.".to_string(),
+                500..=599 => format!("OpenRouter server error ({}). The service may be temporarily unavailable.", status),
+                _ => format!("OpenRouter API error {}: {}", status, error_text),
+            };
+            return Err(user_error);
         }
 
         let result: OpenRouterResponse = response.json().await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| {
+                eprintln!("[ERROR] [openrouter] Failed to parse response: {}", e);
+                format!("Failed to parse AI response: {}", e)
+            })?;
 
         if let Some(choice) = result.choices.first() {
-            eprintln!("[INFO] [openrouter] Response received, tokens used: {:?}", result.usage);
-            Ok(choice.message.content.clone())
+            let content = choice.message.content.clone();
+            
+            // Check for empty content
+            if content.trim().is_empty() {
+                eprintln!("[WARN] [openrouter] Model returned empty content. Finish reason: {:?}", choice.finish_reason);
+                return Err(format!(
+                    "Model returned empty response. Finish reason: {:?}. This may indicate the model refused the request or hit a content filter.",
+                    choice.finish_reason
+                ));
+            }
+            
+            eprintln!("[INFO] [openrouter] Response received, tokens used: {:?}, content length: {} chars", 
+                result.usage, content.len());
+            Ok(content)
         } else {
-            Err("No response from model".to_string())
+            eprintln!("[ERROR] [openrouter] No choices in response. Full response: {:?}", result);
+            Err("No response from model - no choices returned".to_string())
         }
     }
 

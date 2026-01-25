@@ -37,16 +37,40 @@ class OpenRouterService {
   ): Promise<string> {
     console.log('[OPENROUTER] chat called with model:', model);
     try {
-      const result = await invoke<string>('ai_chat', {
+      const response = await invoke<string>('ai_chat', {
         messages,
         model,
         temperature: options?.temperature,
         maxTokens: options?.max_tokens,
       });
-      console.log('[OPENROUTER] chat success');
-      return result;
+      
+      // Check for empty response
+      if (!response || response.trim().length === 0) {
+        throw new Error('AI service returned empty response');
+      }
+      
+      console.log('[OPENROUTER] chat success, response length:', response.length);
+      return response;
     } catch (error) {
       console.error('[OPENROUTER] chat invoke failed:', error);
+      
+      // Re-throw with more context if needed
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      
+      // Check for common error patterns and provide helpful messages
+      if (errorMsg.includes('not configured')) {
+        throw new Error('AI service not configured. Please set up your OpenRouter API key in the .env file.');
+      }
+      if (errorMsg.includes('Invalid API key')) {
+        throw new Error('Invalid OpenRouter API key. Please check your VITE_OPENROUTER_API_KEY.');
+      }
+      if (errorMsg.includes('Rate limited')) {
+        throw new Error('AI service rate limited. Please wait a moment and try again.');
+      }
+      if (errorMsg.includes('Insufficient credits')) {
+        throw new Error('Insufficient OpenRouter credits. Please add credits to your account.');
+      }
+      
       throw error;
     }
   }
@@ -70,7 +94,11 @@ class OpenRouterService {
       console.log('[OPENROUTER] chatStream called with model:', model);
       const response = await this.chat(messages, model, options);
       console.log('[OPENROUTER] chatStream response received, length:', response?.length);
-      yield { content: response, done: true };
+      
+      // First yield the content with done: false so it gets captured
+      yield { content: response, done: false };
+      // Then signal completion
+      yield { content: '', done: true };
     } catch (error) {
       console.error('[OPENROUTER] chatStream error:', error);
       throw error;

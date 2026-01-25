@@ -170,17 +170,6 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
     "Create a balanced portfolio mixing bond ETFs and value stocks"
   ];
 
-  const updateProgress = (stepId: string, status: ProgressStep['status'], message?: string) => {
-    setProgressSteps(prev => {
-      const stepIndex = prev.findIndex(s => s.id === stepId);
-      if (stepIndex === -1) return prev;
-      
-      const updated = [...prev];
-      updated[stepIndex] = { ...updated[stepIndex], status, message };
-      return updated;
-    });
-  };
-
   const handleGeneratePlan = async () => {
     if (!prompt.trim() || isGenerating) return;
 
@@ -190,36 +179,12 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
     setChatMode(false);
     setChatHistory([]);
     setStreamingMessage('');
-
-    // Initialize progress steps for 3-iteration agent loop with fundamental analysis
-    const steps: ProgressStep[] = [
-      { id: 'analyzing', label: 'Analyzing your investment goals', status: 'pending' },
-      { id: 'generating', label: 'AI generating portfolio structure', status: 'pending' },
-      { id: 'structure', label: 'Portfolio structure created', status: 'pending' },
-      { id: 'fetching', label: 'Fetching market data', status: 'pending' },
-      { id: 'enriched', label: 'Market data integrated', status: 'pending' },
-      { id: 'fundamentals', label: 'Running fundamental analysis', status: 'pending' },
-      { id: 'fundamentals-complete', label: 'Fundamental analysis complete', status: 'pending' },
-      { id: 'iteration-1', label: 'Agent Loop 1/3: Evaluating', status: 'pending' },
-      { id: 'iteration-1-drop', label: 'Loop 1: Identifying weak performers', status: 'pending' },
-      { id: 'iteration-1-replace', label: 'Loop 1: Finding replacements', status: 'pending' },
-      { id: 'iteration-1-complete', label: 'Loop 1: Complete', status: 'pending' },
-      { id: 'iteration-2', label: 'Agent Loop 2/3: Re-evaluating', status: 'pending' },
-      { id: 'iteration-2-drop', label: 'Loop 2: Identifying weak performers', status: 'pending' },
-      { id: 'iteration-2-replace', label: 'Loop 2: Finding replacements', status: 'pending' },
-      { id: 'iteration-2-complete', label: 'Loop 2: Complete', status: 'pending' },
-      { id: 'iteration-3', label: 'Agent Loop 3/3: Final optimization', status: 'pending' },
-      { id: 'iteration-3-complete', label: 'Loop 3: Complete', status: 'pending' },
-      { id: 'finalizing', label: 'Finalizing portfolio', status: 'pending' },
-      { id: 'complete', label: 'Portfolio ready', status: 'pending' },
-    ];
-    setProgressSteps(steps);
-
-    // Track completed steps
-    const completedSteps = new Set<string>();
+    
+    // Start with empty steps - will be populated dynamically from backend
+    setProgressSteps([]);
 
     try {
-      logger.info('[INFO] Streaming portfolio generation with 3-iteration agent loop for:', prompt);
+      logger.info('[INFO] Streaming portfolio generation for:', prompt);
 
       // Use streaming API - asset type is auto-detected from prompt
       const stream = portfolioAgent.generatePortfolioStream(prompt);
@@ -230,38 +195,56 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
         
         logger.debug('📡 Stream update:', update);
         
-        if (update.type === 'progress' && update.step) {
-          setStreamingMessage(update.message || '');
+        if ((update.type === 'progress' || update.type === 'data') && update.step) {
+          const stepId = update.step;
+          const message = update.message || '';
+          const isCompleted = message.startsWith('✓') || update.type === 'data';
           
-          // Mark step as active (or completed if message starts with ✓)
-          const isCompleted = update.message?.startsWith('✓');
+          setStreamingMessage(message);
           
-          if (isCompleted) {
-            completedSteps.add(update.step);
-            updateProgress(update.step, 'completed', update.message);
-          } else {
-            updateProgress(update.step, 'active', update.message);
-          }
-          
-          // Mark all previous steps as completed
-          setProgressSteps(prev => prev.map((step, idx) => {
-            const currentIdx = prev.findIndex(s => s.id === update.step);
-            if (idx < currentIdx && step.status !== 'completed') {
-              completedSteps.add(step.id);
-              return { ...step, status: 'completed' };
+          // Dynamically add or update step
+          setProgressSteps(prev => {
+            const existingIndex = prev.findIndex(s => s.id === stepId);
+            
+            if (existingIndex >= 0) {
+              // Update existing step
+              const updated = [...prev];
+              updated[existingIndex] = {
+                ...updated[existingIndex],
+                status: isCompleted ? 'completed' : 'active',
+                message: message,
+              };
+              // Mark all previous steps as completed
+              for (let i = 0; i < existingIndex; i++) {
+                if (updated[i].status !== 'completed') {
+                  updated[i] = { ...updated[i], status: 'completed' };
+                }
+              }
+              return updated;
+            } else {
+              // Add new step - mark all previous as completed
+              const updatedPrev = prev.map(s => 
+                s.status !== 'completed' ? { ...s, status: 'completed' as const } : s
+              );
+              return [
+                ...updatedPrev,
+                {
+                  id: stepId,
+                  label: message.replace(/^✓\s*/, ''), // Use message as label, remove checkmark
+                  status: isCompleted ? 'completed' as const : 'active' as const,
+                  message: message,
+                }
+              ];
             }
-            return step;
-          }));
-        } else if (update.type === 'data' && update.data) {
-          if (update.step) {
-            completedSteps.add(update.step);
-            updateProgress(update.step, 'completed', update.message);
+          });
+          
+          // If data update, merge into portfolio
+          if (update.type === 'data' && update.data) {
+            setGeneratedPortfolio(prev => ({
+              ...prev,
+              ...update.data
+            } as GeneratedPortfolio));
           }
-          // Merge streaming data into portfolio
-          setGeneratedPortfolio(prev => ({
-            ...prev,
-            ...update.data
-          } as GeneratedPortfolio));
         } else if (update.type === 'complete' && update.data) {
           // Mark all as complete
           setProgressSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
@@ -273,7 +256,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
       }
 
       if (isMountedRef.current) {
-        logger.info('[INFO] Portfolio generation completed with 3 agent iterations');
+        logger.info('[INFO] Portfolio generation completed');
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -548,15 +531,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
                 {step.status === 'completed' && <CheckCircle2 size={20} />}
                 {step.status === 'active' && <Loader2 className="spin" size={20} />}
                 {step.status === 'error' && <AlertCircle size={20} />}
-                {step.status === 'pending' && (
-                  <div className="step-dot"></div>
-                )}
               </div>
               <div className="step-content">
                 <div className="step-label">{step.label}</div>
-                {step.message && (
-                  <div className="step-message">{step.message}</div>
-                )}
               </div>
             </div>
           ))}
