@@ -385,7 +385,7 @@ export function PortfolioTab() {
               {isLoading ? "Adding..." : "Add Holding"}
             </button>
           </div>
-          <div className="form-row" style={{ marginTop: '1rem' }}>
+          <div className="form-row mt-md">
             <div className="form-group">
               <label>Cash Balance</label>
               <input
@@ -461,7 +461,6 @@ export function PortfolioTab() {
                             <button 
                               className="btn-small btn-danger" 
                               onClick={() => removeHolding(holding.symbol)}
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                             >
                               Remove
                             </button>
@@ -482,7 +481,7 @@ export function PortfolioTab() {
                 </div>
               </>
             ) : (
-              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
+              <p className="empty-state">
                 No holdings yet. Add your first holding above to get started.
               </p>
             )}

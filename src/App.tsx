@@ -509,12 +509,12 @@ function App() {
         {activeTab === "dashboard" && (
           <div className="animate-fade-in">
             <header className="page-header">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div className="page-header-row">
                 <div>
                   <h1 className="page-title">Dashboard</h1>
                   <p className="page-subtitle">Overview of your investment strategy</p>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <div className="page-header-actions">
                   <button className="btn-secondary" onClick={savePlan} disabled={!plan}>
                     <Save size={16} /> Save Plan
                   </button>
@@ -586,8 +586,8 @@ function App() {
             </div>
 
             {/* Market Overview */}
-            <div className="card" style={{ marginTop: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div className="card mt-lg">
+              <div className="card-header">
                 <h3><TrendingUp size={20} /> Market Overview</h3>
                 <button 
                   className="btn-small" 
@@ -606,7 +606,7 @@ function App() {
                     </div>
                   ))
                 ) : (
-                  <p style={{ color: 'var(--text-muted)', gridColumn: '1 / -1', textAlign: 'center' }}>
+                  <p className="text-muted text-center w-full">
                     {isLoadingMarket ? "Loading prices..." : "No market data loaded"}
                   </p>
                 )}
@@ -652,13 +652,13 @@ function App() {
             </div>
 
             {plan && selectedTemplate && (
-              <div className="card" style={{ marginTop: '2rem' }}>
+              <div className="card mt-xl">
                 <h3>Selected: {plan.name}</h3>
                 <div className="plan-summary">
-                  <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}><strong>Strategy Focus:</strong></p>
-                  <ul style={{ paddingLeft: '1.5rem', marginBottom: '1.5rem', color: 'var(--text-main)' }}>
+                  <p className="text-muted mb-md"><strong>Strategy Focus:</strong></p>
+                  <ul className="text-main mb-lg" style={{ paddingLeft: '1.5rem' }}>
                     {plan.ranking.factors.map((factor, i) => (
-                      <li key={i} style={{ marginBottom: '0.5rem' }}>
+                      <li key={i} className="mb-sm">
                         {factor.name.charAt(0).toUpperCase() + factor.name.slice(1)}: {(factor.weight * 100).toFixed(0)}% weight
                       </li>
                     ))}
@@ -685,11 +685,11 @@ function App() {
 
             <div className="card">
               <h3>Score Symbols</h3>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              <p className="text-muted mb-md">
                 Current Plan: <strong>{plan?.name || "None"}</strong>
               </p>
               
-              <div className="input-group" style={{ marginBottom: '1rem' }}>
+              <div className="form-group">
                 <label>Enter symbol tickers (comma-separated):</label>
                 <input
                   type="text"
@@ -697,7 +697,6 @@ function App() {
                   onChange={(e) => setRankingsSymbols(e.target.value)}
                   placeholder="e.g., AAPL,MSFT,GOOGL"
                   className="symbol-input"
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}
                 />
               </div>
               
@@ -709,45 +708,44 @@ function App() {
                 {isScoring ? "Scoring..." : "Score Symbols"}
               </button>
               
-              {!plan && <p className="note" style={{ marginTop: '0.5rem', color: 'var(--text-muted)' }}>Please select a plan from Templates first</p>}
+              {!plan && <p className="note">Please select a plan from Templates first</p>}
             </div>
 
             {scores.length > 0 && (
-              <div className="card" style={{ marginTop: '1.5rem' }}>
+              <div className="card mt-lg">
                 <h3>Results ({scores.length} symbols ranked)</h3>
-                <div className="scores-table" style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div className="overflow-x-auto">
+                  <table className="data-table">
                     <thead>
                       <tr>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Rank</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Symbol</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Total Score</th>
+                        <th>Rank</th>
+                        <th>Symbol</th>
+                        <th>Total Score</th>
                         {scores[0]?.factors.map((f, i) => (
-                          <th key={i} style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>{f.name.toUpperCase()}</th>
+                          <th key={i}>{f.name.toUpperCase()}</th>
                         ))}
-                        <th style={{ padding: '0.75rem', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Details</th>
+                        <th>Details</th>
                       </tr>
                     </thead>
                     <tbody>
                       {scores.map((score, idx) => (
-                        <tr key={score.symbol} style={{ background: idx < 3 ? 'var(--bg-highlight)' : 'transparent' }}>
-                          <td style={{ padding: '0.75rem' }}>{idx + 1}</td>
-                          <td style={{ padding: '0.75rem', fontWeight: 'bold' }}>{score.symbol}</td>
-                          <td style={{ padding: '0.75rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <div style={{ width: '60px', height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{ width: `${score.total_score}%`, height: '100%', background: 'var(--accent-primary)' }}></div>
+                        <tr key={score.symbol} className={idx < 3 ? 'highlight-row' : ''}>
+                          <td>{idx + 1}</td>
+                          <td className="font-bold">{score.symbol}</td>
+                          <td>
+                            <div className="score-display">
+                              <div className="score-bar">
+                                <div className="score-bar-fill" style={{ width: `${score.total_score}%` }}></div>
                               </div>
-                              <span>{score.total_score.toFixed(1)}</span>
+                              <span className="score-value">{score.total_score.toFixed(1)}</span>
                             </div>
                           </td>
                           {score.factors.map((f, i) => (
-                            <td key={i} style={{ padding: '0.75rem' }}>{f.normalized_value.toFixed(0)}</td>
+                            <td key={i} className="font-mono">{f.normalized_value.toFixed(0)}</td>
                           ))}
-                          <td style={{ padding: '0.75rem' }}>
+                          <td>
                             <button 
                               className="btn-small"
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
                               onClick={() => setSelectedScore(score)}
                             >
                               View
@@ -762,32 +760,32 @@ function App() {
             )}
 
             {selectedScore && (
-              <div className="card score-detail" style={{ marginTop: '1.5rem', position: 'relative' }}>
+              <div className="card mt-lg relative">
                 <h3>Detailed Analysis: {selectedScore.symbol}</h3>
                 <button 
-                  className="close-btn"
+                  className="btn-close"
                   onClick={() => setSelectedScore(null)}
-                  style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}
+                  aria-label="Close"
                 >
                   ✕
                 </button>
                 
-                <div className="score-explanation" style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{selectedScore.explanation}</pre>
+                <div className="explanation-box">
+                  <pre>{selectedScore.explanation}</pre>
                 </div>
 
                 <h4>Factor Contributions</h4>
                 <div className="factor-breakdown">
                   {selectedScore.factors.map((factor, i) => (
-                    <div key={i} className="factor-item" style={{ marginBottom: '1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                        <span style={{ fontWeight: 'bold' }}>{factor.name.toUpperCase()}</span>
-                        <span>{factor.normalized_value.toFixed(1)}/100</span>
+                    <div key={i} className="factor-item">
+                      <div className="factor-header">
+                        <span className="factor-name">{factor.name.toUpperCase()}</span>
+                        <span className="font-mono">{factor.normalized_value.toFixed(1)}/100</span>
                       </div>
-                      <div style={{ width: '100%', height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.25rem' }}>
-                        <div style={{ width: `${factor.normalized_value}%`, height: '100%', background: 'var(--accent-primary)' }}></div>
+                      <div className="factor-bar">
+                        <div className="factor-bar-fill" style={{ width: `${factor.normalized_value}%` }}></div>
                       </div>
-                      <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                      <div className="factor-details">
                         Weight: {(factor.weight * 100).toFixed(0)}% • Contributes {factor.contribution.toFixed(1)} points
                       </div>
                     </div>
@@ -836,24 +834,22 @@ function App() {
             <div className="dashboard-grid">
               <div className="card">
                 <h3><Plus size={20} /> Create New Universe</h3>
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <div className="form-group">
                   <label>Universe Name</label>
                   <input
                     type="text"
                     value={newUniverseName}
                     onChange={(e) => setNewUniverseName(e.target.value)}
                     placeholder="e.g., Tech Leaders"
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}
                   />
                 </div>
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <div className="form-group">
                   <label>Symbols (comma-separated)</label>
                   <input
                     type="text"
                     value={newUniverseSymbols}
                     onChange={(e) => setNewUniverseSymbols(e.target.value)}
                     placeholder="e.g., AAPL, MSFT, GOOGL"
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}
                   />
                 </div>
                 <button className="btn-primary" onClick={createUniverse}>
@@ -863,20 +859,20 @@ function App() {
 
               <div className="card">
                 <h3><Download size={20} /> Export / Import</h3>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                <p className="text-muted mb-md">
                   Export all your data or import from a backup
                 </p>
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div className="flex gap-md flex-wrap">
                   <button className="btn-primary" onClick={exportData}>
                     <Download size={16} /> Export Data
                   </button>
-                  <label className="btn-secondary" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <label className="btn-secondary cursor-pointer flex items-center gap-sm">
                     <Upload size={16} /> Import Data
                     <input
                       type="file"
                       accept=".json"
                       onChange={importData}
-                      style={{ display: 'none' }}
+                      className="hidden"
                     />
                   </label>
                 </div>
@@ -884,25 +880,22 @@ function App() {
             </div>
 
             {universes.length > 0 && (
-              <div className="card" style={{ marginTop: '1.5rem' }}>
+              <div className="card mt-lg">
                 <h3><Globe size={20} /> Your Universes ({universes.length})</h3>
                 <div className="universe-list">
                   {universes.map((universe) => (
-                    <div key={universe.id} className="universe-item" style={{ 
-                      padding: '1rem', 
-                      marginBottom: '1rem', 
-                      background: 'var(--bg-secondary)', 
-                      borderRadius: '8px',
-                      border: selectedUniverse?.id === universe.id ? '2px solid var(--primary)' : '1px solid var(--border-color)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.5rem' }}>
+                    <div 
+                      key={universe.id} 
+                      className={`universe-item p-md mb-md bg-hover rounded ${selectedUniverse?.id === universe.id ? 'border-primary' : 'border'}`}
+                    >
+                      <div className="flex justify-between items-start mb-sm">
                         <div>
-                          <h4 style={{ margin: 0 }}>{universe.name}</h4>
-                          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: '0.25rem 0' }}>
+                          <h4 className="mt-0 mb-0">{universe.name}</h4>
+                          <p className="text-muted text-sm mt-0 mb-0">
                             {universe.symbols.length} symbols
                           </p>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div className="flex gap-sm">
                           <button 
                             className="btn-small"
                             onClick={() => {
@@ -913,15 +906,14 @@ function App() {
                             Use in Rankings
                           </button>
                           <button 
-                            className="btn-small"
+                            className="btn-small text-error"
                             onClick={() => deleteUniverse(universe.id)}
-                            style={{ color: 'var(--error)' }}
                           >
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div className="flex flex-wrap gap-sm">
                         {universe.symbols.slice(0, 10).map((symbol) => (
                           <span key={symbol} className="tag">{symbol}</span>
                         ))}
@@ -930,9 +922,9 @@ function App() {
                         )}
                       </div>
                       {universe.exclude_list.length > 0 && (
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                        <p className="text-muted text-sm mt-sm mb-0">
                           Excluded: {universe.exclude_list.join(", ")}
-                        </div>
+                        </p>
                       )}
                     </div>
                   ))}
@@ -941,9 +933,9 @@ function App() {
             )}
 
             {savedPlans.length > 0 && (
-              <div className="card" style={{ marginTop: '1.5rem' }}>
+              <div className="card mt-lg">
                 <h3><Save size={20} /> Saved Plans ({savedPlans.length})</h3>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                <div className="flex flex-wrap gap-md">
                   {savedPlans.map((planName) => (
                     <div key={planName} style={{ 
                       padding: '1rem', 
