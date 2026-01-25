@@ -1,8 +1,39 @@
 // Core API Client
 // Industrial-grade API client with circuit breaker, retries, and metrics
 
-import { invoke } from '@tauri-apps/api/core';
 import { API_CONFIG, FEATURES } from '../../shared/constants';
+
+// Check if running in Tauri context
+const isTauri = () => {
+  return typeof window !== 'undefined' &&
+         window.__TAURI_INTERNALS__ !== undefined;
+};
+
+// Dynamic import for Tauri invoke (only when available)
+let tauriInvoke: typeof import('@tauri-apps/api/core').invoke | null = null;
+
+const getInvoke = async () => {
+  if (!isTauri()) {
+    return null;
+  }
+  if (!tauriInvoke) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    tauriInvoke = invoke;
+  }
+  return tauriInvoke;
+};
+
+// Mock data for web mode
+const WEB_MODE_MOCKS: Record<string, unknown> = {
+  get_current_prices: {
+    AAPL: { symbol: 'AAPL', price: 185.50, change: 2.30, change_percent: 1.25 },
+    MSFT: { symbol: 'MSFT', price: 378.90, change: -1.20, change_percent: -0.32 },
+    GOOGL: { symbol: 'GOOGL', price: 142.65, change: 0.85, change_percent: 0.60 },
+  },
+  list_vibe_plans: [],
+  get_cache_stats: { hits: 0, misses: 0, size: 0 },
+  health_check: { status: 'ok', mode: 'web' },
+};
 import { 
   AppError, 
   NetworkError, 
@@ -179,11 +210,26 @@ class ApiClient {
 
     try {
       this.metrics.totalRequests++;
+
+      // Get invoke function (null if not in Tauri)
+      const invoke = await getInvoke();
+
+      // If not in Tauri, return mock data
+      if (!invoke) {
+        console.log(`🌐 Web mode: returning mock for ${command}`);
+        const mock = WEB_MODE_MOCKS[command];
+        if (mock !== undefined) {
+          return mock as T;
+        }
+        // Return empty/default values for unknown commands
+        return {} as T;
+      }
+
       const result = await invoke<T>(command, args);
-      
+
       const latency = performance.now() - startTime;
       this.recordLatency(latency);
-      
+
       return result;
     } catch (error) {
       const latency = performance.now() - startTime;

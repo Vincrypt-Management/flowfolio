@@ -1,3 +1,6 @@
+# Frontend (separate repo)
+frontend/
+
 # Logs
 logs
 *.log

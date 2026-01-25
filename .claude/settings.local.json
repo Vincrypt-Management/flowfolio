@@ -6,7 +6,10 @@
       "Bash(sort:*)",
       "Bash(wc:*)",
       "Bash(npm run dev:landing:*)",
-      "Bash(cargo test --help:*)"
+      "Bash(cargo test --help:*)",
+      "Bash(npx tsc:*)",
+      "mcp__filesystem__list_directory",
+      "mcp__playwright__playwright_navigate"
     ]
   }
 }

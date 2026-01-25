@@ -6,10 +6,16 @@ fn main() {
     #[cfg(debug_assertions)]
     {
         let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join(".env");
+        eprintln!("[DEBUG] [main] Looking for .env at: {:?}", env_path);
         if env_path.exists() {
-            dotenvy::from_path(&env_path).ok();
-            eprintln!("[INFO] [main] Loaded environment configuration from {:?}", env_path);
+            match dotenvy::from_path(&env_path) {
+                Ok(_) => eprintln!("[INFO] [main] Loaded environment configuration from {:?}", env_path),
+                Err(e) => eprintln!("[ERROR] [main] Failed to load .env: {:?}", e),
+            }
+            // Verify key env vars
+            eprintln!("[DEBUG] [main] VITE_OPENROUTER_API_KEY present: {}", std::env::var("VITE_OPENROUTER_API_KEY").is_ok());
         } else {
+            eprintln!("[WARN] [main] .env file not found at {:?}, trying current dir", env_path);
             dotenvy::dotenv().ok();
         }
     }

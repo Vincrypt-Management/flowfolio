@@ -67,6 +67,11 @@ impl OpenRouterService {
         let default_model = std::env::var("VITE_DEFAULT_LLM_MODEL")
             .unwrap_or_else(|_| "anthropic/claude-3-sonnet-20240229".to_string());
 
+        // Debug: Log API key status
+        eprintln!("[DEBUG] [openrouter] API key configured: {}", api_key.is_some());
+        eprintln!("[DEBUG] [openrouter] API URL: {}", api_url);
+        eprintln!("[DEBUG] [openrouter] Default model: {}", default_model);
+
         Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(120))
