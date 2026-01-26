@@ -91,15 +91,54 @@ export interface TickerAnalysisData {
     alpha: number;
   };
   fundamentals?: {
+    // Basic valuation
     peRatio: number | null;
     forwardPE: number | null;
+    pegRatio: number | null;
     priceToBook: number | null;
+    priceToSales: number | null;
+    evToEbitda: number | null;
+    
+    // Profitability
     profitMargin: number | null;
+    operatingMargin: number | null;
+    returnOnAssets: number | null;
     returnOnEquity: number | null;
+    
+    // Growth
     revenueGrowthYoY: number | null;
+    earningsGrowthYoY: number | null;
+    
+    // Financial Health
     debtToEquity: number | null;
+    currentRatio: number | null;
+    quickRatio: number | null;
+    freeCashFlow: number | null;
+    
+    // Dividend
     dividendYield: number | null;
+    payoutRatio: number | null;
+    dividendSafety: string | null;
+    
+    // Company info
     marketCap: number;
+    eps: number | null;
+    companyName: string | null;
+    sector: string | null;
+    industry: string | null;
+    fiftyTwoWeekHigh: number | null;
+    fiftyTwoWeekLow: number | null;
+    
+    // Advanced metrics
+    altmanZScore: number | null;
+    piotroskiFScore: number | null;
+    grahamNumber: number | null;
+    marginOfSafety: number | null;
+    
+    // Factor scores
+    valueScore: number;
+    qualityScore: number;
+    growthScore: number;
   };
   sentiment?: {
     overallSentiment: string;
@@ -1475,6 +1514,14 @@ OUTPUT FORMAT (markdown):
       '',
     ];
 
+    // Add company info if available
+    if (data.fundamentals?.companyName) {
+      lines.push(`COMPANY: ${data.fundamentals.companyName}`);
+      if (data.fundamentals.sector) lines.push(`  Sector: ${data.fundamentals.sector}`);
+      if (data.fundamentals.industry) lines.push(`  Industry: ${data.fundamentals.industry}`);
+      lines.push('');
+    }
+
     if (data.quantMetrics) {
       lines.push('QUANTITATIVE METRICS:');
       lines.push(`  Sharpe Ratio: ${data.quantMetrics.sharpeRatio.toFixed(2)}`);
@@ -1493,14 +1540,61 @@ OUTPUT FORMAT (markdown):
     if (data.fundamentals) {
       lines.push('FUNDAMENTAL METRICS:');
       lines.push(`  Market Cap: $${this.formatLargeNumber(data.fundamentals.marketCap)}`);
+      
+      // Valuation
       if (data.fundamentals.peRatio) lines.push(`  P/E Ratio: ${data.fundamentals.peRatio.toFixed(1)}`);
       if (data.fundamentals.forwardPE) lines.push(`  Forward P/E: ${data.fundamentals.forwardPE.toFixed(1)}`);
+      if (data.fundamentals.pegRatio) lines.push(`  PEG Ratio: ${data.fundamentals.pegRatio.toFixed(2)}`);
       if (data.fundamentals.priceToBook) lines.push(`  P/B Ratio: ${data.fundamentals.priceToBook.toFixed(2)}`);
+      if (data.fundamentals.priceToSales) lines.push(`  P/S Ratio: ${data.fundamentals.priceToSales.toFixed(2)}`);
+      if (data.fundamentals.evToEbitda) lines.push(`  EV/EBITDA: ${data.fundamentals.evToEbitda.toFixed(1)}`);
+      if (data.fundamentals.eps) lines.push(`  EPS: $${data.fundamentals.eps.toFixed(2)}`);
+      
+      // Profitability
       if (data.fundamentals.profitMargin) lines.push(`  Profit Margin: ${(data.fundamentals.profitMargin * 100).toFixed(1)}%`);
+      if (data.fundamentals.operatingMargin) lines.push(`  Operating Margin: ${(data.fundamentals.operatingMargin * 100).toFixed(1)}%`);
       if (data.fundamentals.returnOnEquity) lines.push(`  ROE: ${(data.fundamentals.returnOnEquity * 100).toFixed(1)}%`);
+      if (data.fundamentals.returnOnAssets) lines.push(`  ROA: ${(data.fundamentals.returnOnAssets * 100).toFixed(1)}%`);
+      
+      // Growth
       if (data.fundamentals.revenueGrowthYoY) lines.push(`  Revenue Growth: ${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%`);
+      if (data.fundamentals.earningsGrowthYoY) lines.push(`  Earnings Growth: ${(data.fundamentals.earningsGrowthYoY * 100).toFixed(1)}%`);
+      
+      // Financial Health
       if (data.fundamentals.debtToEquity) lines.push(`  Debt/Equity: ${data.fundamentals.debtToEquity.toFixed(2)}`);
+      if (data.fundamentals.currentRatio) lines.push(`  Current Ratio: ${data.fundamentals.currentRatio.toFixed(2)}`);
+      if (data.fundamentals.quickRatio) lines.push(`  Quick Ratio: ${data.fundamentals.quickRatio.toFixed(2)}`);
+      if (data.fundamentals.freeCashFlow) lines.push(`  Free Cash Flow: $${this.formatLargeNumber(data.fundamentals.freeCashFlow)}`);
+      
+      // Dividend
       if (data.fundamentals.dividendYield) lines.push(`  Dividend Yield: ${(data.fundamentals.dividendYield * 100).toFixed(2)}%`);
+      if (data.fundamentals.payoutRatio) lines.push(`  Payout Ratio: ${(data.fundamentals.payoutRatio * 100).toFixed(1)}%`);
+      if (data.fundamentals.dividendSafety) lines.push(`  Dividend Safety: ${data.fundamentals.dividendSafety}`);
+      
+      // 52-week range
+      if (data.fundamentals.fiftyTwoWeekHigh) lines.push(`  52W High: $${data.fundamentals.fiftyTwoWeekHigh.toFixed(2)}`);
+      if (data.fundamentals.fiftyTwoWeekLow) lines.push(`  52W Low: $${data.fundamentals.fiftyTwoWeekLow.toFixed(2)}`);
+      
+      // Advanced metrics
+      if (data.fundamentals.altmanZScore) {
+        const zStatus = data.fundamentals.altmanZScore > 3 ? 'Safe' : data.fundamentals.altmanZScore > 1.8 ? 'Grey Zone' : 'Distress';
+        lines.push(`  Altman Z-Score: ${data.fundamentals.altmanZScore.toFixed(2)} (${zStatus})`);
+      }
+      if (data.fundamentals.piotroskiFScore) {
+        const fStatus = data.fundamentals.piotroskiFScore >= 7 ? 'Strong' : data.fundamentals.piotroskiFScore >= 5 ? 'Average' : 'Weak';
+        lines.push(`  Piotroski F-Score: ${data.fundamentals.piotroskiFScore}/9 (${fStatus})`);
+      }
+      if (data.fundamentals.grahamNumber) lines.push(`  Graham Number: $${data.fundamentals.grahamNumber.toFixed(2)}`);
+      if (data.fundamentals.marginOfSafety) {
+        const mosStatus = data.fundamentals.marginOfSafety > 25 ? 'Undervalued' : data.fundamentals.marginOfSafety > 0 ? 'Fair Value' : 'Overvalued';
+        lines.push(`  Margin of Safety: ${data.fundamentals.marginOfSafety.toFixed(1)}% (${mosStatus})`);
+      }
+      
+      // Factor scores
+      lines.push(`  Value Score: ${data.fundamentals.valueScore.toFixed(0)}/100`);
+      lines.push(`  Quality Score: ${data.fundamentals.qualityScore.toFixed(0)}/100`);
+      lines.push(`  Growth Score: ${data.fundamentals.growthScore.toFixed(0)}/100`);
+      
       lines.push('');
     }
 

@@ -36,6 +36,7 @@ use services::{
     OpenRouterService,
     AlpacaService,
     FundamentalDataService,
+    FundamentalMetrics,
     openrouter_service::OpenRouterMessage,
 };
 use serde::{Serialize, Deserialize};
@@ -1389,6 +1390,9 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
     let quant_result = service.get_quant_metrics(&symbol).await;
     let price_result = service.get_current_price(&symbol).await;
     
+    // Fetch real fundamentals from the fundamental service
+    let fundamentals_result = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await;
+    
     // Detect if this is an ETF based on common ETF suffixes and known ETFs
     let is_etf = is_etf_symbol(&symbol);
     let is_bond_etf = is_bond_etf_symbol(&symbol);
@@ -1438,28 +1442,165 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
             "momentumScore": ((rsi - 50.0) / 50.0 * 100.0).round(),
         });
         
-        // Generate factor scores based on quant metrics
-        let value_score: f64 = 50.0 + (sharpe * 10.0).min(30.0).max(-30.0);
-        let quality_score: f64 = 50.0 + (annualized_return / 2.0).min(30.0).max(-30.0);
-        let growth_score: f64 = 50.0 + (annualized_return / 3.0).min(25.0).max(-25.0);
+        // Calculate factor scores based on real fundamentals when available
+        let (value_score, quality_score, growth_score, fundamentals_json) = 
+            if let Ok(ref fund) = fundamentals_result {
+                // Calculate Value Score (based on P/E, P/B, P/S, EV/EBITDA)
+                let mut v_score: f64 = 50.0;
+                if let Some(pe) = fund.pe_ratio {
+                    v_score += if pe < 15.0 { 20.0 } else if pe < 25.0 { 10.0 } else if pe > 40.0 { -15.0 } else { 0.0 };
+                }
+                if let Some(pb) = fund.price_to_book {
+                    v_score += if pb < 1.5 { 10.0 } else if pb < 3.0 { 5.0 } else if pb > 5.0 { -10.0 } else { 0.0 };
+                }
+                if let Some(ps) = fund.price_to_sales {
+                    v_score += if ps < 2.0 { 10.0 } else if ps < 5.0 { 5.0 } else if ps > 10.0 { -10.0 } else { 0.0 };
+                }
+                
+                // Calculate Quality Score (based on ROE, ROA, profit margin, debt/equity)
+                let mut q_score: f64 = 50.0;
+                if let Some(roe) = fund.return_on_equity {
+                    q_score += if roe > 0.20 { 20.0 } else if roe > 0.15 { 15.0 } else if roe > 0.10 { 10.0 } else if roe < 0.0 { -15.0 } else { 0.0 };
+                }
+                if let Some(margin) = fund.profit_margin {
+                    q_score += if margin > 0.20 { 15.0 } else if margin > 0.10 { 10.0 } else if margin < 0.0 { -15.0 } else { 0.0 };
+                }
+                if let Some(de) = fund.debt_to_equity {
+                    q_score += if de < 0.5 { 10.0 } else if de < 1.0 { 5.0 } else if de > 2.0 { -15.0 } else { 0.0 };
+                }
+                
+                // Calculate Growth Score (based on revenue growth, earnings growth)
+                let mut g_score: f64 = 50.0;
+                if let Some(rev_growth) = fund.revenue_growth_yoy {
+                    g_score += if rev_growth > 0.20 { 25.0 } else if rev_growth > 0.10 { 15.0 } else if rev_growth > 0.05 { 10.0 } else if rev_growth < 0.0 { -15.0 } else { 0.0 };
+                }
+                if let Some(earn_growth) = fund.earnings_growth_yoy {
+                    g_score += if earn_growth > 0.20 { 20.0 } else if earn_growth > 0.10 { 10.0 } else if earn_growth < 0.0 { -10.0 } else { 0.0 };
+                }
+                
+                // Calculate advanced metrics
+                // Altman Z-Score estimate (simplified for data available)
+                let altman_z = calculate_altman_z_estimate(&fund);
+                
+                // Piotroski F-Score estimate
+                let piotroski_f = calculate_piotroski_estimate(&fund);
+                
+                // Calculate intrinsic value metrics
+                let price = price_result.clone().unwrap_or(100.0);
+                let graham_number = calculate_graham_number(&fund);
+                let margin_of_safety = if let Some(gn) = graham_number {
+                    if gn > 0.0 { Some(((gn - price) / gn) * 100.0) } else { None }
+                } else { None };
+                
+                // Dividend safety assessment
+                let dividend_safety = assess_dividend_safety(&fund);
+                
+                let fundamentals = serde_json::json!({
+                    // Basic valuation
+                    "peRatio": fund.pe_ratio,
+                    "forwardPE": fund.forward_pe,
+                    "pegRatio": fund.peg_ratio,
+                    "priceToBook": fund.price_to_book,
+                    "priceToSales": fund.price_to_sales,
+                    "evToEbitda": fund.ev_to_ebitda,
+                    
+                    // Profitability
+                    "profitMargin": fund.profit_margin,
+                    "operatingMargin": fund.operating_margin,
+                    "returnOnAssets": fund.return_on_assets,
+                    "returnOnEquity": fund.return_on_equity,
+                    
+                    // Growth
+                    "revenueGrowthYoY": fund.revenue_growth_yoy,
+                    "earningsGrowthYoY": fund.earnings_growth_yoy,
+                    
+                    // Financial Health
+                    "debtToEquity": fund.debt_to_equity,
+                    "currentRatio": fund.current_ratio,
+                    "quickRatio": fund.quick_ratio,
+                    "freeCashFlow": fund.free_cash_flow,
+                    
+                    // Dividend
+                    "dividendYield": fund.dividend_yield,
+                    "payoutRatio": fund.payout_ratio,
+                    "dividendSafety": dividend_safety,
+                    
+                    // Company info
+                    "marketCap": fund.market_cap,
+                    "eps": fund.eps,
+                    "beta": fund.beta.or(metrics.beta).unwrap_or(1.0),
+                    "companyName": fund.company_name,
+                    "sector": fund.sector,
+                    "industry": fund.industry,
+                    "fiftyTwoWeekHigh": fund.fifty_two_week_high,
+                    "fiftyTwoWeekLow": fund.fifty_two_week_low,
+                    
+                    // Advanced metrics
+                    "altmanZScore": altman_z,
+                    "piotroskiFScore": piotroski_f,
+                    "grahamNumber": graham_number,
+                    "marginOfSafety": margin_of_safety,
+                    
+                    // Factor scores
+                    "valueScore": v_score.max(0.0).min(100.0),
+                    "qualityScore": q_score.max(0.0).min(100.0),
+                    "growthScore": g_score.max(0.0).min(100.0),
+                    
+                    // Data quality
+                    "dataSource": fund.source,
+                    "lastUpdated": fund.last_updated,
+                });
+                
+                (v_score.max(0.0).min(100.0), q_score.max(0.0).min(100.0), g_score.max(0.0).min(100.0), fundamentals)
+            } else {
+                // Fallback to quant-based estimates when fundamentals unavailable
+                let v_score = 50.0 + (sharpe * 10.0).min(30.0).max(-30.0);
+                let q_score = 50.0 + (annualized_return / 2.0).min(30.0).max(-30.0);
+                let g_score = 50.0 + (annualized_return / 3.0).min(25.0).max(-25.0);
+                
+                let fundamentals = serde_json::json!({
+                    "peRatio": null,
+                    "forwardPE": null,
+                    "pegRatio": null,
+                    "priceToBook": null,
+                    "priceToSales": null,
+                    "evToEbitda": null,
+                    "profitMargin": null,
+                    "operatingMargin": null,
+                    "returnOnAssets": null,
+                    "returnOnEquity": null,
+                    "revenueGrowthYoY": null,
+                    "earningsGrowthYoY": null,
+                    "debtToEquity": null,
+                    "currentRatio": null,
+                    "quickRatio": null,
+                    "freeCashFlow": null,
+                    "dividendYield": null,
+                    "payoutRatio": null,
+                    "dividendSafety": null,
+                    "marketCap": 0,
+                    "eps": null,
+                    "beta": metrics.beta.unwrap_or(1.0),
+                    "companyName": null,
+                    "sector": null,
+                    "industry": null,
+                    "fiftyTwoWeekHigh": null,
+                    "fiftyTwoWeekLow": null,
+                    "altmanZScore": null,
+                    "piotroskiFScore": null,
+                    "grahamNumber": null,
+                    "marginOfSafety": null,
+                    "valueScore": v_score.max(0.0).min(100.0),
+                    "qualityScore": q_score.max(0.0).min(100.0),
+                    "growthScore": g_score.max(0.0).min(100.0),
+                    "dataSource": "estimated",
+                    "lastUpdated": chrono::Utc::now().to_rfc3339(),
+                });
+                
+                (v_score.max(0.0).min(100.0), q_score.max(0.0).min(100.0), g_score.max(0.0).min(100.0), fundamentals)
+            };
         
-        // Generate fundamentals - different for ETFs vs stocks
-        result["fundamentals"] = serde_json::json!({
-            "peRatio": null,
-            "forwardPE": null,
-            "priceToBook": null,
-            "profitMargin": null,
-            "returnOnEquity": null,
-            "revenueGrowthYoY": null,
-            "debtToEquity": null,
-            "dividendYield": null,
-            "marketCap": 0,
-            "eps": null,
-            "beta": metrics.beta.unwrap_or(1.0),
-            "valueScore": value_score.max(0.0).min(100.0),
-            "qualityScore": quality_score.max(0.0).min(100.0),
-            "growthScore": growth_score.max(0.0).min(100.0),
-        });
+        result["fundamentals"] = fundamentals_json;
         
         // Add ETF-specific fundamentals for ETFs
         if is_etf {
@@ -1648,6 +1789,219 @@ fn get_estimated_expense_ratio(symbol: &str) -> Option<f64> {
     else {
         Some(0.20) // Default moderate expense ratio
     }
+}
+
+// ==================== FUNDAMENTAL ANALYSIS HELPERS ====================
+
+/// Calculate Altman Z-Score estimate (simplified version)
+/// Z-Score > 3.0: Safe zone
+/// Z-Score 1.8-3.0: Grey zone  
+/// Z-Score < 1.8: Distress zone
+fn calculate_altman_z_estimate(fund: &FundamentalMetrics) -> Option<f64> {
+    // Simplified Z-Score calculation using available metrics
+    // Original formula: Z = 1.2×A + 1.4×B + 3.3×C + 0.6×D + 1.0×E
+    // A = Working Capital/Total Assets (approximated from current ratio)
+    // B = Retained Earnings/Total Assets (approximated from ROA)
+    // C = EBIT/Total Assets (approximated from operating margin)
+    // D = Market Value of Equity/Total Liabilities (approximated from D/E ratio)
+    // E = Sales/Total Assets (approximated)
+    
+    let mut score: f64 = 0.0;
+    let mut components = 0;
+    
+    // A: Working Capital/Total Assets (estimate from current ratio)
+    if let Some(current_ratio) = fund.current_ratio {
+        // If current ratio > 1, we have positive working capital
+        let a = (current_ratio - 1.0).max(0.0).min(0.5) / 2.0; // Normalize to 0-0.25
+        score += 1.2 * a;
+        components += 1;
+    }
+    
+    // B: Profitability indicator from ROA
+    if let Some(roa) = fund.return_on_assets {
+        let b = roa.max(-0.3).min(0.3); // Cap at ±30%
+        score += 1.4 * b;
+        components += 1;
+    }
+    
+    // C: Operating efficiency from operating margin
+    if let Some(op_margin) = fund.operating_margin {
+        let c = op_margin.max(-0.2).min(0.3);
+        score += 3.3 * c;
+        components += 1;
+    }
+    
+    // D: Leverage indicator (inverse of D/E)
+    if let Some(de) = fund.debt_to_equity {
+        if de > 0.0 {
+            let d = (1.0 / de).min(3.0); // Cap at 3x
+            score += 0.6 * d;
+            components += 1;
+        }
+    }
+    
+    // E: Asset turnover estimate
+    if let Some(profit_margin) = fund.profit_margin {
+        if let Some(roa) = fund.return_on_assets {
+            // Asset turnover ≈ ROA / Profit Margin
+            if profit_margin.abs() > 0.01 {
+                let e = (roa / profit_margin).max(0.0).min(3.0);
+                score += 1.0 * e;
+                components += 1;
+            }
+        }
+    }
+    
+    if components >= 3 {
+        // Normalize based on components used (target score ~2.7 for average company)
+        let normalized_score = score * (5.0 / components as f64);
+        Some(normalized_score.max(0.0).min(5.0))
+    } else {
+        None
+    }
+}
+
+/// Calculate Piotroski F-Score estimate (0-9, higher is better)
+/// Based on 9 binary signals for financial strength
+fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<i32> {
+    let mut score = 0;
+    let mut criteria_checked = 0;
+    
+    // Profitability signals (4 criteria)
+    
+    // 1. Positive Net Income (use profit margin as proxy)
+    if let Some(margin) = fund.profit_margin {
+        criteria_checked += 1;
+        if margin > 0.0 { score += 1; }
+    }
+    
+    // 2. Positive ROA
+    if let Some(roa) = fund.return_on_assets {
+        criteria_checked += 1;
+        if roa > 0.0 { score += 1; }
+    }
+    
+    // 3. Positive Operating Cash Flow (use FCF as proxy)
+    if let Some(fcf) = fund.free_cash_flow {
+        criteria_checked += 1;
+        if fcf > 0.0 { score += 1; }
+    }
+    
+    // 4. Cash Flow > Net Income (quality of earnings)
+    // Assume positive if FCF exists and margin is positive (simplified)
+    if fund.free_cash_flow.is_some() && fund.profit_margin.map_or(false, |m| m > 0.0) {
+        criteria_checked += 1;
+        if fund.free_cash_flow.unwrap_or(0.0) > 0.0 { score += 1; }
+    }
+    
+    // Leverage, Liquidity, Source of Funds (3 criteria)
+    
+    // 5. Lower Debt/Equity (improvement) - assume pass if D/E < 1
+    if let Some(de) = fund.debt_to_equity {
+        criteria_checked += 1;
+        if de < 1.0 { score += 1; }
+    }
+    
+    // 6. Higher Current Ratio (improvement) - assume pass if > 1.5
+    if let Some(cr) = fund.current_ratio {
+        criteria_checked += 1;
+        if cr > 1.5 { score += 1; }
+    }
+    
+    // 7. No new shares issued (assume pass if profitable)
+    if fund.profit_margin.map_or(false, |m| m > 0.05) {
+        criteria_checked += 1;
+        score += 1;
+    }
+    
+    // Operating Efficiency (2 criteria)
+    
+    // 8. Higher Gross Margin (use operating margin as proxy)
+    if let Some(op_margin) = fund.operating_margin {
+        criteria_checked += 1;
+        if op_margin > 0.10 { score += 1; }
+    }
+    
+    // 9. Higher Asset Turnover (revenue growth indicates efficiency)
+    if let Some(rev_growth) = fund.revenue_growth_yoy {
+        criteria_checked += 1;
+        if rev_growth > 0.0 { score += 1; }
+    }
+    
+    if criteria_checked >= 5 {
+        // Scale to 0-9 based on criteria checked
+        let scaled_score = (score as f64 * 9.0 / criteria_checked as f64).round() as i32;
+        Some(scaled_score.min(9).max(0))
+    } else {
+        None
+    }
+}
+
+/// Calculate Graham Number (intrinsic value estimate)
+/// Graham Number = sqrt(22.5 × EPS × Book Value per Share)
+fn calculate_graham_number(fund: &FundamentalMetrics) -> Option<f64> {
+    let eps = fund.eps?;
+    let price_to_book = fund.price_to_book?;
+    
+    if eps <= 0.0 || price_to_book <= 0.0 {
+        return None;
+    }
+    
+    // Estimate book value per share from P/B ratio
+    // If we had price, BV = Price / PB
+    // For now, we estimate using a reference price
+    // Graham Number = sqrt(22.5 × EPS × (EPS × PE / PB))
+    
+    if let Some(pe) = fund.pe_ratio {
+        if pe > 0.0 {
+            // Implied price = EPS × PE
+            let implied_price = eps * pe;
+            // Book value per share = Price / PB
+            let book_value = implied_price / price_to_book;
+            
+            if book_value > 0.0 && eps > 0.0 {
+                let graham = (22.5 * eps * book_value).sqrt();
+                return Some(graham);
+            }
+        }
+    }
+    
+    None
+}
+
+/// Assess dividend safety based on payout ratio and financial health
+fn assess_dividend_safety(fund: &FundamentalMetrics) -> Option<String> {
+    // Only relevant if there's a dividend
+    let yield_val = fund.dividend_yield.unwrap_or(0.0);
+    if yield_val <= 0.0 {
+        return None;
+    }
+    
+    // Check payout ratio
+    let payout = fund.payout_ratio.unwrap_or(0.5);
+    
+    // Check cash flow coverage
+    let has_good_cashflow = fund.free_cash_flow.map_or(false, |f| f > 0.0);
+    
+    // Check profitability
+    let is_profitable = fund.profit_margin.map_or(false, |m| m > 0.05);
+    
+    // Check leverage
+    let low_debt = fund.debt_to_equity.map_or(true, |d| d < 1.5);
+    
+    let safety = if payout < 0.4 && has_good_cashflow && is_profitable && low_debt {
+        "very_safe"
+    } else if payout < 0.6 && (has_good_cashflow || is_profitable) && low_debt {
+        "safe"
+    } else if payout < 0.8 && is_profitable {
+        "moderate"
+    } else if payout < 1.0 {
+        "at_risk"
+    } else {
+        "cutting"
+    };
+    
+    Some(safety.to_string())
 }
 
 // ==================== HISTORICAL DATA ====================

@@ -881,3 +881,64 @@
     margin-bottom: 0.5rem;
   }
 }
+
+/* Company Header */
+.ta-company-header {
+  grid-column: 1 / -1;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, var(--accent-10), var(--bg-tertiary));
+  border-radius: var(--radius-md);
+  margin-bottom: 0.5rem;
+  border-left: 3px solid var(--accent);
+}
+
+.ta-company-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.ta-company-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ta-sector-badge {
+  background: var(--accent-20);
+  color: var(--accent);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ta-industry {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Data source indicator */
+.ta-data-source {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+}
+
+.ta-data-source-live {
+  color: #22c55e;
+}
+
+.ta-data-source-estimated {
+  color: #f59e0b;
+}

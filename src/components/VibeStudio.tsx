@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage } from "../services/openrouter";
+import { chatHistoryService, Conversation } from "../services/chatHistory";
 import { invoke } from "../services/tauri";
 import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
@@ -75,6 +76,11 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
   const [showQuantDashboard, setShowQuantDashboard] = useState(true);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   
+  // Chat history persistence
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [savedConversations, setSavedConversations] = useState<Conversation[]>([]);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  
   // Save state
   const [isSaving, setIsSaving] = useState(false);
   
@@ -87,6 +93,11 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
 
+  // Load saved conversations on mount
+  useEffect(() => {
+    loadSavedConversations();
+  }, []);
+
   // Load portfolio from props when passed (from SavedPortfoliosTab)
   useEffect(() => {
     if (initialPortfolio) {
@@ -97,6 +108,80 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
       }
     }
   }, [initialPortfolio, onPortfolioLoaded]);
+
+  // Load saved conversations from IndexedDB
+  const loadSavedConversations = async () => {
+    try {
+      const conversations = await chatHistoryService.listConversations();
+      if (isMountedRef.current) {
+        setSavedConversations(conversations);
+      }
+    } catch (err) {
+      logger.error('Failed to load chat history:', err);
+    }
+  };
+
+  // Save chat message to history
+  const saveChatMessage = async (role: 'user' | 'assistant', content: string) => {
+    try {
+      // Create new conversation if none exists
+      if (!currentConversationId) {
+        const conv = await chatHistoryService.createConversation(
+          prompt.substring(0, 50) || 'New Conversation'
+        );
+        setCurrentConversationId(conv.id);
+        await chatHistoryService.addMessage(conv.id, role, content);
+      } else {
+        await chatHistoryService.addMessage(currentConversationId, role, content);
+      }
+      // Refresh conversation list
+      loadSavedConversations();
+    } catch (err) {
+      logger.error('Failed to save chat message:', err);
+    }
+  };
+
+  // Load a conversation from history
+  const loadConversation = async (conversationId: string) => {
+    try {
+      const conversation = await chatHistoryService.getConversation(conversationId);
+      if (conversation && isMountedRef.current) {
+        setCurrentConversationId(conversation.id);
+        setChatHistory(conversation.messages.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        })));
+        setChatMode(true);
+        setShowChatHistory(false);
+      }
+    } catch (err) {
+      logger.error('Failed to load conversation:', err);
+    }
+  };
+
+  // Delete a conversation
+  const deleteConversation = async (conversationId: string) => {
+    try {
+      await chatHistoryService.deleteConversation(conversationId);
+      if (currentConversationId === conversationId) {
+        setCurrentConversationId(null);
+        setChatHistory([]);
+      }
+      loadSavedConversations();
+    } catch (err) {
+      logger.error('Failed to delete conversation:', err);
+    }
+  };
+
+  // Start a new conversation
+  const startNewConversation = () => {
+    setCurrentConversationId(null);
+    setChatHistory([]);
+    setChatMode(false);
+    setGeneratedPortfolio(null);
+    setPrompt('');
+    setShowChatHistory(false);
+  };
 
   // Helper to check if sections have data (for hiding empty sections)
   const sectionVisibility = useMemo(() => {
@@ -285,6 +370,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
         { role: 'user', content: userMessage }
       ];
 
+      // Save user message to history
+      await saveChatMessage('user', userMessage);
+
       const response = await portfolioAgent.chatAboutPortfolio(
         userMessage,
         generatedPortfolio,
@@ -297,6 +385,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
           ...newHistory,
           { role: 'assistant', content: response }
         ]);
+        
+        // Save assistant response to history
+        await saveChatMessage('assistant', response);
       }
     } catch (error) {
       if (isMountedRef.current) {
@@ -321,6 +412,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
     setChatMode(false);
     setChatHistory([]);
     setProgressSteps([]);
+    setCurrentConversationId(null);
   };
 
   const handleSaveJSON = async () => {
@@ -1470,7 +1562,75 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
 
           {chatMode && (
             <div className="chat-section">
-              <h3><MessageSquare size={20} /> Chat with AI about this portfolio</h3>
+              <div className="chat-header">
+                <h3><MessageSquare size={20} /> Chat with AI about this portfolio</h3>
+                <div className="chat-header-actions">
+                  <button 
+                    className="btn-icon"
+                    onClick={() => setShowChatHistory(!showChatHistory)}
+                    title="Chat history"
+                  >
+                    <FileText size={16} />
+                  </button>
+                  <button 
+                    className="btn-icon"
+                    onClick={startNewConversation}
+                    title="New conversation"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                </div>
+              </div>
+              
+              {/* Chat History Panel */}
+              {showChatHistory && (
+                <div className="chat-history-panel">
+                  <div className="chat-history-header">
+                    <h4>Saved Conversations</h4>
+                    <span className="chat-history-info">Auto-deleted after 30 days</span>
+                  </div>
+                  {savedConversations.length === 0 ? (
+                    <p className="chat-history-empty">No saved conversations</p>
+                  ) : (
+                    <div className="chat-history-list">
+                      {savedConversations.map((conv) => {
+                        const daysLeft = chatHistoryService.getDaysUntilDeletion(conv);
+                        return (
+                          <div 
+                            key={conv.id} 
+                            className={`chat-history-item ${currentConversationId === conv.id ? 'active' : ''}`}
+                          >
+                            <div 
+                              className="chat-history-item-content"
+                              onClick={() => loadConversation(conv.id)}
+                            >
+                              <span className="chat-history-title">{conv.title}</span>
+                              <span className="chat-history-preview">{conv.preview}</span>
+                              <div className="chat-history-meta">
+                                <span>{conv.messageCount} messages</span>
+                                <span className={daysLeft <= 7 ? 'expiring-soon' : ''}>
+                                  {daysLeft} days left
+                                </span>
+                              </div>
+                            </div>
+                            <button 
+                              className="chat-history-delete"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteConversation(conv.id);
+                              }}
+                              title="Delete conversation"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              
               <div className="chat-messages">
                 {chatHistory.map((msg, i) => (
                   <div key={i} className={`chat-message ${msg.role}`}>

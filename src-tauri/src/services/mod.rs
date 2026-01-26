@@ -8,4 +8,4 @@ pub mod fundamental_service;
 pub use enhanced_market_service::EnhancedMarketDataService;
 pub use openrouter_service::OpenRouterService;
 pub use alpaca_service::AlpacaService;
-pub use fundamental_service::FundamentalDataService;
+pub use fundamental_service::{FundamentalDataService, FundamentalMetrics};

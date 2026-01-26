@@ -71,20 +71,59 @@ interface TickerData {
     momentumScore: number;
   };
   fundamentals?: {
+    // Basic valuation
     peRatio: number | null;
     forwardPE: number | null;
+    pegRatio: number | null;
     priceToBook: number | null;
+    priceToSales: number | null;
+    evToEbitda: number | null;
+    
+    // Profitability
     profitMargin: number | null;
+    operatingMargin: number | null;
+    returnOnAssets: number | null;
     returnOnEquity: number | null;
+    
+    // Growth
     revenueGrowthYoY: number | null;
+    earningsGrowthYoY: number | null;
+    
+    // Financial Health
     debtToEquity: number | null;
+    currentRatio: number | null;
+    quickRatio: number | null;
+    freeCashFlow: number | null;
+    
+    // Dividend
     dividendYield: number | null;
+    payoutRatio: number | null;
+    dividendSafety: string | null;
+    
+    // Company info
     marketCap: number;
     eps: number | null;
     beta: number | null;
+    companyName: string | null;
+    sector: string | null;
+    industry: string | null;
+    fiftyTwoWeekHigh: number | null;
+    fiftyTwoWeekLow: number | null;
+    
+    // Advanced metrics
+    altmanZScore: number | null;
+    piotroskiFScore: number | null;
+    grahamNumber: number | null;
+    marginOfSafety: number | null;
+    
+    // Factor scores
     valueScore: number;
     qualityScore: number;
     growthScore: number;
+    
+    // Data quality
+    dataSource: string | null;
+    lastUpdated: string | null;
   };
   etfFundamentals?: {
     aum: number | null;
@@ -200,15 +239,54 @@ export default function TickerAnalysis({
         alpha: data.quantMetrics.alpha,
       } : undefined,
       fundamentals: data.fundamentals ? {
+        // Basic valuation
         peRatio: data.fundamentals.peRatio,
         forwardPE: data.fundamentals.forwardPE,
+        pegRatio: data.fundamentals.pegRatio,
         priceToBook: data.fundamentals.priceToBook,
+        priceToSales: data.fundamentals.priceToSales,
+        evToEbitda: data.fundamentals.evToEbitda,
+        
+        // Profitability
         profitMargin: data.fundamentals.profitMargin,
+        operatingMargin: data.fundamentals.operatingMargin,
+        returnOnAssets: data.fundamentals.returnOnAssets,
         returnOnEquity: data.fundamentals.returnOnEquity,
+        
+        // Growth
         revenueGrowthYoY: data.fundamentals.revenueGrowthYoY,
+        earningsGrowthYoY: data.fundamentals.earningsGrowthYoY,
+        
+        // Financial Health
         debtToEquity: data.fundamentals.debtToEquity,
+        currentRatio: data.fundamentals.currentRatio,
+        quickRatio: data.fundamentals.quickRatio,
+        freeCashFlow: data.fundamentals.freeCashFlow,
+        
+        // Dividend
         dividendYield: data.fundamentals.dividendYield,
+        payoutRatio: data.fundamentals.payoutRatio,
+        dividendSafety: data.fundamentals.dividendSafety,
+        
+        // Company info
         marketCap: data.fundamentals.marketCap,
+        eps: data.fundamentals.eps,
+        companyName: data.fundamentals.companyName,
+        sector: data.fundamentals.sector,
+        industry: data.fundamentals.industry,
+        fiftyTwoWeekHigh: data.fundamentals.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: data.fundamentals.fiftyTwoWeekLow,
+        
+        // Advanced metrics
+        altmanZScore: data.fundamentals.altmanZScore,
+        piotroskiFScore: data.fundamentals.piotroskiFScore,
+        grahamNumber: data.fundamentals.grahamNumber,
+        marginOfSafety: data.fundamentals.marginOfSafety,
+        
+        // Factor scores
+        valueScore: data.fundamentals.valueScore,
+        qualityScore: data.fundamentals.qualityScore,
+        growthScore: data.fundamentals.growthScore,
       } : undefined,
       sentiment: data.sentiment ? {
         overallSentiment: data.sentiment.overallSentiment,
@@ -590,8 +668,19 @@ export default function TickerAnalysis({
                     </div>
                   </div>
                 ) : (
-                  // Stock Fundamentals
+                  // Stock Fundamentals - Enhanced with real data
                   <div className="ta-metrics-list">
+                    {/* Company Info */}
+                    {data.fundamentals?.companyName && (
+                      <div className="ta-company-header">
+                        <div className="ta-company-name">{data.fundamentals.companyName}</div>
+                        <div className="ta-company-meta">
+                          {data.fundamentals.sector && <span className="ta-sector-badge">{data.fundamentals.sector}</span>}
+                          {data.fundamentals.industry && <span className="ta-industry">{data.fundamentals.industry}</span>}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="ta-metric-item">
                       <span className="ta-metric-name">Market Cap</span>
                       <span className="ta-metric-value">{data.fundamentals?.marketCap && data.fundamentals.marketCap > 0 ? formatCurrency(data.fundamentals.marketCap) : 'N/A'}</span>
@@ -607,29 +696,63 @@ export default function TickerAnalysis({
                       <span className="ta-metric-value">{data.fundamentals?.forwardPE?.toFixed(1) ?? 'N/A'}</span>
                     </div>
                     <div className="ta-metric-item">
+                      <span className="ta-metric-name">PEG Ratio</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.pegRatio && data.fundamentals.pegRatio < 1 ? 'positive' : data.fundamentals?.pegRatio && data.fundamentals.pegRatio > 2 ? 'negative' : ''}`}>
+                        {data.fundamentals?.pegRatio?.toFixed(2) ?? 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
                       <span className="ta-metric-name">P/B Ratio</span>
                       <span className="ta-metric-value">{data.fundamentals?.priceToBook?.toFixed(2) ?? 'N/A'}</span>
                     </div>
                     <div className="ta-metric-item">
+                      <span className="ta-metric-name">P/S Ratio</span>
+                      <span className="ta-metric-value">{data.fundamentals?.priceToSales?.toFixed(2) ?? 'N/A'}</span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">EV/EBITDA</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.evToEbitda && data.fundamentals.evToEbitda < 12 ? 'positive' : data.fundamentals?.evToEbitda && data.fundamentals.evToEbitda > 20 ? 'negative' : ''}`}>
+                        {data.fundamentals?.evToEbitda?.toFixed(1) ?? 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
                       <span className="ta-metric-name">EPS</span>
-                      <span className="ta-metric-value">${data.fundamentals?.eps?.toFixed(2) ?? 'N/A'}</span>
+                      <span className="ta-metric-value">{data.fundamentals?.eps != null ? `$${data.fundamentals.eps.toFixed(2)}` : 'N/A'}</span>
                     </div>
                     <div className="ta-metric-item">
                       <span className="ta-metric-name">ROE</span>
-                      <span className={`ta-metric-value ${data.fundamentals?.returnOnEquity && data.fundamentals.returnOnEquity > 0.15 ? 'positive' : ''}`}>
-                        {data.fundamentals?.returnOnEquity ? `${(data.fundamentals.returnOnEquity * 100).toFixed(1)}%` : 'N/A'}
+                      <span className={`ta-metric-value ${data.fundamentals?.returnOnEquity && data.fundamentals.returnOnEquity > 0.15 ? 'positive' : data.fundamentals?.returnOnEquity && data.fundamentals.returnOnEquity < 0 ? 'negative' : ''}`}>
+                        {data.fundamentals?.returnOnEquity != null ? `${(data.fundamentals.returnOnEquity * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">ROA</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.returnOnAssets && data.fundamentals.returnOnAssets > 0.08 ? 'positive' : ''}`}>
+                        {data.fundamentals?.returnOnAssets != null ? `${(data.fundamentals.returnOnAssets * 100).toFixed(1)}%` : 'N/A'}
                       </span>
                     </div>
                     <div className="ta-metric-item">
                       <span className="ta-metric-name">Profit Margin</span>
-                      <span className={`ta-metric-value ${data.fundamentals?.profitMargin && data.fundamentals.profitMargin > 0.15 ? 'positive' : ''}`}>
-                        {data.fundamentals?.profitMargin ? `${(data.fundamentals.profitMargin * 100).toFixed(1)}%` : 'N/A'}
+                      <span className={`ta-metric-value ${data.fundamentals?.profitMargin && data.fundamentals.profitMargin > 0.15 ? 'positive' : data.fundamentals?.profitMargin && data.fundamentals.profitMargin < 0 ? 'negative' : ''}`}>
+                        {data.fundamentals?.profitMargin != null ? `${(data.fundamentals.profitMargin * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Operating Margin</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.operatingMargin && data.fundamentals.operatingMargin > 0.15 ? 'positive' : ''}`}>
+                        {data.fundamentals?.operatingMargin != null ? `${(data.fundamentals.operatingMargin * 100).toFixed(1)}%` : 'N/A'}
                       </span>
                     </div>
                     <div className="ta-metric-item">
                       <span className="ta-metric-name">Revenue Growth</span>
-                      <span className={`ta-metric-value ${data.fundamentals?.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY > 0 ? 'positive' : 'negative'}`}>
-                        {data.fundamentals?.revenueGrowthYoY ? `${data.fundamentals.revenueGrowthYoY > 0 ? '+' : ''}${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
+                      <span className={`ta-metric-value ${data.fundamentals?.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY > 0 ? 'positive' : data.fundamentals?.revenueGrowthYoY && data.fundamentals.revenueGrowthYoY < 0 ? 'negative' : ''}`}>
+                        {data.fundamentals?.revenueGrowthYoY != null ? `${data.fundamentals.revenueGrowthYoY > 0 ? '+' : ''}${(data.fundamentals.revenueGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Earnings Growth</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.earningsGrowthYoY && data.fundamentals.earningsGrowthYoY > 0 ? 'positive' : data.fundamentals?.earningsGrowthYoY && data.fundamentals.earningsGrowthYoY < 0 ? 'negative' : ''}`}>
+                        {data.fundamentals?.earningsGrowthYoY != null ? `${data.fundamentals.earningsGrowthYoY > 0 ? '+' : ''}${(data.fundamentals.earningsGrowthYoY * 100).toFixed(1)}%` : 'N/A'}
                       </span>
                     </div>
                     <div className="ta-metric-item">
@@ -639,10 +762,97 @@ export default function TickerAnalysis({
                       </span>
                     </div>
                     <div className="ta-metric-item">
-                      <span className="ta-metric-name">Dividend Yield</span>
-                      <span className="ta-metric-value">
-                        {data.fundamentals?.dividendYield ? `${(data.fundamentals.dividendYield * 100).toFixed(2)}%` : 'N/A'}
+                      <span className="ta-metric-name">Current Ratio</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.currentRatio && data.fundamentals.currentRatio > 1.5 ? 'positive' : data.fundamentals?.currentRatio && data.fundamentals.currentRatio < 1 ? 'negative' : ''}`}>
+                        {data.fundamentals?.currentRatio?.toFixed(2) ?? 'N/A'}
                       </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Quick Ratio</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.quickRatio && data.fundamentals.quickRatio > 1 ? 'positive' : data.fundamentals?.quickRatio && data.fundamentals.quickRatio < 0.5 ? 'negative' : ''}`}>
+                        {data.fundamentals?.quickRatio?.toFixed(2) ?? 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Free Cash Flow</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.freeCashFlow && data.fundamentals.freeCashFlow > 0 ? 'positive' : data.fundamentals?.freeCashFlow && data.fundamentals.freeCashFlow < 0 ? 'negative' : ''}`}>
+                        {data.fundamentals?.freeCashFlow != null ? formatCurrency(data.fundamentals.freeCashFlow) : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">Dividend Yield</span>
+                      <span className={`ta-metric-value ${data.fundamentals?.dividendYield && data.fundamentals.dividendYield > 0.02 ? 'positive' : ''}`}>
+                        {data.fundamentals?.dividendYield != null ? `${(data.fundamentals.dividendYield * 100).toFixed(2)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    {data.fundamentals?.dividendYield != null && data.fundamentals.dividendYield > 0 && (
+                      <div className="ta-metric-item">
+                        <span className="ta-metric-name">Dividend Safety</span>
+                        <span className={`ta-metric-value ${data.fundamentals?.dividendSafety === 'very_safe' || data.fundamentals?.dividendSafety === 'safe' ? 'positive' : data.fundamentals?.dividendSafety === 'at_risk' || data.fundamentals?.dividendSafety === 'cutting' ? 'negative' : ''}`}>
+                          {data.fundamentals?.dividendSafety?.replace('_', ' ').toUpperCase() ?? 'N/A'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">52W High</span>
+                      <span className="ta-metric-value">
+                        {data.fundamentals?.fiftyTwoWeekHigh != null ? `$${data.fundamentals.fiftyTwoWeekHigh.toFixed(2)}` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="ta-metric-item">
+                      <span className="ta-metric-name">52W Low</span>
+                      <span className="ta-metric-value">
+                        {data.fundamentals?.fiftyTwoWeekLow != null ? `$${data.fundamentals.fiftyTwoWeekLow.toFixed(2)}` : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Advanced Metrics Section */}
+                {data.fundamentals && (data.fundamentals.altmanZScore || data.fundamentals.piotroskiFScore || data.fundamentals.grahamNumber) && (
+                  <div className="ta-subsection">
+                    <h4><Shield size={16} /> Advanced Financial Health</h4>
+                    <div className="ta-metrics-list">
+                      {data.fundamentals.altmanZScore != null && (
+                        <div className="ta-metric-item">
+                          <span className="ta-metric-name">Altman Z-Score</span>
+                          <span className={`ta-metric-value ${data.fundamentals.altmanZScore > 3 ? 'positive' : data.fundamentals.altmanZScore < 1.8 ? 'negative' : ''}`}>
+                            {data.fundamentals.altmanZScore.toFixed(2)}
+                          </span>
+                          <span className="ta-metric-status">
+                            {data.fundamentals.altmanZScore > 3 ? 'Safe' : data.fundamentals.altmanZScore > 1.8 ? 'Grey Zone' : 'Distress'}
+                          </span>
+                        </div>
+                      )}
+                      {data.fundamentals.piotroskiFScore != null && (
+                        <div className="ta-metric-item">
+                          <span className="ta-metric-name">Piotroski F-Score</span>
+                          <span className={`ta-metric-value ${data.fundamentals.piotroskiFScore >= 7 ? 'positive' : data.fundamentals.piotroskiFScore <= 3 ? 'negative' : ''}`}>
+                            {data.fundamentals.piotroskiFScore}/9
+                          </span>
+                          <span className="ta-metric-status">
+                            {data.fundamentals.piotroskiFScore >= 7 ? 'Strong' : data.fundamentals.piotroskiFScore >= 5 ? 'Average' : 'Weak'}
+                          </span>
+                        </div>
+                      )}
+                      {data.fundamentals.grahamNumber != null && (
+                        <div className="ta-metric-item">
+                          <span className="ta-metric-name">Graham Number</span>
+                          <span className="ta-metric-value">${data.fundamentals.grahamNumber.toFixed(2)}</span>
+                          <span className="ta-metric-status">Intrinsic Value</span>
+                        </div>
+                      )}
+                      {data.fundamentals.marginOfSafety != null && (
+                        <div className="ta-metric-item">
+                          <span className="ta-metric-name">Margin of Safety</span>
+                          <span className={`ta-metric-value ${data.fundamentals.marginOfSafety > 0 ? 'positive' : 'negative'}`}>
+                            {data.fundamentals.marginOfSafety > 0 ? '+' : ''}{data.fundamentals.marginOfSafety.toFixed(1)}%
+                          </span>
+                          <span className="ta-metric-status">
+                            {data.fundamentals.marginOfSafety > 25 ? 'Undervalued' : data.fundamentals.marginOfSafety > 0 ? 'Fair Value' : 'Overvalued'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

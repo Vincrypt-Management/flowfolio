@@ -358,19 +358,61 @@ interface PortfolioAsset {
   
   dailyReturns?: number[]; // For correlation analysis
   
-  // Legacy fundamentals (for backward compatibility)
+  // Enhanced fundamentals (includes legacy + advanced metrics)
   fundamentals?: {
+    // Basic valuation
     peRatio: number | null;
     forwardPE: number | null;
+    pegRatio?: number | null;
     priceToBook: number | null;
+    priceToSales?: number | null;
+    evToEbitda?: number | null;
+    
+    // Profitability
     profitMargin: number | null;
+    operatingMargin?: number | null;
+    returnOnAssets?: number | null;
     returnOnEquity: number | null;
+    
+    // Growth
     revenueGrowthYoY: number | null;
+    earningsGrowthYoY?: number | null;
+    
+    // Financial Health
     debtToEquity: number | null;
+    currentRatio?: number | null;
+    quickRatio?: number | null;
+    freeCashFlow?: number | null;
+    
+    // Dividend
     dividendYield: number | null;
+    payoutRatio?: number | null;
+    dividendSafety?: string | null;
+    
+    // Company info
     marketCap: number;
     eps: number | null;
     beta: number | null;
+    companyName?: string | null;
+    sector?: string | null;
+    industry?: string | null;
+    fiftyTwoWeekHigh?: number | null;
+    fiftyTwoWeekLow?: number | null;
+    
+    // Advanced metrics
+    altmanZScore?: number | null;
+    piotroskiFScore?: number | null;
+    grahamNumber?: number | null;
+    marginOfSafety?: number | null;
+    
+    // Factor scores
+    valueScore?: number;
+    qualityScore?: number;
+    growthScore?: number;
+    
+    // Data quality
+    dataSource?: string | null;
+    lastUpdated?: string | null;
   };
   
   // NEW: Comprehensive fundamental analysis by asset type
@@ -988,22 +1030,30 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     
     console.log(`[QUANT FEEDBACK] Portfolio type: ${isETFHeavy ? 'ETF-heavy' : 'Stock-heavy'} (${etfCount}/${assets.length} ETFs)`);
     
-    // Step 1: Identify underperforming assets based on quant metrics
+    // Step 1: Identify underperforming assets based on quant metrics AND fundamentals
     const assetAnalysis = assets.map(asset => {
       const metrics = asset.quantMetrics;
+      const fundamentals = asset.fundamentals;
       const score = asset.compositeScore || 50;
+      const fundScore = asset.fundamentalScore || 50;
       const issues: string[] = [];
+      const strengths: string[] = [];
       let riskScore = 0; // Higher = more issues
+      let strengthScore = 0; // Higher = better fundamentals
       
       // Use appropriate thresholds based on asset type
       const isETF = asset.assetType === 'etf' || this.isETFSymbol(asset.symbol);
       const thresholds = isETF ? ETF_QUANT_THRESHOLDS : QUANT_FEEDBACK_THRESHOLDS;
       
+      // ============ QUANT METRICS ANALYSIS ============
       if (metrics) {
         // Check Sharpe Ratio
         if (metrics.sharpeRatio < thresholds.minSharpeRatio) {
           issues.push(`Low Sharpe (${metrics.sharpeRatio.toFixed(2)}) for ${isETF ? 'ETF' : 'stock'}`);
           riskScore += 2;
+        } else if (metrics.sharpeRatio > 1.0) {
+          strengths.push(`Strong Sharpe (${metrics.sharpeRatio.toFixed(2)})`);
+          strengthScore += 2;
         }
         
         // Check Volatility - ETFs should have lower volatility
@@ -1045,10 +1095,97 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
           }
         }
       }
+      
+      // ============ FUNDAMENTAL ANALYSIS (NEW) ============
+      if (fundamentals && !isETF) {
+        // Altman Z-Score - Bankruptcy Risk
+        if (fundamentals.altmanZScore != null) {
+          if (fundamentals.altmanZScore < 1.8) {
+            issues.push(`Distress Zone (Z-Score: ${fundamentals.altmanZScore.toFixed(2)})`);
+            riskScore += 4; // Major red flag
+          } else if (fundamentals.altmanZScore > 3) {
+            strengths.push(`Safe Zone (Z-Score: ${fundamentals.altmanZScore.toFixed(2)})`);
+            strengthScore += 2;
+          }
+        }
+        
+        // Piotroski F-Score - Financial Strength
+        if (fundamentals.piotroskiFScore != null) {
+          if (fundamentals.piotroskiFScore <= 3) {
+            issues.push(`Weak Financials (F-Score: ${fundamentals.piotroskiFScore}/9)`);
+            riskScore += 3;
+          } else if (fundamentals.piotroskiFScore >= 7) {
+            strengths.push(`Strong Financials (F-Score: ${fundamentals.piotroskiFScore}/9)`);
+            strengthScore += 2;
+          }
+        }
+        
+        // Margin of Safety - Valuation
+        if (fundamentals.marginOfSafety != null) {
+          if (fundamentals.marginOfSafety < -30) {
+            issues.push(`Overvalued (${fundamentals.marginOfSafety.toFixed(0)}% above intrinsic)`);
+            riskScore += 2;
+          } else if (fundamentals.marginOfSafety > 25) {
+            strengths.push(`Undervalued (${fundamentals.marginOfSafety.toFixed(0)}% margin of safety)`);
+            strengthScore += 3;
+          }
+        }
+        
+        // Dividend Safety
+        if (fundamentals.dividendSafety) {
+          if (fundamentals.dividendSafety === 'at_risk' || fundamentals.dividendSafety === 'cutting') {
+            issues.push(`Dividend ${fundamentals.dividendSafety.replace('_', ' ')}`);
+            riskScore += 2;
+          } else if (fundamentals.dividendSafety === 'very_safe') {
+            strengths.push('Very safe dividend');
+            strengthScore += 1;
+          }
+        }
+        
+        // High Debt Level
+        if (fundamentals.debtToEquity != null && fundamentals.debtToEquity > 2) {
+          issues.push(`High Leverage (D/E: ${fundamentals.debtToEquity.toFixed(2)})`);
+          riskScore += 2;
+        }
+        
+        // Poor Profitability
+        if (fundamentals.returnOnEquity != null && fundamentals.returnOnEquity < 0) {
+          issues.push(`Negative ROE (${(fundamentals.returnOnEquity * 100).toFixed(1)}%)`);
+          riskScore += 2;
+        } else if (fundamentals.returnOnEquity != null && fundamentals.returnOnEquity > 0.20) {
+          strengths.push(`Excellent ROE (${(fundamentals.returnOnEquity * 100).toFixed(1)}%)`);
+          strengthScore += 2;
+        }
+        
+        // Liquidity Risk
+        if (fundamentals.currentRatio != null && fundamentals.currentRatio < 1) {
+          issues.push(`Liquidity Risk (Current Ratio: ${fundamentals.currentRatio.toFixed(2)})`);
+          riskScore += 2;
+        }
+        
+        // Negative Growth
+        if (fundamentals.revenueGrowthYoY != null && fundamentals.revenueGrowthYoY < -0.1) {
+          issues.push(`Revenue Decline (${(fundamentals.revenueGrowthYoY * 100).toFixed(1)}%)`);
+          riskScore += 1;
+        } else if (fundamentals.revenueGrowthYoY != null && fundamentals.revenueGrowthYoY > 0.2) {
+          strengths.push(`Strong Growth (${(fundamentals.revenueGrowthYoY * 100).toFixed(1)}%)`);
+          strengthScore += 1;
+        }
+      }
+      
       // Check composite score
       if (score < QUANT_FEEDBACK_THRESHOLDS.minCompositeScore) {
         issues.push(`Low Score (${score})`);
         riskScore += 2;
+      }
+      
+      // Check fundamental score
+      if (fundScore < 35) {
+        issues.push(`Poor Fundamentals (${fundScore}/100)`);
+        riskScore += 2;
+      } else if (fundScore >= 70) {
+        strengths.push(`Strong Fundamentals (${fundScore}/100)`);
+        strengthScore += 2;
       }
       
       return {
@@ -1056,40 +1193,60 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
         sector: asset.sector || 'Default',
         allocation: asset.allocation,
         issues,
+        strengths,
         riskScore,
+        strengthScore,
         needsAttention: riskScore >= 3,
+        isStrong: strengthScore >= 4 && riskScore < 2,
         metrics,
         compositeScore: score,
+        fundamentalScore: fundScore,
+        fundamentalGrade: asset.fundamentalGrade,
       };
     });
     
-    // Step 2: Apply allocation adjustments based on analysis
+    // Step 2: Apply allocation adjustments based on analysis (now includes fundamentals)
     const totalRiskScore = assetAnalysis.reduce((sum, a) => sum + a.riskScore, 0);
     const avgRiskScore = totalRiskScore / assets.length;
+    const totalStrengthScore = assetAnalysis.reduce((sum, a) => sum + a.strengthScore, 0);
+    const avgStrengthScore = totalStrengthScore / assets.length;
     
     assets = assets.map((asset, index) => {
       const analysis = assetAnalysis[index];
       let newAllocation = asset.allocation;
       let allocationReason = '';
       
-      if (analysis.riskScore >= 4) {
+      if (analysis.riskScore >= 5) {
+        // Critical risk (includes fundamental red flags like distress zone): reduce significantly
+        const reduction = asset.allocation * QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor * 1.5;
+        newAllocation = Math.max(1, asset.allocation - reduction);
+        allocationReason = `Critical issues: ${analysis.issues.slice(0, 3).join(', ')}`;
+        feedbackActions.push(`🔴 ${asset.symbol}: ${allocationReason}`);
+        assetsToFlag.push(asset.symbol);
+      } else if (analysis.riskScore >= 4) {
         // High risk: reduce allocation significantly
         const reduction = asset.allocation * QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor;
         newAllocation = Math.max(2, asset.allocation - reduction);
-        allocationReason = `Reduced allocation due to: ${analysis.issues.join(', ')}`;
+        allocationReason = `Reduced due to: ${analysis.issues.join(', ')}`;
         feedbackActions.push(`⚠️ ${asset.symbol}: ${allocationReason}`);
         assetsToFlag.push(asset.symbol);
-      } else if (analysis.riskScore >= 2 && analysis.riskScore < avgRiskScore) {
+      } else if (analysis.riskScore >= 2 && analysis.riskScore > avgRiskScore) {
         // Moderate risk: slight reduction
         const reduction = asset.allocation * (QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor / 2);
         newAllocation = Math.max(2, asset.allocation - reduction);
-        allocationReason = `Slightly reduced due to: ${analysis.issues.join(', ')}`;
+        allocationReason = `Slightly reduced: ${analysis.issues.join(', ')}`;
         feedbackActions.push(`📉 ${asset.symbol}: ${allocationReason}`);
-      } else if (analysis.riskScore === 0 && analysis.compositeScore > 60) {
-        // Strong performer: can increase allocation
-        const boost = asset.allocation * (QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor / 2);
+      } else if (analysis.isStrong && analysis.strengthScore > avgStrengthScore) {
+        // Strong fundamentals AND low risk: increase allocation
+        const boost = asset.allocation * QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor;
         newAllocation = Math.min(25, asset.allocation + boost); // Cap at 25%
-        allocationReason = `Increased allocation - strong quant metrics`;
+        allocationReason = `Increased - ${analysis.strengths.slice(0, 2).join(', ')}`;
+        feedbackActions.push(`📈 ${asset.symbol}: ${allocationReason}`);
+      } else if (analysis.riskScore === 0 && analysis.compositeScore > 60) {
+        // Good performer: can increase allocation
+        const boost = asset.allocation * (QUANT_FEEDBACK_THRESHOLDS.allocationAdjustFactor / 2);
+        newAllocation = Math.min(25, asset.allocation + boost);
+        allocationReason = `Increased - strong quant metrics`;
         feedbackActions.push(`📈 ${asset.symbol}: ${allocationReason}`);
       }
       
@@ -1147,18 +1304,30 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     // Step 5: Recalculate portfolio metrics after adjustments
     let portfolioSharpe = 0;
     let portfolioVol = 0;
+    let avgFundamentalScore = 0;
+    let fundamentalDataCount = 0;
+    
     assets.forEach(asset => {
       const weight = asset.allocation / 100;
       if (asset.quantMetrics) {
         portfolioSharpe += asset.quantMetrics.sharpeRatio * weight;
         portfolioVol += Math.pow(asset.quantMetrics.volatility * weight, 2);
       }
+      if (asset.fundamentalScore) {
+        avgFundamentalScore += asset.fundamentalScore * weight;
+        fundamentalDataCount++;
+      }
     });
     portfolioVol = Math.sqrt(portfolioVol) * 0.7 + portfolioVol * 0.3;
+    
+    // Count strong/weak assets
+    const strongAssets = assetAnalysis.filter(a => a.isStrong).length;
+    const weakAssets = assetAnalysis.filter(a => a.needsAttention).length;
     
     console.log(`[QUANT FEEDBACK] Applied ${feedbackActions.length} adjustments`);
     console.log(`[QUANT FEEDBACK] ${assetsToFlag.length} assets flagged for attention`);
     console.log(`[QUANT FEEDBACK] ${replacementSuggestions.length} replacement suggestions`);
+    console.log(`[QUANT FEEDBACK] Portfolio fundamentals: ${strongAssets} strong, ${weakAssets} weak, avg score: ${avgFundamentalScore.toFixed(0)}`);
     
     return {
       ...portfolio,
@@ -2267,18 +2436,63 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
           } : undefined,
           dailyReturns: metrics?.daily_returns || [],
           fundamentals: fundamentals ? {
+            // Basic valuation
             peRatio: fundamentals.peRatio,
             forwardPE: fundamentals.forwardPE,
+            pegRatio: fundamentals.pegRatio,
             priceToBook: fundamentals.priceToBook,
+            priceToSales: fundamentals.priceToSales,
+            evToEbitda: fundamentals.evToEbitda,
+            
+            // Profitability
             profitMargin: fundamentals.profitMargin,
+            operatingMargin: fundamentals.operatingMargin,
+            returnOnAssets: fundamentals.returnOnAssets,
             returnOnEquity: fundamentals.returnOnEquity,
+            
+            // Growth
             revenueGrowthYoY: fundamentals.revenueGrowthYoY,
+            earningsGrowthYoY: fundamentals.earningsGrowthYoY,
+            
+            // Financial Health
             debtToEquity: fundamentals.debtToEquity,
+            currentRatio: fundamentals.currentRatio,
+            quickRatio: fundamentals.quickRatio,
+            freeCashFlow: fundamentals.freeCashFlow,
+            
+            // Dividend
             dividendYield: fundamentals.dividendYield,
+            payoutRatio: fundamentals.payoutRatio,
+            dividendSafety: fundamentals.dividendSafety,
+            
+            // Company info
             marketCap: fundamentals.marketCap,
             eps: fundamentals.eps,
-            beta: fundamentals.beta
-          } : undefined
+            beta: fundamentals.beta,
+            companyName: fundamentals.companyName,
+            sector: fundamentals.sector,
+            industry: fundamentals.industry,
+            fiftyTwoWeekHigh: fundamentals.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: fundamentals.fiftyTwoWeekLow,
+            
+            // Advanced metrics (Altman Z-Score, Piotroski F-Score, Graham Number)
+            altmanZScore: fundamentals.altmanZScore,
+            piotroskiFScore: fundamentals.piotroskiFScore,
+            grahamNumber: fundamentals.grahamNumber,
+            marginOfSafety: fundamentals.marginOfSafety,
+            
+            // Factor scores
+            valueScore: fundamentals.valueScore,
+            qualityScore: fundamentals.qualityScore,
+            growthScore: fundamentals.growthScore,
+            
+            // Data quality
+            dataSource: fundamentals.dataSource,
+            lastUpdated: fundamentals.lastUpdated,
+          } : undefined,
+          // Calculate fundamental score from advanced metrics
+          fundamentalScore: this.calculateFundamentalScore(fundamentals),
+          fundamentalGrade: this.getFundamentalGrade(this.calculateFundamentalScore(fundamentals)),
         };
       });
 
@@ -2290,6 +2504,96 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       // Return portfolio with whatever data we have
       return portfolio;
     }
+  }
+  
+  /**
+   * Calculate fundamental score from advanced metrics (0-100)
+   */
+  private calculateFundamentalScore(fundamentals: any): number {
+    if (!fundamentals) return 50; // Default neutral score
+    
+    let score = 50;
+    let dataPoints = 0;
+    
+    // Altman Z-Score (bankruptcy risk)
+    if (fundamentals.altmanZScore != null) {
+      dataPoints++;
+      if (fundamentals.altmanZScore > 3) score += 15; // Safe zone
+      else if (fundamentals.altmanZScore > 1.8) score += 5; // Grey zone
+      else score -= 20; // Distress zone
+    }
+    
+    // Piotroski F-Score (financial strength)
+    if (fundamentals.piotroskiFScore != null) {
+      dataPoints++;
+      if (fundamentals.piotroskiFScore >= 7) score += 15; // Strong
+      else if (fundamentals.piotroskiFScore >= 5) score += 5; // Average
+      else score -= 10; // Weak
+    }
+    
+    // Margin of Safety (valuation)
+    if (fundamentals.marginOfSafety != null) {
+      dataPoints++;
+      if (fundamentals.marginOfSafety > 25) score += 15; // Undervalued
+      else if (fundamentals.marginOfSafety > 0) score += 5; // Fair value
+      else if (fundamentals.marginOfSafety < -25) score -= 15; // Overvalued
+      else score -= 5;
+    }
+    
+    // ROE (profitability)
+    if (fundamentals.returnOnEquity != null) {
+      dataPoints++;
+      if (fundamentals.returnOnEquity > 0.2) score += 10;
+      else if (fundamentals.returnOnEquity > 0.1) score += 5;
+      else if (fundamentals.returnOnEquity < 0) score -= 10;
+    }
+    
+    // Debt to Equity (leverage)
+    if (fundamentals.debtToEquity != null) {
+      dataPoints++;
+      if (fundamentals.debtToEquity < 0.5) score += 10;
+      else if (fundamentals.debtToEquity < 1) score += 5;
+      else if (fundamentals.debtToEquity > 2) score -= 10;
+    }
+    
+    // Dividend Safety
+    if (fundamentals.dividendSafety != null) {
+      dataPoints++;
+      if (fundamentals.dividendSafety === 'very_safe') score += 10;
+      else if (fundamentals.dividendSafety === 'safe') score += 5;
+      else if (fundamentals.dividendSafety === 'at_risk') score -= 5;
+      else if (fundamentals.dividendSafety === 'cutting') score -= 15;
+    }
+    
+    // Current Ratio (liquidity)
+    if (fundamentals.currentRatio != null) {
+      dataPoints++;
+      if (fundamentals.currentRatio > 2) score += 5;
+      else if (fundamentals.currentRatio > 1.5) score += 2;
+      else if (fundamentals.currentRatio < 1) score -= 10;
+    }
+    
+    // Revenue Growth
+    if (fundamentals.revenueGrowthYoY != null) {
+      dataPoints++;
+      if (fundamentals.revenueGrowthYoY > 0.2) score += 10;
+      else if (fundamentals.revenueGrowthYoY > 0.1) score += 5;
+      else if (fundamentals.revenueGrowthYoY < 0) score -= 5;
+    }
+    
+    // Normalize score to 0-100
+    return Math.max(0, Math.min(100, score));
+  }
+  
+  /**
+   * Get letter grade from fundamental score
+   */
+  private getFundamentalGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
+    if (score >= 80) return 'A';
+    if (score >= 65) return 'B';
+    if (score >= 50) return 'C';
+    if (score >= 35) return 'D';
+    return 'F';
   }
 
   /**

@@ -40,6 +40,7 @@ export interface FundamentalMetrics {
   // Dividend metrics
   dividendYield: number | null;
   payoutRatio: number | null;
+  dividendSafety: string | null; // 'very_safe' | 'safe' | 'moderate' | 'at_risk' | 'cutting'
   
   // Additional info
   eps: number | null;
@@ -47,9 +48,21 @@ export interface FundamentalMetrics {
   fiftyTwoWeekHigh: number | null;
   fiftyTwoWeekLow: number | null;
   
+  // Advanced metrics (Altman Z-Score, Piotroski F-Score, Graham Number)
+  altmanZScore: number | null;
+  piotroskiFScore: number | null;
+  grahamNumber: number | null;
+  marginOfSafety: number | null;
+  
+  // Factor scores
+  valueScore: number | null;
+  qualityScore: number | null;
+  growthScore: number | null;
+  
   // Source and timestamp
-  source: 'alphavantage' | 'yahoo' | 'polygon' | 'finnhub';
+  source: 'alphavantage' | 'yahoo' | 'polygon' | 'finnhub' | 'estimated';
   lastUpdated: string;
+  dataSource?: string;
 }
 
 export interface CompanyOverview {
@@ -183,12 +196,22 @@ class FundamentalDataService {
       freeCashFlow: backend.free_cash_flow,
       dividendYield: backend.dividend_yield,
       payoutRatio: backend.payout_ratio,
+      dividendSafety: null, // Calculated in backend's get_detailed_ticker_analysis
       eps: backend.eps,
       beta: backend.beta,
       fiftyTwoWeekHigh: backend.fifty_two_week_high,
       fiftyTwoWeekLow: backend.fifty_two_week_low,
-      source: backend.source as 'yahoo' | 'alphavantage' | 'polygon' | 'finnhub',
+      // Advanced metrics (from detailed analysis endpoint)
+      altmanZScore: null,
+      piotroskiFScore: null,
+      grahamNumber: null,
+      marginOfSafety: null,
+      valueScore: null,
+      qualityScore: null,
+      growthScore: null,
+      source: backend.source as 'yahoo' | 'alphavantage' | 'polygon' | 'finnhub' | 'estimated',
       lastUpdated: backend.last_updated,
+      dataSource: backend.source,
     };
   }
 
