@@ -5,3 +5,6 @@ pub mod config;
 pub mod error;
 pub mod logging;
 pub mod encrypted_env;
+
+// Re-export commonly used functions
+pub use encrypted_env::decrypt_env_file;

@@ -10,7 +10,7 @@
 
 mod modules;
 mod services;
-mod core;
+pub mod core;
 mod infrastructure;
 mod domain;
 mod api;
