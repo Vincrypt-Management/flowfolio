@@ -255,45 +255,56 @@ function addShimmer(ctx: OfflineAudioContext, dest: AudioNode, startTime: number
  */
 export async function buildIntroAudio(durationSec: number, seed: number = 42): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, SAMPLE_RATE * durationSec, SAMPLE_RATE);
-  const bus = createMixBus(ctx, { master: 0.65, pad: 0.8, chime: 1.0, fx: 0.7 });
+  const bus = createMixBus(ctx, { master: 0.7, pad: 0.9, chime: 1.0, fx: 0.75 });
 
   const chordKeys: ChordKey[] = ['Am', 'Dm', 'Em', 'Cm', 'Fm'];
   const selectedKey = audioSelect(chordKeys, seed, 0);
   const chords = chordProgressions[selectedKey];
 
-  // Warm ambient pad throughout (seed-varied chord)
+  // Full warm pad throughout
   addPad(ctx, bus.pad, {
     frequencies: chords[0],
-    startTime: 0, duration: durationSec, volume: 0.04,
+    startTime: 0, duration: durationSec * 0.5, volume: 0.045,
+  });
+  addPad(ctx, bus.pad, {
+    frequencies: chords[1],
+    startTime: durationSec * 0.4, duration: durationSec * 0.6, volume: 0.05,
+  });
+  // High shimmer layer
+  addPad(ctx, bus.pad, {
+    frequencies: [chords[0][2] * 2],
+    startTime: 2, duration: durationSec - 4, volume: 0.012, type: 'triangle',
   });
 
   // Scene timings (frames / 30fps)
-  const hookStart = 0;
   const logoStart = 80 / 30;
   const privacyStart = 195 / 30;
   const platformStart = 315 / 30;
   const closingStart = 435 / 30;
 
-  // Hook — subtle low presence
-  addImpact(ctx, bus.fx, hookStart + 0.3, 0.07);
+  // Hook — opening impact
+  addImpact(ctx, bus.fx, 0.3, 0.10);
 
-  // Logo reveal — refined chime chord with shimmer (seed-varied notes)
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 1), logoStart + 0.5, 0.10);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 2), logoStart + 0.7, 0.07);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 3), logoStart + 0.9, 0.05);
-  addShimmer(ctx, bus.chime, logoStart + 1.0, 0.02);
+  // Logo reveal — refined chime chord with shimmer
+  addImpact(ctx, bus.fx, logoStart + 0.1, 0.08);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 1), logoStart + 0.3, 0.12);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 2), logoStart + 0.5, 0.08);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 3), logoStart + 0.7, 0.06);
+  addShimmer(ctx, bus.chime, logoStart + 0.8, 0.025);
 
-  // Privacy — single warm tone
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 4), privacyStart + 0.3, 0.06);
+  // Privacy — accent
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 4), privacyStart + 0.3, 0.07);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 5), privacyStart + 0.6, 0.04);
 
   // Platforms — soft accent
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 5), platformStart + 0.3, 0.05);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 6), platformStart + 0.3, 0.06);
 
-  // Closing — gentle resolve chord
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 6), closingStart + 0.3, 0.08);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 7), closingStart + 0.5, 0.06);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 8), closingStart + 0.7, 0.05);
-  addShimmer(ctx, bus.chime, closingStart + 0.8, 0.02);
+  // Closing — resolve chord bloom
+  addImpact(ctx, bus.fx, closingStart + 0.05, 0.07);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 7), closingStart + 0.2, 0.10);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 8), closingStart + 0.4, 0.07);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 9), closingStart + 0.6, 0.05);
+  addShimmer(ctx, bus.chime, closingStart + 0.7, 0.025);
 
   return ctx.startRendering();
 }
@@ -304,7 +315,7 @@ export async function buildIntroAudio(durationSec: number, seed: number = 42): P
  */
 export async function buildIGReelAudio(durationSec: number, seed: number = 42): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, SAMPLE_RATE * durationSec, SAMPLE_RATE);
-  const bus = createMixBus(ctx, { master: 0.7, pad: 0.6, chime: 0.9, fx: 1.0 });
+  const bus = createMixBus(ctx, { master: 0.75, pad: 0.7, chime: 0.9, fx: 1.0 });
 
   const chordKeys: ChordKey[] = ['Am', 'Dm', 'Em', 'Cm', 'Fm'];
   const selectedKey = audioSelect(chordKeys, seed, 0);
@@ -316,11 +327,26 @@ export async function buildIGReelAudio(durationSec: number, seed: number = 42): 
   const featuresStart = 230 / 30;
   const ctaStart = 385 / 30;
 
-  // Low ambient bed — seed-varied chord
+  // Full ambient bed — evolving chords
   addPad(ctx, bus.pad, {
-    frequencies: chords[0].slice(0, 2),
-    startTime: 0, duration: durationSec, volume: 0.025,
+    frequencies: chords[0],
+    startTime: 0, duration: durationSec * 0.5, volume: 0.035,
   });
+  addPad(ctx, bus.pad, {
+    frequencies: chords[1],
+    startTime: durationSec * 0.4, duration: durationSec * 0.6, volume: 0.04,
+  });
+
+  // Rhythmic sub-bass pulse throughout (energy)
+  for (let t = 2; t < durationSec - 1; t += 0.5) {
+    const vol = t < hookEnd ? 0.05 : t < featuresStart ? 0.06 : 0.08;
+    addPulse(ctx, bus.fx, t, vol);
+  }
+
+  // Offbeat ticks for groove
+  for (let t = 2.25; t < durationSec - 1; t += 0.5) {
+    addTick(ctx, bus.fx, t, 0.03);
+  }
 
   // Rhythmic sub-bass pulse during features + CTA (every ~0.6s)
   for (let t = featuresStart; t < durationSec - 1; t += 0.55) {
@@ -362,94 +388,143 @@ export async function buildIGReelAudio(durationSec: number, seed: number = 42): 
 
 /**
  * DEMO SHOWCASE — Product Capability, Cinematic, Impressive
- * Evolving ambient layers, musical story beat motifs, building arc.
- * Now accepts optional seed for unique chord progressions and chime patterns.
+ * Full background music with evolving pads, rhythmic pulse,
+ * melodic motifs at scene transitions, and cinematic arc.
  */
 export async function buildShowcaseAudio(durationSec: number, seed: number = 42): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, SAMPLE_RATE * durationSec, SAMPLE_RATE);
-  const bus = createMixBus(ctx, { master: 0.6, pad: 0.7, chime: 0.9, fx: 0.8 });
+  const bus = createMixBus(ctx, { master: 0.65, pad: 0.8, chime: 0.85, fx: 0.75 });
 
   const chordKeys: ChordKey[] = ['Am', 'Dm', 'Em', 'Cm', 'Fm'];
   const selectedKey = audioSelect(chordKeys, seed, 0);
   const chords = chordProgressions[selectedKey];
 
+  // ─── Evolving Pad Layers (crossfade between chord sections) ───
+
+  // Act 1: dark, tension (0-8s)
+  addPad(ctx, bus.pad, {
+    frequencies: chords[0],
+    startTime: 0, duration: 10, volume: 0.035,
+  });
+
+  // Act 2: discovery (8-18s)
+  addPad(ctx, bus.pad, {
+    frequencies: chords[1],
+    startTime: 8, duration: 12, volume: 0.04,
+  });
+  // Add a warm triangle layer for depth
+  addPad(ctx, bus.pad, {
+    frequencies: [chords[1][0] * 2, chords[1][2] * 2],
+    startTime: 10, duration: 8, volume: 0.012, type: 'triangle',
+  });
+
+  // Act 3a: hopeful, building (18-44s)
+  addPad(ctx, bus.pad, {
+    frequencies: chords[2],
+    startTime: 18, duration: 28, volume: 0.04,
+  });
+  addPad(ctx, bus.pad, {
+    frequencies: [chords[0][0], chords[2][1]],
+    startTime: 22, duration: 20, volume: 0.015, type: 'triangle',
+  });
+
+  // Act 3b: energy plateau (44-65s)
+  addPad(ctx, bus.pad, {
+    frequencies: chords[0],
+    startTime: 44, duration: 23, volume: 0.04,
+  });
+  addPad(ctx, bus.pad, {
+    frequencies: [chords[1][1], chords[1][2]],
+    startTime: 46, duration: 18, volume: 0.018, type: 'triangle',
+  });
+
+  // Act 4: resolution (65s to end)
+  addPad(ctx, bus.pad, {
+    frequencies: [NOTES.C3, NOTES.E3, NOTES.G3, NOTES.C4],
+    startTime: 65, duration: durationSec - 65, volume: 0.045,
+  });
+
+  // ─── Subtle Rhythmic Pulse (starts Act 2, builds through Act 3) ───
+
+  // Light pulse during feature demos (14s - 75s)
+  for (let t = 14; t < 75; t += 1.8) {
+    const vol = t < 30 ? 0.04 : t < 55 ? 0.06 : 0.04;
+    addPulse(ctx, bus.fx, t, vol);
+  }
+
+  // Gentle ticks on the offbeat for rhythm (20s - 70s)
+  for (let t = 20.9; t < 70; t += 1.8) {
+    addTick(ctx, bus.fx, t, 0.025);
+  }
+
   // ─── Act 1: The Problem (0-5s) ───
-  addImpact(ctx, bus.fx, 0.3, 0.08);
-  addSweep(ctx, bus.fx, 1.0, 3.5, 0.025);
+  addImpact(ctx, bus.fx, 0.3, 0.10);
+  addSweep(ctx, bus.fx, 1.0, 3.5, 0.03);
 
   // ─── Act 2: The Discovery (4.7-12.8s) ───
   const logoTime = 140 / 30;
   const privacyTime = 255 / 30;
 
-  // Logo reveal — cinematic chord bloom with seed-varied notes
-  addImpact(ctx, bus.fx, logoTime + 0.2, 0.12);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 1), logoTime + 0.4, 0.10);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 2), logoTime + 0.55, 0.07);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 3), logoTime + 0.7, 0.05);
+  // Logo reveal — cinematic chord bloom
+  addImpact(ctx, bus.fx, logoTime + 0.1, 0.14);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 1), logoTime + 0.3, 0.11);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 2), logoTime + 0.5, 0.08);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 3), logoTime + 0.7, 0.06);
   addChime(ctx, bus.chime, NOTES.C5, logoTime + 0.85, 0.04);
-  addShimmer(ctx, bus.chime, logoTime + 0.9, 0.02);
+  addShimmer(ctx, bus.chime, logoTime + 0.9, 0.025);
 
   // Privacy — warm resolve
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 4), privacyTime + 0.3, 0.06);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 4), privacyTime + 0.3, 0.07);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 5), privacyTime + 0.6, 0.04);
 
   // ─── Act 3: Story Beats + Feature Demos ───
 
   const storyBeats = [
-    { frame: 375, note: NOTES.C5 },
-    { frame: 655, note: NOTES.D5 },
-    { frame: 935, note: NOTES.E5 },
-    { frame: 1215, note: NOTES.G4 },
-    { frame: 1645, note: NOTES.A4 },
-    { frame: 1915, note: NOTES.C5 },
-    { frame: 2165, note: NOTES.E5 },
+    { frame: 375, seedIdx: 10 },   // Vibe Studio
+    { frame: 655, seedIdx: 11 },   // Portfolio
+    { frame: 935, seedIdx: 12 },   // Backtest
+    { frame: 1215, seedIdx: 13 },  // Quant
+    { frame: 1455, seedIdx: 14 },  // Fundamentals
+    { frame: 1645, seedIdx: 15 },  // Optimizer
+    { frame: 1915, seedIdx: 16 },  // Journal
+    { frame: 2165, seedIdx: 17 },  // AI Chat
   ];
 
-  for (const [idx, beat] of storyBeats.entries()) {
+  for (const beat of storyBeats) {
     const t = beat.frame / 30;
-    addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 10 + idx), t + 0.3, 0.07);
-    addTick(ctx, bus.fx, t + 0.15, 0.04);
-    addImpact(ctx, bus.fx, t + 0.1, 0.05);
+    // Impact + chime motif at each story beat
+    addImpact(ctx, bus.fx, t + 0.05, 0.06);
+    addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, beat.seedIdx), t + 0.2, 0.08);
+    addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, beat.seedIdx + 20), t + 0.45, 0.05);
+    addTick(ctx, bus.fx, t + 0.1, 0.04);
   }
 
-  // ─── Ambient Pad Layers (crossfade, don't stack) — seed-varied chords ───
-
-  // Act 1-2: dark, tension (0s to 14s)
-  addPad(ctx, bus.pad, {
-    frequencies: chords[0].slice(0, 2),
-    startTime: 0, duration: 14, volume: 0.03,
-  });
-
-  // Act 3 first half: hopeful (14s to 40s)
-  addPad(ctx, bus.pad, {
-    frequencies: chords[1],
-    startTime: 14, duration: 26, volume: 0.025,
-  });
-
-  // Act 3 second half: building (40s to 65s)
-  addPad(ctx, bus.pad, {
-    frequencies: chords[2],
-    startTime: 40, duration: 25, volume: 0.025,
-  });
-
-  // Act 4: Resolution — resolve (65s to end)
-  addPad(ctx, bus.pad, {
-    frequencies: [NOTES.C3, NOTES.G3, NOTES.C4],
-    startTime: 65, duration: durationSec - 65, volume: 0.03,
-  });
+  // Mid-demo accent chimes (inside feature demos, every ~4s)
+  for (let i = 0; i < storyBeats.length; i++) {
+    const demoStart = storyBeats[i].frame / 30 + 3;
+    const demoEnd = i < storyBeats.length - 1 ? storyBeats[i + 1].frame / 30 - 1 : 80;
+    const midChime = (demoStart + demoEnd) / 2;
+    if (midChime < durationSec - 5) {
+      addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 30 + i), midChime, 0.035);
+    }
+  }
 
   // ─── Act 4: Resolution ───
   const platformTime = 2415 / 30;
   const closingTime = 2535 / 30;
 
-  addChime(ctx, bus.chime, NOTES.G4, platformTime + 0.3, 0.06);
+  // Rising sweep into resolution
+  addSweep(ctx, bus.fx, platformTime - 1, 2.5, 0.025);
+  addChime(ctx, bus.chime, NOTES.G4, platformTime + 0.3, 0.07);
+  addChime(ctx, bus.chime, NOTES.C5, platformTime + 0.6, 0.05);
 
-  // Final resolve — full chord bloom with seed variation
-  addImpact(ctx, bus.fx, closingTime + 0.1, 0.08);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 20), closingTime + 0.3, 0.08);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 21), closingTime + 0.5, 0.06);
-  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 22), closingTime + 0.65, 0.05);
-  addChime(ctx, bus.chime, NOTES.C5, closingTime + 0.8, 0.04);
-  addShimmer(ctx, bus.chime, closingTime + 0.9, 0.02);
+  // Final resolve — full chord bloom
+  addImpact(ctx, bus.fx, closingTime + 0.05, 0.10);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 20), closingTime + 0.2, 0.10);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 21), closingTime + 0.4, 0.07);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 22), closingTime + 0.6, 0.06);
+  addChime(ctx, bus.chime, NOTES.C5, closingTime + 0.75, 0.05);
+  addShimmer(ctx, bus.chime, closingTime + 0.85, 0.03);
 
   return ctx.startRendering();
 }

@@ -9,7 +9,17 @@
       "Bash(cargo test --help:*)",
       "Bash(npx tsc:*)",
       "mcp__filesystem__list_directory",
-      "mcp__playwright__playwright_navigate"
+      "mcp__playwright__playwright_navigate",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(npm i:*)",
+      "Bash(npx remotion:*)",
+      "Bash(npm run:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(tail:*)",
+      "Bash(head:*)",
+      "Bash(echo ffmpeg not installed via brew:*)"
     ]
   }
 }
