@@ -537,8 +537,8 @@ export const FlowFolioIntroIG: React.FC<IGProps> = ({ seed }) => {
     return selected.map((f, i) => ({
       beat: f.beat,
       label: f.label,
-      color: igColorMap[f.colorKey],
-      Icon: igIcons[i % igIcons.length],
+      color: igColorMap[f.colorKey] ?? colors.primary,
+      Icon: igIcons[i % igIcons.length] ?? IGIconSliders,
     }));
   }, [rng]);
 

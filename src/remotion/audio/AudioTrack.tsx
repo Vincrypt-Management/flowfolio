@@ -43,6 +43,7 @@ export const AudioTrack: React.FC<AudioTrackProps> = ({
       setAudioSrc(dataUrl);
       continueRender(handle);
     } catch (err) {
+      console.error('[AudioTrack] Failed to generate audio:', err);
       cancelRender(err);
     }
   }, [generator, durationSec, handle]);

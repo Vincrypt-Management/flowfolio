@@ -36,9 +36,9 @@ export const AnimatedChart: React.FC<AnimatedChartProps> = ({
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  const padX = 10;
-  const padTop = 20;
-  const padBot = 10;
+  const padX = Math.round(width * 0.02);
+  const padTop = Math.round(height * 0.07);
+  const padBot = Math.round(height * 0.03);
 
   const points = data.map((val, i) => {
     const x = padX + (i / (data.length - 1)) * (width - padX * 2);

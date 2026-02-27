@@ -19,6 +19,12 @@ export const hookVariants: readonly HookVariant[] = [
   { line1: 'Your edge is real.', line2: 'Your toolkit is holding you back.' },
   { line1: 'You think in factors.', line2: 'Your spreadsheet thinks in cells.' },
   { line1: 'Markets move fast.', line2: 'Your workflow moves slower.' },
+  { line1: 'You see the signal.', line2: 'Your tools see noise.' },
+  { line1: 'You know what to buy.', line2: 'But not when or how much.' },
+  { line1: 'Your thesis is solid.', line2: 'Your process is manual.' },
+  { line1: 'Data is everywhere.', line2: 'Insight is nowhere.' },
+  { line1: 'You invest with conviction.', line2: 'You manage with chaos.' },
+  { line1: 'Your ideas outpace', line2: 'your infrastructure.' },
 ];
 
 // ─── Pain Points ────────────────────────────────────────────────
@@ -186,6 +192,11 @@ export const taglineVariants: readonly string[] = [
   'Where conviction meets computation',
   'Investing intelligence, offline',
   'The desktop quant lab',
+  'Private. Powerful. Precise.',
+  'Your portfolio, your rules',
+  'Factor investing without the friction',
+  'Offline-first. Insight-always.',
+  'From thesis to portfolio in minutes',
 ];
 
 // ─── Animation Style Variants ───────────────────────────────────

@@ -41,8 +41,8 @@ export const Background: React.FC<BackgroundProps> = ({ variant = 'default', bgV
   const gridOpacity = variant === 'hero' ? 0.035 : 0.02;
   const orbSize = variant === 'hero' ? 750 : 550;
 
-  // Grain animation — shift grain phase over time
-  const grainSeed = Math.floor(frame / 2) * 100;
+  // Grain animation — shift grain phase smoothly (every 10 frames to avoid flicker)
+  const grainSeed = Math.floor(frame / 10) * 100;
 
   // Subtle global pulse for organic feel
   const breathe = interpolate(

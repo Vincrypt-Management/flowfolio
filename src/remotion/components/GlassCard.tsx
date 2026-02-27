@@ -62,7 +62,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
         boxShadow: [
           '0 4px 24px rgba(0,0,0,0.25)',
           'inset 0 1px 0 rgba(255,255,255,0.06)',
-          glowColor ? `0 0 20px ${glowColor}${Math.round(glowStr * 50).toString(16).padStart(2, '0')}` : '',
+          glowColor ? `0 0 20px ${glowColor}${Math.min(255, Math.max(0, Math.round(glowStr * 50))).toString(16).padStart(2, '0')}` : '',
         ].filter(Boolean).join(', '),
         ...style,
       }}

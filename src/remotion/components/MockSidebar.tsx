@@ -74,9 +74,10 @@ interface MockSidebarProps {
 }
 
 export const MockSidebar: React.FC<MockSidebarProps> = ({
-  activeIndex = 0,
+  activeIndex: rawActiveIndex = 0,
   delay = 0,
 }) => {
+  const activeIndex = Math.max(0, Math.min(rawActiveIndex, items.length - 1));
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 

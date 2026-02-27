@@ -105,9 +105,9 @@ function buildPainPointCards(painPointsData?: PainPoint[]) {
   return painPointsData.map((pp, i) => ({
     label: pp.label,
     desc: pp.desc,
-    Icon: iconOptions[i % iconOptions.length],
-    color: colorMap[pp.colorKey].color,
-    glowColor: colorMap[pp.colorKey].glow,
+    Icon: iconOptions[i % iconOptions.length] ?? IconScattered,
+    color: (colorMap[pp.colorKey] ?? colorMap.accent).color,
+    glowColor: (colorMap[pp.colorKey] ?? colorMap.accent).glow,
   }));
 }
 
