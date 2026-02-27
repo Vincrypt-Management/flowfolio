@@ -18,9 +18,19 @@
     "android:build": "tauri android build",
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",
-    "ios:build": "tauri ios build"
+    "ios:build": "tauri ios build",
+    "remotion:preview": "npx remotion studio src/remotion/index.ts",
+    "remotion:vo": "node src/remotion/scripts/generate-vo.mjs",
+    "remotion:render:intro": "npx remotion render src/remotion/index.ts FlowFolioIntro out/flowfolio-intro.mp4",
+    "remotion:render:intro-ig": "npx remotion render src/remotion/index.ts FlowFolioIntroIG out/flowfolio-intro-ig.mp4",
+    "remotion:render:demo": "npx remotion render src/remotion/index.ts FlowFolioShowcase out/flowfolio-demo.mp4",
+    "remotion:render": "npm run remotion:vo && npm run remotion:render:intro && npm run remotion:render:intro-ig && npm run remotion:render:demo"
   },
   "dependencies": {
+    "@remotion/cli": "^4.0.428",
+    "@remotion/media": "^4.0.429",
+    "@remotion/media-utils": "^4.0.429",
+    "@remotion/player": "^4.0.428",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.4.2",
     "@tauri-apps/plugin-fs": "^2.4.4",
@@ -31,7 +41,8 @@
     "lucide-react": "^0.562.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "recharts": "^3.6.0"
+    "recharts": "^3.6.0",
+    "remotion": "^4.0.428"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

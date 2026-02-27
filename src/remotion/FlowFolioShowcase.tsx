@@ -18,7 +18,9 @@ import { JournalDemo } from './scenes/JournalDemo';
 import { AIChatDemo } from './scenes/AIChatDemo';
 import { Platforms } from './scenes/Platforms';
 import { Closing } from './scenes/Closing';
+import { VoiceOver } from './components/VoiceOver';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
+import { buildShowcaseNarration } from './lib/narrationScripts';
 import {
   hookVariants,
   pickPainPoints,
@@ -62,12 +64,15 @@ export const FlowFolioShowcase: React.FC<ShowcaseProps> = ({ seed }) => {
     return { styles, accents };
   }, [rng]);
 
-  // Seed-driven audio generator
+  // Seed-driven audio generator (reduced volume to sit behind VO)
   const audioSeed = rng.seed;
   const audioGen = useMemo(
     () => (dur: number) => buildShowcaseAudio(dur, audioSeed),
     [audioSeed]
   );
+
+  // Narration segments
+  const narrationSegments = useMemo(() => buildShowcaseNarration(rng), [rng]);
 
   return (
     <VideoSeedContext.Provider value={rng}>
@@ -79,7 +84,8 @@ export const FlowFolioShowcase: React.FC<ShowcaseProps> = ({ seed }) => {
         }}
       >
         <Background variant="hero" bgVariation={bgVariation} />
-        <AudioTrack generator={audioGen} volume={0.7} fadeInFrames={25} fadeOutFrames={30} />
+        <AudioTrack generator={audioGen} volume={0.35} fadeInFrames={25} fadeOutFrames={30} />
+        <VoiceOver compositionId="showcase" segments={narrationSegments} volume={0.9} />
 
         {/* ═══ ACT 1: THE PROBLEM ═══ */}
         <Sequence from={0} durationInFrames={150}>

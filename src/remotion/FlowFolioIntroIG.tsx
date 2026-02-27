@@ -14,6 +14,8 @@ import { AudioTrack } from './audio/AudioTrack';
 import { buildIGReelAudio } from './audio/SynthEngine';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 import { hookVariants, pickIGFeatures, taglineVariants } from './lib/contentPools';
+import { VoiceOver } from './components/VoiceOver';
+import { buildIGNarration } from './lib/narrationScripts';
 
 interface IGProps {
   seed?: number;
@@ -548,11 +550,14 @@ export const FlowFolioIntroIG: React.FC<IGProps> = ({ seed }) => {
     [audioSeed]
   );
 
+  const narrationSegments = useMemo(() => buildIGNarration(rng), [rng]);
+
   return (
     <VideoSeedContext.Provider value={rng}>
       <AbsoluteFill style={{ backgroundColor: colors.bg, fontFamily: fonts.sans, overflow: 'hidden' }}>
         <IGBackground />
-        <AudioTrack generator={audioGen} volume={0.8} fadeInFrames={10} fadeOutFrames={15} />
+        <AudioTrack generator={audioGen} volume={0.4} fadeInFrames={10} fadeOutFrames={15} />
+        <VoiceOver compositionId="ig" segments={narrationSegments} volume={0.9} />
 
         {/* Hook — problem statement (0-4.2s) */}
         <Sequence from={0} durationInFrames={125}>

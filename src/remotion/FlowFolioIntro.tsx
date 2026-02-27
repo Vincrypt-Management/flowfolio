@@ -11,6 +11,8 @@ import { AudioTrack } from './audio/AudioTrack';
 import { buildIntroAudio } from './audio/SynthEngine';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 import { hookVariants, pickBGVariation } from './lib/contentPools';
+import { VoiceOver } from './components/VoiceOver';
+import { buildIntroNarration } from './lib/narrationScripts';
 
 interface IntroProps {
   seed?: number;
@@ -29,6 +31,8 @@ export const FlowFolioIntro: React.FC<IntroProps> = ({ seed }) => {
     [audioSeed]
   );
 
+  const narrationSegments = useMemo(() => buildIntroNarration(rng), [rng]);
+
   return (
     <VideoSeedContext.Provider value={rng}>
       <AbsoluteFill
@@ -39,7 +43,8 @@ export const FlowFolioIntro: React.FC<IntroProps> = ({ seed }) => {
         }}
       >
         <Background variant="hero" bgVariation={bgVariation} />
-        <AudioTrack generator={audioGen} volume={0.75} fadeInFrames={20} fadeOutFrames={25} />
+        <AudioTrack generator={audioGen} volume={0.4} fadeInFrames={20} fadeOutFrames={25} />
+        <VoiceOver compositionId="intro" segments={narrationSegments} volume={0.9} />
 
         {/* Hook (0-90) — compact problem statement */}
         <Sequence from={0} durationInFrames={90}>
