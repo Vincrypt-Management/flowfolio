@@ -1,16 +1,17 @@
 import React from 'react';
-import { AbsoluteFill, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
 import { colors } from '../styles';
 import type { BGVariation } from '../lib/contentPools';
 
 /**
- * Ambient background with dual drifting gradient orbs
- * and subtle dot grid. Clean but not flat.
- * Now supports seed-driven variation for unique renders.
+ * Cinematic ambient background with layered depth:
+ * - Dual drifting gradient orbs with motion blur
+ * - Third accent orb for parallax depth
+ * - Subtle grain texture overlay
+ * - Dot grid + vignette
  */
 interface BackgroundProps {
   variant?: 'default' | 'hero' | 'feature';
-  /** Seed-driven color/speed variation */
   bgVariation?: BGVariation;
 }
 
@@ -32,13 +33,44 @@ export const Background: React.FC<BackgroundProps> = ({ variant = 'default', bgV
   const x2 = 60 + Math.cos(-a2) * 12;
   const y2 = 60 + Math.sin(-a2) * 10;
 
+  // Third orb — slow parallax depth layer
+  const a3 = (frame / 1200) * Math.PI * 2;
+  const x3 = 30 + Math.cos(a3 + 1.5) * 15;
+  const y3 = 70 + Math.sin(a3 * 0.7) * 12;
+
   const gridOpacity = variant === 'hero' ? 0.035 : 0.02;
   const orbSize = variant === 'hero' ? 750 : 550;
+
+  // Grain animation — shift grain phase over time
+  const grainSeed = Math.floor(frame / 2) * 100;
+
+  // Subtle global pulse for organic feel
+  const breathe = interpolate(
+    Math.sin(frame / 90 * Math.PI * 2),
+    [-1, 1],
+    [0.85, 1],
+  );
 
   return (
     <AbsoluteFill>
       {/* Solid dark base */}
       <AbsoluteFill style={{ background: colors.bg }} />
+
+      {/* Deep background orb — parallax layer (slowest) */}
+      <div
+        style={{
+          position: 'absolute',
+          left: `${x3}%`,
+          top: `${y3}%`,
+          width: orbSize * 1.3,
+          height: orbSize * 1.3,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, rgba(56, 189, 248, 0.03) 0%, transparent 65%)`,
+          transform: 'translate(-50%, -50%)',
+          filter: 'blur(120px)',
+          opacity: breathe,
+        }}
+      />
 
       {/* Primary green orb */}
       <div
@@ -52,6 +84,7 @@ export const Background: React.FC<BackgroundProps> = ({ variant = 'default', bgV
           background: `radial-gradient(circle, ${orb1Color} 0%, transparent 70%)`,
           transform: 'translate(-50%, -50%)',
           filter: 'blur(80px)',
+          opacity: breathe,
         }}
       />
 
@@ -82,10 +115,21 @@ export const Background: React.FC<BackgroundProps> = ({ variant = 'default', bgV
         </svg>
       </AbsoluteFill>
 
-      {/* Soft edge vignette */}
+      {/* Film grain overlay */}
+      <AbsoluteFill style={{ opacity: 0.025, mixBlendMode: 'overlay' }}>
+        <svg width="100%" height="100%">
+          <filter id="grain">
+            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" seed={grainSeed} />
+            <feColorMatrix type="saturate" values="0" />
+          </filter>
+          <rect width="100%" height="100%" filter="url(#grain)" />
+        </svg>
+      </AbsoluteFill>
+
+      {/* Soft edge vignette — darker for cinematic feel */}
       <AbsoluteFill
         style={{
-          background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.4) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.5) 100%)',
         }}
       />
     </AbsoluteFill>

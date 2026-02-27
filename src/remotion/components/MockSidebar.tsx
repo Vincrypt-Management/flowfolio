@@ -156,10 +156,33 @@ export const MockSidebar: React.FC<MockSidebarProps> = ({
               fontWeight: isActive ? 500 : 400,
               fontFamily: fonts.sans,
               opacity: itemOpacity,
+              position: 'relative',
             }}
           >
-            <div style={{ width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <item.Icon color={isActive ? colors.text : colors.textDim} />
+            {/* Active indicator bar */}
+            {isActive && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '15%',
+                  width: 3,
+                  height: '70%',
+                  borderRadius: '0 2px 2px 0',
+                  background: colors.primary,
+                  boxShadow: `0 0 12px ${colors.primaryGlow}`,
+                  opacity: itemOpacity,
+                }}
+              />
+            )}
+            <div style={{
+              width: 18,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transform: `scale(${interpolate(frame - itemDelay, [0, 15], [0.7, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })})`,
+            }}>
+              <item.Icon color={isActive ? colors.primary : colors.textDim} />
             </div>
             {item.label}
           </div>

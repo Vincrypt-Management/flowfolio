@@ -19,17 +19,31 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   height,
   padding = 28,
   style,
+  glowColor,
 }) => {
   const frame = useCurrentFrame();
+  const localFrame = frame - delay;
 
-  const opacity = interpolate(frame - delay, [0, 20], [0, 1], {
+  const opacity = interpolate(localFrame, [0, 20], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const translateY = interpolate(frame - delay, [0, 20], [8, 0], {
+  const translateY = interpolate(localFrame, [0, 20], [12, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
+
+  // Shimmer sweep: diagonal highlight that crosses once after card appears
+  const shimmerX = interpolate(localFrame, [10, 50], [-100, 200], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const shimmerOp = localFrame > 10 && localFrame < 50 ? 1 : 0;
+
+  // Subtle border glow pulse
+  const glowStr = glowColor
+    ? interpolate(Math.sin(frame / 40 * Math.PI * 2), [-1, 1], [0.3, 0.7])
+    : 0;
 
   return (
     <div
@@ -44,10 +58,29 @@ export const GlassCard: React.FC<GlassCardProps> = ({
         transform: `translateY(${translateY}px)`,
         position: 'relative',
         overflow: 'hidden',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+        boxShadow: [
+          '0 4px 24px rgba(0,0,0,0.25)',
+          'inset 0 1px 0 rgba(255,255,255,0.06)',
+          glowColor ? `0 0 20px ${glowColor}${Math.round(glowStr * 50).toString(16).padStart(2, '0')}` : '',
+        ].filter(Boolean).join(', '),
         ...style,
       }}
     >
+      {/* Shimmer sweep overlay */}
+      {shimmerOp > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: `linear-gradient(105deg, transparent ${shimmerX - 40}%, rgba(255,255,255,0.08) ${shimmerX}%, transparent ${shimmerX + 40}%)`,
+            pointerEvents: 'none',
+            borderRadius: radius['2xl'],
+          }}
+        />
+      )}
       {children}
     </div>
   );

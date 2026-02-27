@@ -232,17 +232,19 @@ export const HookScene: React.FC<HookSceneProps> = ({
                 position: 'relative',
               }}
             >
-              {/* Vertical flow line — connects the 3 cards */}
+              {/* Vertical flow line — animated gradient glow */}
               <div
                 style={{
                   position: 'absolute',
                   left: '50%',
                   top: 0,
-                  width: 1,
+                  width: 2,
                   height: `${flowLineHeight * 100}%`,
-                  background: `linear-gradient(180deg, ${colors.rose}40 0%, ${colors.amber}40 50%, ${colors.accent}40 100%)`,
-                  transform: 'translateX(-0.5px)',
+                  background: `linear-gradient(180deg, ${colors.rose}60 0%, ${colors.amber}60 50%, ${colors.accent}60 100%)`,
+                  transform: 'translateX(-1px)',
                   zIndex: 0,
+                  boxShadow: `0 0 12px ${colors.rose}30, 0 0 24px ${colors.accent}20`,
+                  borderRadius: 2,
                 }}
               />
 
@@ -271,11 +273,14 @@ export const HookScene: React.FC<HookSceneProps> = ({
                     extrapolateRight: 'clamp',
                   });
 
-                  // Flow dot — appears slightly before the card
+                  // Flow dot — pulsing glow
                   const dotOp = interpolate(frame, [start - 4, start + 6], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
                   });
+                  const dotPulse = dotOp > 0
+                    ? interpolate(Math.sin((frame - start) / 10 * Math.PI * 2), [-1, 1], [0.6, 1])
+                    : 0;
 
                   return (
                     <div
@@ -287,16 +292,17 @@ export const HookScene: React.FC<HookSceneProps> = ({
                         opacity: cardOp,
                       }}
                     >
-                      {/* Flow indicator dot */}
+                      {/* Flow indicator dot — pulsing */}
                       <div
                         style={{
-                          width: 8,
-                          height: 8,
+                          width: 10,
+                          height: 10,
                           borderRadius: '50%',
                           background: point.color,
-                          boxShadow: `0 0 10px ${point.color}, 0 0 20px ${point.glowColor}`,
+                          boxShadow: `0 0 ${10 + dotPulse * 8}px ${point.color}, 0 0 ${20 + dotPulse * 12}px ${point.glowColor}`,
                           opacity: dotOp,
                           flexShrink: 0,
+                          transform: `scale(${0.8 + dotPulse * 0.2})`,
                         }}
                       />
 

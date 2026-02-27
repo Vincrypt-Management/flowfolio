@@ -43,6 +43,13 @@ export const Closing: React.FC = () => {
     extrapolateRight: 'clamp',
   });
 
+  // Pulsing CTA glow
+  const glowPulse = interpolate(
+    Math.sin(frame / 15 * Math.PI * 2),
+    [-1, 1],
+    [0.15, 0.4],
+  );
+
   return (
     <SceneTransition durationInFrames={105} fadeInDuration={15} fadeOutDuration={20}>
     <AbsoluteFill
@@ -68,7 +75,7 @@ export const Closing: React.FC = () => {
             width: 96,
             height: 96,
             objectFit: 'contain',
-            filter: 'drop-shadow(0 16px 36px rgba(0,0,0,0.3))',
+            filter: `drop-shadow(0 0 30px rgba(0,229,153,0.35)) drop-shadow(0 16px 36px rgba(0,0,0,0.3))`,
           }}
         />
 
@@ -114,8 +121,8 @@ export const Closing: React.FC = () => {
           style={{
             padding: '14px 44px',
             borderRadius: radius.lg,
-            background: colors.primary,
-            boxShadow: `0 8px 24px rgba(0, 229, 153, 0.2)`,
+            background: `linear-gradient(135deg, ${colors.primary}, ${colors.primaryHover})`,
+            boxShadow: `0 8px 24px rgba(0, 229, 153, ${glowPulse}), 0 0 60px rgba(0, 229, 153, ${glowPulse * 0.4})`,
           }}
         >
           <span
