@@ -136,15 +136,14 @@ export const VibeStudioDemo: React.FC = () => {
                       { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
                     );
 
-                    const bounce = spring({
-                      frame: frame - (sliderDelay + 45),
-                      fps,
-                      config: { damping: 8, stiffness: 200, mass: 0.3 },
-                    });
-                    const finalProgress = Math.min(
+                    const bounceFrame = frame - (sliderDelay + 45);
+                    const bounce = bounceFrame > 0
+                      ? spring({ frame: bounceFrame, fps, config: { damping: 8, stiffness: 200, mass: 0.3 } })
+                      : 0;
+                    const finalProgress = Math.max(0, Math.min(
                       factor.value,
-                      sliderProgress + (bounce - 1) * 0.03
-                    );
+                      sliderProgress + bounce * 0.03
+                    ));
 
                     return (
                       <div key={factor.name} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
