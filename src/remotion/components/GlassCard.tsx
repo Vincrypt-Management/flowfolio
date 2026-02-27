@@ -42,7 +42,8 @@ export const GlassCard: React.FC<GlassCardProps> = ({
 
   // Subtle border glow pulse
   const glowStr = glowColor
-    ? interpolate(Math.sin(frame / 40 * Math.PI * 2), [-1, 1], [0.3, 0.7])
+    ? interpolate(Math.sin(frame / 40 * Math.PI * 2), [-1, 1], [0.3, 0.7],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
     : 0;
 
   return (

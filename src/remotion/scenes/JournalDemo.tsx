@@ -286,7 +286,7 @@ export const JournalDemo: React.FC = () => {
                 {dynamicStats.map((s, i) => {
                   const sDelay = 40 + i * 12;
                   const sScale = spring({
-                    frame: frame - sDelay,
+                    frame: Math.max(0, frame - sDelay),
                     fps,
                     config: { damping: 14, stiffness: 120, mass: 0.4 },
                   });

@@ -81,7 +81,7 @@ export const MockSidebar: React.FC<MockSidebarProps> = ({
   const { fps } = useVideoConfig();
 
   const slideIn = spring({
-    frame: frame - delay,
+    frame: Math.max(0, frame - delay),
     fps,
     config: { damping: 20, stiffness: 100, mass: 0.5 },
   });

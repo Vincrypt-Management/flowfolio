@@ -60,7 +60,7 @@ export const SectionTitle: React.FC<SectionTitleProps> = ({
 
   // Title spring
   const titleSpring = spring({
-    frame: frame - 12,
+    frame: Math.max(0, frame - 12),
     fps,
     config: { damping: 16, stiffness: 100, mass: 0.6 },
   });

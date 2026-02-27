@@ -279,7 +279,8 @@ export const HookScene: React.FC<HookSceneProps> = ({
                     extrapolateRight: 'clamp',
                   });
                   const dotPulse = dotOp > 0
-                    ? interpolate(Math.sin((frame - start) / 10 * Math.PI * 2), [-1, 1], [0.6, 1])
+                    ? interpolate(Math.sin((frame - start) / 10 * Math.PI * 2), [-1, 1], [0.6, 1],
+                        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
                     : 0;
 
                   return (

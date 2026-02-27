@@ -181,6 +181,7 @@ export const AIChatDemo: React.FC = () => {
                             color: colors.textSoft,
                             lineHeight: 1.6,
                             whiteSpace: 'pre-line',
+                            wordBreak: 'break-word' as const,
                           }}
                         >
                           {msg.text}

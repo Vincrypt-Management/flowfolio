@@ -49,6 +49,7 @@ export const Background: React.FC<BackgroundProps> = ({ variant = 'default', bgV
     Math.sin(frame / 90 * Math.PI * 2),
     [-1, 1],
     [0.85, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
   );
 
   return (

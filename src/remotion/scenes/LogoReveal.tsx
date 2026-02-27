@@ -9,6 +9,7 @@ import {
   useVideoConfig,
 } from 'remotion';
 import { colors, fonts } from '../styles';
+import { SceneTransition } from '../components/SceneTransition';
 
 /**
  * Clean logo reveal — one element at a time.
@@ -49,18 +50,12 @@ export const LogoReveal: React.FC = () => {
     extrapolateRight: 'clamp',
   });
 
-  // Scene fade-out
-  const fadeOut = interpolate(frame, [105, 125], [1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
   return (
+    <SceneTransition durationInFrames={125} fadeInDuration={12} fadeOutDuration={18}>
     <AbsoluteFill
       style={{
         justifyContent: 'center',
         alignItems: 'center',
-        opacity: fadeOut,
       }}
     >
       <div
@@ -165,5 +160,6 @@ export const LogoReveal: React.FC = () => {
         </span>
       </div>
     </AbsoluteFill>
+    </SceneTransition>
   );
 };

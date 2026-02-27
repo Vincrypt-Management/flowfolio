@@ -144,7 +144,7 @@ export const QuantDemo: React.FC = () => {
                 {quantMetrics.map((m, i) => {
                   const cardDelay = 25 + i * 10;
                   const cardScale = spring({
-                    frame: frame - cardDelay,
+                    frame: Math.max(0, frame - cardDelay),
                     fps,
                     config: { damping: 14, stiffness: 120, mass: 0.4 },
                   });

@@ -350,7 +350,7 @@ const HealthScoreCard: React.FC<{
   scoreColor: string;
 }> = ({ label, score, frame, delay, fps, scoreColor }) => {
   const cardScale = spring({
-    frame: frame - delay,
+    frame: Math.max(0, frame - delay),
     fps,
     config: { damping: 14, stiffness: 100, mass: 0.5 },
   });

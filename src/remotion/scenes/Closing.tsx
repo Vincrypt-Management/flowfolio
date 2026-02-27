@@ -48,6 +48,7 @@ export const Closing: React.FC = () => {
     Math.sin(frame / 15 * Math.PI * 2),
     [-1, 1],
     [0.15, 0.4],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
   );
 
   return (

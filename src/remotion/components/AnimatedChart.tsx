@@ -25,6 +25,9 @@ export const AnimatedChart: React.FC<AnimatedChartProps> = ({
   strokeWidth = 2,
 }) => {
   const frame = useCurrentFrame();
+
+  if (!data || data.length < 2) return null;
+
   const progress = interpolate(frame - delay, [0, duration], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
