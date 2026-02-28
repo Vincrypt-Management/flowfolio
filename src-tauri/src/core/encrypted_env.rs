@@ -155,22 +155,48 @@ pub fn load_encrypted_env(app_data_dir: Option<&std::path::Path>) -> Result<(), 
             }
         }
         
-        // Try executable directory
+        // Try executable directory and platform-specific resource paths
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
+                // Same directory as executable (all platforms)
                 let encrypted_path = exe_dir.join(".env.encrypted");
                 if encrypted_path.exists() {
                     return load_from_encrypted_file(&encrypted_path);
                 }
                 
-                // Also check Resources folder on macOS
+                // macOS: AppName.app/Contents/Resources/
                 #[cfg(target_os = "macos")]
                 {
-                    let resources_path = exe_dir.parent()
-                        .and_then(|p| Some(p.join("Resources").join(".env.encrypted")));
-                    if let Some(res_path) = resources_path {
+                    if let Some(res_path) = exe_dir.parent()
+                        .map(|p| p.join("Resources").join(".env.encrypted"))
+                    {
                         if res_path.exists() {
                             return load_from_encrypted_file(&res_path);
+                        }
+                    }
+                }
+
+                // Windows: resources/ subfolder next to exe (Tauri 2 NSIS/MSI bundle)
+                #[cfg(target_os = "windows")]
+                {
+                    let win_res_path = exe_dir.join("resources").join(".env.encrypted");
+                    if win_res_path.exists() {
+                        return load_from_encrypted_file(&win_res_path);
+                    }
+                }
+
+                // Linux: ../lib/{identifier}/ or ../share/{identifier}/
+                #[cfg(target_os = "linux")]
+                {
+                    let identifier = "com.evintleovonzko.flowfolio";
+                    let linux_candidates = [
+                        exe_dir.parent().map(|p| p.join("lib").join(identifier).join(".env.encrypted")),
+                        exe_dir.parent().map(|p| p.join("share").join(identifier).join(".env.encrypted")),
+                        Some(exe_dir.join("resources").join(".env.encrypted")),
+                    ];
+                    for candidate in linux_candidates.iter().flatten() {
+                        if candidate.exists() {
+                            return load_from_encrypted_file(candidate);
                         }
                     }
                 }
