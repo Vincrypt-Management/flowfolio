@@ -16,7 +16,7 @@ interface IntroProps {
   seed?: number;
 }
 
-// Intro: Hook → Logo → Privacy → Platforms → Closing (~17.7s = 530 frames)
+// Intro: Hook → Logo → Privacy → Platforms → Closing (~24.3s = 1460 frames at 60fps)
 // Audio: Formal, professional — warm pad, refined chimes, subtle presence
 export const FlowFolioIntro: React.FC<IntroProps> = ({ seed }) => {
   const rng = useMemo(() => new VideoRNG(seed), [seed]);
@@ -39,30 +39,30 @@ export const FlowFolioIntro: React.FC<IntroProps> = ({ seed }) => {
         }}
       >
         <Background variant="hero" bgVariation={bgVariation} />
-        <AudioTrack generator={audioGen} volume={0.75} fadeInFrames={20} fadeOutFrames={25} />
+        <AudioTrack generator={audioGen} volume={0.75} fadeInFrames={40} fadeOutFrames={50} />
 
-        {/* Hook (0-90) — compact problem statement */}
-        <Sequence from={0} durationInFrames={90}>
-          <HookScene durationInFrames={90} compact hookVariant={hookVariant} />
+        {/* Hook (0-300) — compact problem statement */}
+        <Sequence from={0} durationInFrames={300}>
+          <HookScene durationInFrames={300} compact hookVariant={hookVariant} />
         </Sequence>
 
-        {/* Logo (80-205) */}
-        <Sequence from={80} durationInFrames={125}>
+        {/* Logo (280-580) */}
+        <Sequence from={280} durationInFrames={300}>
           <LogoReveal />
         </Sequence>
 
-        {/* Privacy (195-325) */}
-        <Sequence from={195} durationInFrames={130}>
+        {/* Privacy (560-900) */}
+        <Sequence from={560} durationInFrames={340}>
           <PrivacyMessage />
         </Sequence>
 
-        {/* Platforms (315-445) */}
-        <Sequence from={315} durationInFrames={130}>
+        {/* Platforms (880-1180) */}
+        <Sequence from={880} durationInFrames={300}>
           <Platforms />
         </Sequence>
 
-        {/* Closing (435-530) */}
-        <Sequence from={435} durationInFrames={95}>
+        {/* Closing (1160-1460) */}
+        <Sequence from={1160} durationInFrames={300}>
           <Closing />
         </Sequence>
       </AbsoluteFill>

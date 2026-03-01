@@ -8,6 +8,7 @@ import {
   staticFile,
   useCurrentFrame,
   useVideoConfig,
+  Easing,
 } from 'remotion';
 import { colors, fonts, radius } from './styles';
 import { AudioTrack } from './audio/AudioTrack';
@@ -29,27 +30,32 @@ interface IGProps {
 const IGHook: React.FC<{ line1: string; line2: string }> = ({ line1, line2 }) => {
   const frame = useCurrentFrame();
 
-  const line1Op = interpolate(frame, [8, 26], [0, 1], {
+  const line1Op = interpolate(frame, [16, 52], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
-  const line1Y = interpolate(frame, [8, 26], [14, 0], {
+  const line1Y = interpolate(frame, [16, 52], [14, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
-  });
-
-  const line2Op = interpolate(frame, [28, 44], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const line2Y = interpolate(frame, [28, 44], [10, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const fadeOut = interpolate(frame, [100, 118], [1, 0], {
+  const line2Op = interpolate(frame, [56, 88], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+  const line2Y = interpolate(frame, [56, 88], [10, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+
+  const fadeOut = interpolate(frame, [200, 236], [1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
   return (
@@ -101,28 +107,33 @@ const IGLogo: React.FC<{ tagline: string }> = ({ tagline }) => {
     config: { damping: 20, stiffness: 80, mass: 0.8 },
   });
   const logoScale = interpolate(logoSpring, [0, 1], [0.8, 1]);
-  const logoOp = interpolate(frame, [0, 20], [0, 1], {
+  const logoOp = interpolate(frame, [0, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const wordOp = interpolate(frame, [25, 45], [0, 1], {
+  const wordOp = interpolate(frame, [50, 90], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
-  const wordY = interpolate(frame, [25, 45], [8, 0], {
+  const wordY = interpolate(frame, [50, 90], [8, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
-  });
-
-  const tagOp = interpolate(frame, [50, 68], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const fadeOut = interpolate(frame, [100, 118], [1, 0], {
+  const tagOp = interpolate(frame, [100, 136], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+
+  const fadeOut = interpolate(frame, [200, 236], [1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
   return (
@@ -220,20 +231,23 @@ const IGFeatures: React.FC<IGFeaturesProps> = ({ features }) => {
   const storyFeatures = features ?? defaultStoryFeatures;
   const frame = useCurrentFrame();
 
-  const titleOp = interpolate(frame, [5, 22], [0, 1], {
+  const titleOp = interpolate(frame, [10, 44], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const fadeOut = interpolate(frame, [135, 152], [1, 0], {
+  const fadeOut = interpolate(frame, [270, 304], [1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
   // Flow line grows as cards appear
-  const flowProgress = interpolate(frame, [16, 80], [0, 1], {
+  const flowProgress = interpolate(frame, [32, 200], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
   return (
@@ -270,18 +284,21 @@ const IGFeatures: React.FC<IGFeaturesProps> = ({ features }) => {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 640, position: 'relative', zIndex: 1 }}>
           {storyFeatures.map((f, i) => {
-            const start = 18 + i * 20;
+            const start = 36 + i * 40;
             const op = interpolate(frame, [start, start + 16], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+              easing: Easing.out(Easing.cubic),
             });
             const x = interpolate(frame, [start, start + 16], [16, 0], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+              easing: Easing.out(Easing.cubic),
             });
             const dotOp = interpolate(frame, [start - 2, start + 8], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+              easing: Easing.out(Easing.cubic),
             });
 
             return (
@@ -367,29 +384,34 @@ const IGCTA: React.FC = () => {
     fps,
     config: { damping: 20, stiffness: 80, mass: 0.8 },
   });
-  const logoOp = interpolate(frame, [0, 20], [0, 1], {
+  const logoOp = interpolate(frame, [0, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const ctaOp = interpolate(frame, [30, 48], [0, 1], {
+  const ctaOp = interpolate(frame, [60, 96], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
-  const ctaY = interpolate(frame, [30, 48], [10, 0], {
+  const ctaY = interpolate(frame, [60, 96], [10, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const linkOp = interpolate(frame, [45, 60], [0, 1], {
+  const linkOp = interpolate(frame, [90, 120], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
   const platforms = ['macOS', 'Windows', 'Linux'];
-  const platOp = interpolate(frame, [55, 72], [0, 1], {
+  const platOp = interpolate(frame, [110, 144], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
   return (
@@ -552,25 +574,25 @@ export const FlowFolioIntroIG: React.FC<IGProps> = ({ seed }) => {
     <VideoSeedContext.Provider value={rng}>
       <AbsoluteFill style={{ backgroundColor: colors.bg, fontFamily: fonts.sans, overflow: 'hidden' }}>
         <IGBackground />
-        <AudioTrack generator={audioGen} volume={0.8} fadeInFrames={10} fadeOutFrames={15} />
+        <AudioTrack generator={audioGen} volume={0.8} fadeInFrames={20} fadeOutFrames={30} />
 
-        {/* Hook — problem statement (0-4.2s) */}
-        <Sequence from={0} durationInFrames={125}>
+        {/* Hook — problem statement (0-5.5s) */}
+        <Sequence from={0} durationInFrames={330}>
           <IGHook line1={hookVariant.line1} line2={hookVariant.line2} />
         </Sequence>
 
-        {/* Logo (3.8-8s) */}
-        <Sequence from={115} durationInFrames={125}>
+        {/* Logo (5.2-10.3s) */}
+        <Sequence from={310} durationInFrames={310}>
           <IGLogo tagline={tagline} />
         </Sequence>
 
-        {/* Story-framed features (7.7-13s) */}
-        <Sequence from={230} durationInFrames={160}>
+        {/* Story-framed features (10-16.3s) */}
+        <Sequence from={600} durationInFrames={380}>
           <IGFeatures features={igFeatures} />
         </Sequence>
 
-        {/* CTA (12.8-18s) */}
-        <Sequence from={385} durationInFrames={155}>
+        {/* CTA (16-22s) */}
+        <Sequence from={960} durationInFrames={360}>
           <IGCTA />
         </Sequence>
       </AbsoluteFill>

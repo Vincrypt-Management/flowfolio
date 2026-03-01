@@ -292,11 +292,11 @@ export async function buildIntroAudio(durationSec: number, seed: number = 42): P
     addArpNote(ctx, bus.chime, arpNotes[noteIdx], t, 0.03);
   }
 
-  // Scene timings (frames / 30fps)
-  const logoStart = 80 / 30;
-  const privacyStart = 195 / 30;
-  const platformStart = 315 / 30;
-  const closingStart = 435 / 30;
+  // Scene timings (frames at 60fps)
+  const logoStart = 280 / 60;
+  const privacyStart = 560 / 60;
+  const platformStart = 880 / 60;
+  const closingStart = 1160 / 60;
 
   // Hook — opening impact
   addImpact(ctx, bus.fx, 0.3, 0.10);
@@ -338,11 +338,11 @@ export async function buildIGReelAudio(durationSec: number, seed: number = 42): 
   const selectedKey = audioSelect(chordKeys, seed, 0);
   const chords = chordProgressions[selectedKey];
 
-  // Scene timings
-  const hookEnd = 125 / 30;
-  const logoStart = 115 / 30;
-  const featuresStart = 230 / 30;
-  const ctaStart = 385 / 30;
+  // Scene timings (frames at 60fps)
+  const hookEnd = 330 / 60;
+  const logoStart = 310 / 60;
+  const featuresStart = 600 / 60;
+  const ctaStart = 960 / 60;
 
   // ─── Full ambient bed — evolving chords (louder for proper backtrack) ───
   addPad(ctx, bus.pad, {
@@ -386,7 +386,7 @@ export async function buildIGReelAudio(durationSec: number, seed: number = 42): 
   addImpact(ctx, bus.fx, 0.3, 0.10);
 
   // Second hook line — tension hit
-  addImpact(ctx, bus.fx, 28 / 30, 0.07);
+  addImpact(ctx, bus.fx, 56 / 60, 0.07);
 
   // Logo drop — punchy impact
   addImpact(ctx, bus.fx, logoStart + 0.3, 0.14);
@@ -398,9 +398,9 @@ export async function buildIGReelAudio(durationSec: number, seed: number = 42): 
 
   // Feature card reveals — ticks with chime accent
   const featureStarts = [
-    (230 + 18) / 30,
-    (230 + 38) / 30,
-    (230 + 58) / 30,
+    (600 + 36) / 60,
+    (600 + 76) / 60,
+    (600 + 116) / 60,
   ];
   for (let i = 0; i < featureStarts.length; i++) {
     const ft = featureStarts[i];
@@ -432,84 +432,84 @@ export async function buildShowcaseAudio(durationSec: number, seed: number = 42)
 
   // ─── Evolving Pad Layers (louder, proper backtrack bed) ───
 
-  // Act 1: dark, tension (0-10s)
+  // Act 1: dark, tension (0-11s)
   addPad(ctx, bus.pad, {
     frequencies: chords[0],
-    startTime: 0, duration: 12, volume: 0.06,
+    startTime: 0, duration: 14, volume: 0.06,
   });
 
-  // Act 2: discovery (8-20s)
+  // Act 2: discovery (7-17s)
   addPad(ctx, bus.pad, {
     frequencies: chords[1],
-    startTime: 8, duration: 14, volume: 0.065,
+    startTime: 7, duration: 14, volume: 0.065,
   });
   addPad(ctx, bus.pad, {
     frequencies: [chords[1][0] * 2, chords[1][2] * 2],
     startTime: 10, duration: 10, volume: 0.02, type: 'triangle',
   });
 
-  // Act 3a: hopeful, building (18-44s)
+  // Act 3a: hopeful, building (17-55s)
   addPad(ctx, bus.pad, {
     frequencies: chords[2],
-    startTime: 18, duration: 28, volume: 0.065,
+    startTime: 17, duration: 40, volume: 0.065,
   });
   addPad(ctx, bus.pad, {
     frequencies: [chords[0][0], chords[2][1]],
-    startTime: 22, duration: 20, volume: 0.022, type: 'triangle',
+    startTime: 22, duration: 30, volume: 0.022, type: 'triangle',
   });
 
-  // Act 3b: energy plateau (44-67s)
+  // Act 3b: energy plateau (55-90s)
   addPad(ctx, bus.pad, {
     frequencies: chords[0],
-    startTime: 44, duration: 23, volume: 0.065,
+    startTime: 55, duration: 35, volume: 0.065,
   });
   addPad(ctx, bus.pad, {
     frequencies: [chords[1][1], chords[1][2]],
-    startTime: 46, duration: 18, volume: 0.025, type: 'triangle',
+    startTime: 58, duration: 28, volume: 0.025, type: 'triangle',
   });
 
-  // Act 4: resolution (65s to end)
+  // Act 4: resolution (90s to end)
   addPad(ctx, bus.pad, {
     frequencies: [NOTES.C3, NOTES.E3, NOTES.G3, NOTES.C4],
-    startTime: 65, duration: durationSec - 65, volume: 0.07,
+    startTime: 90, duration: durationSec - 90, volume: 0.07,
   });
 
-  // ─── Continuous arpeggio for melodic interest (8s onwards) ───
+  // ─── Continuous arpeggio for melodic interest (7s onwards) ───
   const arpNotes = [
     chords[0][0] * 2, chords[0][2] * 2, chords[1][1] * 2,
     chords[1][2] * 2, chords[2][0] * 2, chords[2][2] * 2,
   ];
-  for (let t = 8; t < durationSec - 3; t += 0.9) {
+  for (let t = 7; t < durationSec - 3; t += 0.9) {
     const noteIdx = Math.floor(t / 0.9) % arpNotes.length;
     // Volume follows the cinematic arc
     let vol: number;
-    if (t < 18) vol = 0.02;        // quiet discovery
-    else if (t < 44) vol = 0.03;   // building
-    else if (t < 65) vol = 0.035;  // energy plateau
+    if (t < 17) vol = 0.02;        // quiet discovery
+    else if (t < 55) vol = 0.03;   // building
+    else if (t < 90) vol = 0.035;  // energy plateau
     else vol = 0.025;              // resolution wind-down
     addArpNote(ctx, bus.chime, arpNotes[noteIdx], t, vol);
   }
 
   // ─── Rhythmic Pulse (tighter interval for proper groove) ───
 
-  // Pulse during feature demos (12s - 78s), every 1s for musical feel
-  for (let t = 12; t < 78; t += 1.0) {
-    const vol = t < 25 ? 0.04 : t < 55 ? 0.06 : 0.045;
+  // Pulse during feature demos (17s - 96s), every 1s for musical feel
+  for (let t = 17; t < 96; t += 1.0) {
+    const vol = t < 35 ? 0.04 : t < 70 ? 0.06 : 0.045;
     addPulse(ctx, bus.fx, t, vol);
   }
 
-  // Offbeat ticks for rhythm (16s - 72s), every other beat
-  for (let t = 16.5; t < 72; t += 2.0) {
+  // Offbeat ticks for rhythm (20s - 90s), every other beat
+  for (let t = 20.5; t < 90; t += 2.0) {
     addTick(ctx, bus.fx, t, 0.02);
   }
 
-  // ─── Act 1: The Problem (0-5s) ───
+  // ─── Act 1: The Problem (0-7s) ───
   addImpact(ctx, bus.fx, 0.3, 0.10);
-  addSweep(ctx, bus.fx, 1.0, 3.5, 0.03);
+  addSweep(ctx, bus.fx, 1.0, 5.0, 0.03);
 
-  // ─── Act 2: The Discovery (4.7-12.8s) ───
-  const logoTime = 140 / 30;
-  const privacyTime = 255 / 30;
+  // ─── Act 2: The Discovery ───
+  const logoTime = 400 / 60;
+  const privacyTime = 680 / 60;
 
   // Logo reveal — cinematic chord bloom
   addImpact(ctx, bus.fx, logoTime + 0.1, 0.12);
@@ -526,18 +526,18 @@ export async function buildShowcaseAudio(durationSec: number, seed: number = 42)
   // ─── Act 3: Story Beats + Feature Demos ───
 
   const storyBeats = [
-    { frame: 375, seedIdx: 10 },   // Vibe Studio
-    { frame: 655, seedIdx: 11 },   // Portfolio
-    { frame: 935, seedIdx: 12 },   // Backtest
-    { frame: 1215, seedIdx: 13 },  // Quant
-    { frame: 1455, seedIdx: 14 },  // Fundamentals
-    { frame: 1645, seedIdx: 15 },  // Optimizer
-    { frame: 1915, seedIdx: 16 },  // Journal
-    { frame: 2165, seedIdx: 17 },  // AI Chat
+    { frame: 1000, seedIdx: 10 },   // Vibe Studio
+    { frame: 1660, seedIdx: 11 },   // Portfolio
+    { frame: 2320, seedIdx: 12 },   // Backtest
+    { frame: 2980, seedIdx: 13 },   // Quant
+    { frame: 3560, seedIdx: 14 },   // Fundamentals
+    { frame: 3940, seedIdx: 15 },   // Optimizer
+    { frame: 4580, seedIdx: 16 },   // Journal
+    { frame: 5180, seedIdx: 17 },   // AI Chat
   ];
 
   for (const beat of storyBeats) {
-    const t = beat.frame / 30;
+    const t = beat.frame / 60;
     // Impact + chime motif at each story beat
     addImpact(ctx, bus.fx, t + 0.05, 0.07);
     addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, beat.seedIdx), t + 0.2, 0.09);
@@ -547,8 +547,8 @@ export async function buildShowcaseAudio(durationSec: number, seed: number = 42)
 
   // Mid-demo accent chimes (inside feature demos)
   for (let i = 0; i < storyBeats.length; i++) {
-    const demoStart = storyBeats[i].frame / 30 + 3;
-    const demoEnd = i < storyBeats.length - 1 ? storyBeats[i + 1].frame / 30 - 1 : 80;
+    const demoStart = storyBeats[i].frame / 60 + 3;
+    const demoEnd = i < storyBeats.length - 1 ? storyBeats[i + 1].frame / 60 - 1 : 95;
     const midChime = (demoStart + demoEnd) / 2;
     if (midChime < durationSec - 5) {
       addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 30 + i), midChime, 0.04);
@@ -556,8 +556,8 @@ export async function buildShowcaseAudio(durationSec: number, seed: number = 42)
   }
 
   // ─── Act 4: Resolution ───
-  const platformTime = 2415 / 30;
-  const closingTime = 2535 / 30;
+  const platformTime = 5780 / 60;
+  const closingTime = 6020 / 60;
 
   // Rising sweep into resolution
   addSweep(ctx, bus.fx, platformTime - 1, 2.5, 0.025);

@@ -130,7 +130,7 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
 
 export function pickStoryBeat(rng: VideoRNG, sceneKey: string): StoryBeatVariant {
   const pool = storyBeatPools.find((p) => p.sceneKey === sceneKey);
-  if (!pool) return { line: sceneKey, accentColor: colors.primary };
+  if (!pool) return { line: 'Discover something new.', accentColor: colors.primary };
   return rng.pick(pool.variants);
 }
 
