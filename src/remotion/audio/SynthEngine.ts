@@ -418,6 +418,126 @@ export async function buildIGReelAudio(durationSec: number, seed: number = 42): 
 }
 
 /**
+ * IG DEMO REEL — Condensed Showcase for Instagram (9:16 portrait)
+ * ~50s at 60fps = 3000 frames. Story beats + 5 feature demos + CTA.
+ * Punchy, engaging, social-media-energy audio with cinematic arc.
+ */
+export async function buildIGDemoAudio(durationSec: number, seed: number = 42): Promise<AudioBuffer> {
+  const ctx = new OfflineAudioContext(2, SAMPLE_RATE * durationSec, SAMPLE_RATE);
+  const bus = createMixBus(ctx, { master: 0.8, pad: 0.85, chime: 0.95, fx: 0.9 });
+
+  const chordKeys: ChordKey[] = ['Am', 'Dm', 'Em', 'Cm', 'Fm'];
+  const selectedKey = audioSelect(chordKeys, seed, 0);
+  const chords = chordProgressions[selectedKey];
+
+  // Scene timings (frames at 60fps → seconds)
+  const hookEnd = 300 / 60;       // 5s
+  const logoStart = 280 / 60;     // 4.67s
+  const demosStart = 540 / 60;    // 9s
+  const ctaStart = 2640 / 60;     // 44s
+
+  // ─── Evolving Pad Layers ───
+  addPad(ctx, bus.pad, {
+    frequencies: chords[0],
+    startTime: 0, duration: durationSec * 0.4, volume: 0.06,
+  });
+  addPad(ctx, bus.pad, {
+    frequencies: chords[1],
+    startTime: durationSec * 0.25, duration: durationSec * 0.5, volume: 0.065,
+  });
+  addPad(ctx, bus.pad, {
+    frequencies: chords[2],
+    startTime: durationSec * 0.6, duration: durationSec * 0.4, volume: 0.065,
+  });
+  // Resolution pad
+  addPad(ctx, bus.pad, {
+    frequencies: [NOTES.C3, NOTES.E3, NOTES.G3, NOTES.C4],
+    startTime: ctaStart - 2, duration: durationSec - ctaStart + 2, volume: 0.07,
+  });
+  // Triangle shimmer layer
+  addPad(ctx, bus.pad, {
+    frequencies: [chords[0][2] * 2],
+    startTime: 1, duration: durationSec - 2, volume: 0.018, type: 'triangle',
+  });
+
+  // ─── Rhythmic Pulse ───
+  for (let t = 1.5; t < durationSec - 1; t += 0.5) {
+    let vol: number;
+    if (t < hookEnd) vol = 0.04;
+    else if (t < demosStart) vol = 0.05;
+    else if (t < ctaStart) vol = 0.07;
+    else vol = 0.05;
+    addPulse(ctx, bus.fx, t, vol);
+  }
+
+  // Offbeat ticks for groove
+  for (let t = 2.25; t < durationSec - 1; t += 1.0) {
+    addTick(ctx, bus.fx, t, 0.025);
+  }
+
+  // ─── Continuous Arpeggio ───
+  const arpNotes = [
+    chords[0][0] * 2, chords[0][2] * 2, chords[1][1] * 2,
+    chords[1][2] * 2, chords[2][0] * 2, chords[2][2] * 2,
+  ];
+  for (let t = 3; t < durationSec - 2; t += 0.65) {
+    const noteIdx = Math.floor(t / 0.65) % arpNotes.length;
+    let vol: number;
+    if (t < demosStart) vol = 0.02;
+    else if (t < ctaStart) vol = 0.03;
+    else vol = 0.025;
+    addArpNote(ctx, bus.chime, arpNotes[noteIdx], t, vol);
+  }
+
+  // ─── Hook ───
+  addSweep(ctx, bus.fx, 0.5, hookEnd - 1, 0.035);
+  addImpact(ctx, bus.fx, 0.3, 0.10);
+
+  // ─── Logo Drop ───
+  addImpact(ctx, bus.fx, logoStart + 0.3, 0.14);
+  addChime(ctx, bus.chime, NOTES.C4, logoStart + 0.4, 0.09);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 1), logoStart + 0.6, 0.06);
+  addShimmer(ctx, bus.chime, logoStart + 0.8, 0.025);
+
+  // ─── Story Beats (5 demos) ───
+  const storyBeats = [
+    { frame: 540, seedIdx: 10 },   // Vibe Studio
+    { frame: 960, seedIdx: 11 },   // Backtest
+    { frame: 1380, seedIdx: 12 },  // Quant
+    { frame: 1800, seedIdx: 13 },  // Optimizer
+    { frame: 2220, seedIdx: 14 },  // AI Chat
+  ];
+
+  for (const beat of storyBeats) {
+    const t = beat.frame / 60;
+    addImpact(ctx, bus.fx, t + 0.05, 0.07);
+    addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, beat.seedIdx), t + 0.2, 0.09);
+    addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, beat.seedIdx + 20), t + 0.45, 0.06);
+    addTick(ctx, bus.fx, t + 0.1, 0.03);
+  }
+
+  // Mid-demo accent chimes
+  for (let i = 0; i < storyBeats.length; i++) {
+    const demoStart = storyBeats[i].frame / 60 + 3;
+    const demoEnd = i < storyBeats.length - 1 ? storyBeats[i + 1].frame / 60 - 1 : ctaStart;
+    const midChime = (demoStart + demoEnd) / 2;
+    if (midChime < durationSec - 3) {
+      addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 30 + i), midChime, 0.04);
+    }
+  }
+
+  // ─── CTA Build ───
+  addSweep(ctx, bus.fx, ctaStart - 1, 2.0, 0.03);
+  addImpact(ctx, bus.fx, ctaStart + 0.3, 0.12);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 20), ctaStart + 0.4, 0.10);
+  addChime(ctx, bus.chime, audioSelect(chimeNotePool, seed, 21), ctaStart + 0.7, 0.07);
+  addChime(ctx, bus.chime, NOTES.C5, ctaStart + 0.9, 0.06);
+  addShimmer(ctx, bus.chime, ctaStart + 1.0, 0.03);
+
+  return ctx.startRendering();
+}
+
+/**
  * DEMO SHOWCASE — Product Capability, Cinematic, Impressive
  * Full background music with evolving pads, rhythmic pulse,
  * melodic motifs at scene transitions, and cinematic arc.

@@ -3,6 +3,7 @@ import { Composition } from 'remotion';
 import { FlowFolioIntro } from './FlowFolioIntro';
 import { FlowFolioIntroIG } from './FlowFolioIntroIG';
 import { FlowFolioShowcase } from './FlowFolioShowcase';
+import { FlowFolioShowcaseIG } from './FlowFolioShowcaseIG';
 
 export const Root: React.FC = () => {
   const defaultSeed = Date.now();
@@ -12,8 +13,8 @@ export const Root: React.FC = () => {
       <Composition
         id="FlowFolioIntro"
         component={FlowFolioIntro}
-        durationInFrames={530}
-        fps={30}
+        durationInFrames={1460}
+        fps={60}
         width={1920}
         height={1080}
         defaultProps={{ seed: defaultSeed }}
@@ -21,8 +22,8 @@ export const Root: React.FC = () => {
       <Composition
         id="FlowFolioIntroIG"
         component={FlowFolioIntroIG}
-        durationInFrames={540}
-        fps={30}
+        durationInFrames={1320}
+        fps={60}
         width={1080}
         height={1920}
         defaultProps={{ seed: defaultSeed }}
@@ -30,10 +31,19 @@ export const Root: React.FC = () => {
       <Composition
         id="FlowFolioShowcase"
         component={FlowFolioShowcase}
-        durationInFrames={2640}
-        fps={30}
+        durationInFrames={6320}
+        fps={60}
         width={1920}
         height={1080}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FlowFolioShowcaseIG"
+        component={FlowFolioShowcaseIG}
+        durationInFrames={3000}
+        fps={60}
+        width={1080}
+        height={1920}
         defaultProps={{ seed: defaultSeed }}
       />
     </>
