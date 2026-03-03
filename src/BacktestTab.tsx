@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "./services/tauri";
 import { useToast } from "./components/Toast";
 import {
@@ -151,7 +151,7 @@ export function BacktestTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error running backtest: " + error, "error");
+        addToast("Error running backtest: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -209,23 +209,26 @@ export function BacktestTab() {
     </div>
   );
 
-  const renderSimpleChart = () => {
+  const chartData = useMemo(() => {
     if (!result || result.timeline.length === 0) return null;
-    
     const maxValue = Math.max(...result.timeline.map(s => s.value));
     const minValue = Math.min(...result.timeline.map(s => s.value));
     const range = maxValue - minValue || 1;
-    
-    // Sample points for the chart (max 24 points)
     const sampleRate = Math.max(1, Math.floor(result.timeline.length / 24));
     const sampledData = result.timeline.filter((_, i) => i % sampleRate === 0);
+    return { maxValue, minValue, range, sampledData, startDate: result.start_date, endDate: result.end_date };
+  }, [result]);
+
+  const renderSimpleChart = () => {
+    if (!chartData) return null;
+    const { maxValue, minValue, range, sampledData, startDate, endDate } = chartData;
     
     return (
       <div className="simple-chart">
         <div className="chart-header">
           <span className="chart-title">Portfolio Value Over Time</span>
           <span className="chart-range">
-            {result.start_date} → {result.end_date}
+            {startDate} → {endDate}
           </span>
         </div>
         <div className="chart-container">
@@ -252,8 +255,8 @@ export function BacktestTab() {
           </div>
         </div>
         <div className="chart-x-axis">
-          <span>{result.start_date}</span>
-          <span>{result.end_date}</span>
+          <span>{startDate}</span>
+          <span>{endDate}</span>
         </div>
       </div>
     );
@@ -283,16 +286,18 @@ export function BacktestTab() {
           <h3><Calendar size={18} /> Time Period</h3>
           <div className="config-row">
             <div className="config-field">
-              <label>Start Date</label>
+              <label htmlFor="backtest-start-date">Start Date</label>
               <input
+                id="backtest-start-date"
                 type="date"
                 value={config.start_date}
                 onChange={(e) => updateConfig("start_date", e.target.value)}
               />
             </div>
             <div className="config-field">
-              <label>End Date</label>
+              <label htmlFor="backtest-end-date">End Date</label>
               <input
+                id="backtest-end-date"
                 type="date"
                 value={config.end_date}
                 onChange={(e) => updateConfig("end_date", e.target.value)}

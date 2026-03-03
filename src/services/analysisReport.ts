@@ -1723,7 +1723,7 @@ OUTPUT FORMAT (markdown):
         if (asset.quantMetrics.maxDrawdown < -30) issues.push('Large drawdown');
         if (asset.quantMetrics.rsi > 70) issues.push('Overbought');
         if (asset.quantMetrics.rsi < 30) issues.push('Oversold');
-        if ((asset.quantMetrics as any).beta > 1.5) issues.push('High beta');
+        if (asset.quantMetrics.beta && asset.quantMetrics.beta > 1.5) issues.push('High beta');
         
         if (issues.length > 0) {
           lines.push(`  ${asset.symbol}: ${issues.join(', ')}`);

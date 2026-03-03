@@ -356,6 +356,12 @@ interface PortfolioAsset {
     ulcerIndex?: number;
     gainToLossRatio?: number;
     winRate?: number;
+    rsiSignal?: string;
+    cvar95?: number;
+    treynorRatio?: number;
+    informationRatio?: number;
+    trendStrength?: string;
+    momentumScore?: number;
   };
   
   dailyReturns?: number[]; // For correlation analysis
@@ -431,6 +437,7 @@ interface PortfolioAsset {
     sentimentScore: number;
     newsCount: number;
     buzzScore: number;
+    sentimentTrend?: string;
   };
   
   analystData?: {

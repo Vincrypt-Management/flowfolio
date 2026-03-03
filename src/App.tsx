@@ -135,7 +135,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        setStatus("Error: " + error);
+        setStatus("Error: " + (error instanceof Error ? error.message : String(error)));
       }
     }
   }
@@ -227,7 +227,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error creating universe: " + error, "error");
+        addToast("Error creating universe: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }, [newUniverseName, newUniverseSymbols, universes, addToast]);
@@ -243,7 +243,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error deleting universe: " + error, "error");
+        addToast("Error deleting universe: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }, [universes, selectedUniverse, addToast]);
@@ -262,7 +262,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error saving plan: " + error, "error");
+        addToast("Error saving plan: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }, [plan, addToast]);
@@ -278,7 +278,7 @@ function App() {
       await saveFile(bundleJson, filename, "application/json");
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error exporting data: " + error, "error");
+        addToast("Error exporting data: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }, [plan, addToast]);
@@ -297,7 +297,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error importing data: " + error, "error");
+        addToast("Error importing data: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }, [addToast]);
@@ -311,7 +311,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error loading template: " + error, "error");
+        addToast("Error loading template: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }, [addToast]);
@@ -389,7 +389,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error scoring symbols: " + error, "error");
+        addToast("Error scoring symbols: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -633,15 +633,15 @@ function App() {
               <div className="card">
                 <h3><Calendar size={20} /> Next Actions</h3>
                 <div className="plan-summary">
-                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => e.key === 'Enter' && setActiveTab("portfolio")}>
+                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab("portfolio"); } }}>
                     <span className="stat-label">Monthly Buy List</span>
                     <span className="stat-value action-link">Generate →</span>
                   </div>
-                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => e.key === 'Enter' && setActiveTab("portfolio")}>
+                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab("portfolio"); } }}>
                     <span className="stat-label">Quarterly Rebalance</span>
                     <span className="stat-value action-link">Check →</span>
                   </div>
-                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("yearly-review")} onKeyDown={(e) => e.key === 'Enter' && setActiveTab("yearly-review")}>
+                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("yearly-review")} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab("yearly-review"); } }}>
                     <span className="stat-label">Yearly Review</span>
                     <span className="stat-value action-link">Start →</span>
                   </div>
@@ -1024,7 +1024,7 @@ function App() {
                             setPlan(loadedPlan);
                             addToast("Plan loaded successfully!", "success");
                           } catch (error) {
-                            addToast("Error loading plan: " + error, "error");
+                            addToast("Error loading plan: " + (error instanceof Error ? error.message : String(error)), "error");
                           }
                         }}
                       >

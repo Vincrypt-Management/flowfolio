@@ -74,7 +74,7 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
       const categories = new Set(result.checklist.map(item => item.category));
       setExpandedCategories(categories);
     } catch (error) {
-      addToast("Error generating review: " + error, "error");
+      addToast("Error generating review: " + (error instanceof Error ? error.message : String(error)), "error");
     } finally {
       setIsLoading(false);
     }

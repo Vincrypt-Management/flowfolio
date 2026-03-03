@@ -189,7 +189,7 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error generating optimization report: " + error, "error");
+        addToast("Error generating optimization report: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {

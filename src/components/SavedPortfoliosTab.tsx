@@ -89,7 +89,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
       }
     } catch (err) {
       if (isMountedRef.current) {
-        addToast('Failed to load portfolio: ' + err, 'error');
+        addToast('Failed to load portfolio: ' + (err instanceof Error ? err.message : String(err)), 'error');
       }
     } finally {
       if (isMountedRef.current) {
@@ -111,7 +111,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
       }
     } catch (err) {
       if (isMountedRef.current) {
-        addToast('Failed to delete portfolio: ' + err, 'error');
+        addToast('Failed to delete portfolio: ' + (err instanceof Error ? err.message : String(err)), 'error');
       }
     }
   }
@@ -127,7 +127,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
         'application/json'
       );
     } catch (err) {
-      addToast('Failed to export portfolio: ' + err, 'error');
+      addToast('Failed to export portfolio: ' + (err instanceof Error ? err.message : String(err)), 'error');
     }
   }
 
@@ -172,6 +172,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
           <input
             type="text"
             placeholder="Search portfolios..."
+            aria-label="Search portfolios"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -203,7 +204,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
         <div className="error-banner">
           <AlertTriangle size={18} />
           <span>{error}</span>
-          <button onClick={loadPortfolios}>Retry</button>
+          <button onClick={loadPortfolios} disabled={isLoading}>Retry</button>
         </div>
       )}
 
@@ -259,6 +260,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
                   className="btn-action"
                   onClick={() => handleExportPortfolio(portfolio.id)}
                   title="Export as JSON"
+                  aria-label="Export portfolio"
                 >
                   <Download size={14} />
                 </button>
@@ -266,6 +268,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
                   className="btn-action danger"
                   onClick={() => handleDeletePortfolio(portfolio.id, portfolio.name)}
                   title="Delete"
+                  aria-label="Delete portfolio"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -288,7 +291,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
         <div className="portfolio-preview">
           <div className="preview-header">
             <h3><TrendingUp size={18} /> {selectedPortfolio.title}</h3>
-            <button onClick={() => setSelectedPortfolio(null)}>×</button>
+            <button onClick={() => setSelectedPortfolio(null)} aria-label="Close details">×</button>
           </div>
           <div className="preview-content">
             <p className="preview-description">{selectedPortfolio.description}</p>

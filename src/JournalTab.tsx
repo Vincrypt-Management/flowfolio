@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "./services/tauri";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
@@ -88,7 +88,7 @@ export function JournalTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error creating entry: " + error, "error");
+        addToast("Error creating entry: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }
@@ -107,7 +107,7 @@ export function JournalTab() {
       URL.revokeObjectURL(url);
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error exporting: " + error, "error");
+        addToast("Error exporting: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
   }
@@ -150,10 +150,11 @@ export function JournalTab() {
     }
   };
 
-  const filteredEntries =
+  const filteredEntries = useMemo(() =>
     filterType === "all"
       ? entries
-      : entries.filter((e) => e.event_type === filterType);
+      : entries.filter((e) => e.event_type === filterType),
+    [entries, filterType]);
 
   return (
     <div className="journal-tab">
@@ -192,7 +193,7 @@ export function JournalTab() {
         <div className="timeline-view">
           <div className="filter-bar">
             <label>Filter by type:</label>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} aria-label="Filter by entry type">
               <option value="all">All Types</option>
               <option value="strategy_creation">Strategy Creation</option>
               <option value="strategy_change">Strategy Change</option>

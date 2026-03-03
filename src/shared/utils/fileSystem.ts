@@ -2,6 +2,13 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { createLogger } from '../../core/logger';
 
+declare global {
+  interface Window {
+    __TAURI__?: unknown;
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
 const log = createLogger('file-system');
 
 /**
@@ -15,7 +22,7 @@ export async function saveFile(
 ): Promise<void> {
   // Check if running in Tauri environment
   // We can check if window.__TAURI__ exists or try to use the plugin
-  const isTauri = !!(window as any).__TAURI__ || !!(window as any).__TAURI_INTERNALS__;
+  const isTauri = !!window.__TAURI__ || !!window.__TAURI_INTERNALS__;
 
   if (isTauri) {
     try {

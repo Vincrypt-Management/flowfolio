@@ -128,7 +128,7 @@ class WebSearchService {
 
     try {
       // Use Yahoo Finance search API for news
-      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${symbol}&newsCount=${limit}&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&newsCount=${limit}&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
       
       const response = await fetch(url, {
         headers: {
@@ -222,7 +222,7 @@ class WebSearchService {
     log.info(`Fetching earnings data for ${symbol}...`);
 
     try {
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=earnings`;
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=earnings`;
       
       const response = await fetch(url, {
         headers: {
@@ -267,7 +267,7 @@ class WebSearchService {
     log.info(`Fetching company profile for ${symbol}...`);
 
     try {
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=assetProfile,summaryProfile`;
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=assetProfile,summaryProfile`;
       
       const response = await fetch(url, {
         headers: {
@@ -308,7 +308,7 @@ class WebSearchService {
     log.info(`Fetching insider activity for ${symbol}...`);
 
     try {
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=insiderTransactions`;
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=insiderTransactions`;
       
       const response = await fetch(url, {
         headers: {
@@ -343,7 +343,7 @@ class WebSearchService {
     log.info(`Fetching institutional holdings for ${symbol}...`);
 
     try {
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=institutionOwnership,majorHoldersBreakdown`;
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=institutionOwnership,majorHoldersBreakdown`;
       
       const response = await fetch(url, {
         headers: {

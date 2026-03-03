@@ -53,7 +53,7 @@ function App() {
       const health = await invoke<string>("health_check");
       setStatus(health);
     } catch (error) {
-      setStatus("Error: " + error);
+      setStatus("Error: " + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -89,7 +89,7 @@ function App() {
       
       setScores(results);
     } catch (error) {
-      alert("Error scoring symbols: " + error);
+      alert("Error scoring symbols: " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsScoring(false);
     }

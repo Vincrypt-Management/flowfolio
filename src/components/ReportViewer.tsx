@@ -167,7 +167,7 @@ export default function ReportViewer({
             JSON
           </button>
           {onClose && (
-            <button className="btn-report-close" onClick={onClose}>
+            <button className="btn-report-close" onClick={onClose} aria-label="Close report">
               <X size={20} />
             </button>
           )}
@@ -188,6 +188,9 @@ export default function ReportViewer({
         <div 
           className="section-header"
           onClick={() => toggleSection('Executive Summary')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Executive Summary'); } }}
         >
           <div className="section-title">
             <Target size={18} />
@@ -209,6 +212,9 @@ export default function ReportViewer({
           <div 
             className="section-header"
             onClick={() => toggleSection(section.title)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection(section.title); } }}
           >
             <div className="section-title">
               {getSentimentIcon(section.sentiment)}
@@ -253,6 +259,9 @@ export default function ReportViewer({
           <div 
             className="section-header"
             onClick={() => toggleSection('Key Takeaways')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Key Takeaways'); } }}
           >
             <div className="section-title">
               <Target size={18} />
@@ -279,6 +288,9 @@ export default function ReportViewer({
           <div 
             className="section-header"
             onClick={() => toggleSection('Action Items')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Action Items'); } }}
           >
             <div className="section-title">
               <Target size={18} />
@@ -322,6 +334,9 @@ export default function ReportViewer({
           <div 
             className="section-header"
             onClick={() => toggleSection('Risk Warnings')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Risk Warnings'); } }}
           >
             <div className="section-title">
               <Shield size={18} />
@@ -351,6 +366,9 @@ export default function ReportViewer({
           <div 
             className="section-header"
             onClick={() => toggleSection('Market Context')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Market Context'); } }}
           >
             <div className="section-title">
               <TrendingUp size={18} />

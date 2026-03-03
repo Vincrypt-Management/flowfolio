@@ -117,7 +117,7 @@ class NewsService {
 
     try {
       // Use Yahoo Finance news endpoint
-      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${symbol}&newsCount=10`;
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&newsCount=10`;
       
       const response = await fetch(url, {
         headers: {
@@ -260,7 +260,7 @@ class NewsService {
     log.info(`Fetching analyst ratings for ${symbol}...`);
 
     try {
-      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`;
+      const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=recommendationTrend,financialData`;
       
       const response = await fetch(url, {
         headers: {

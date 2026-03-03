@@ -370,6 +370,7 @@ export default function TickerAnalysis({
                 className="ta-ticker-select"
                 value={symbol}
                 onChange={(e) => onTickerChange?.(e.target.value)}
+                aria-label="Select ticker symbol"
               >
                 {availableTickers.map(t => (
                   <option key={t} value={t}>{t}</option>
@@ -390,10 +391,10 @@ export default function TickerAnalysis({
           <div className="ta-header-right">
             {report && (
               <>
-                <button className="ta-btn-icon" onClick={handleCopyReport} title="Copy Report">
+                <button className="ta-btn-icon" onClick={handleCopyReport} title="Copy Report" aria-label="Copy report">
                   {copied ? <Check size={16} /> : <Copy size={16} />}
                 </button>
-                <button className="ta-btn-icon" onClick={handleDownloadReport} title="Download">
+                <button className="ta-btn-icon" onClick={handleDownloadReport} title="Download" aria-label="Download report">
                   <Download size={16} />
                 </button>
               </>
@@ -406,11 +407,12 @@ export default function TickerAnalysis({
               }} 
               disabled={isLoading || isReportLoading}
               title="Refresh"
+              aria-label="Refresh data"
             >
               <RefreshCw size={16} className={isLoading || isReportLoading ? 'spinning' : ''} />
             </button>
             {!inline && (
-              <button className="ta-btn-close" onClick={onClose}>
+              <button className="ta-btn-close" onClick={onClose} aria-label="Close">
                 <X size={20} />
               </button>
             )}

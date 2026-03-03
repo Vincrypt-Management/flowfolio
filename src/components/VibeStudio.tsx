@@ -234,7 +234,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
     } catch (err) {
       if (isMountedRef.current) {
         logger.error('Failed to save portfolio:', err);
-        addToast('Failed to save portfolio: ' + err, 'error');
+        addToast('Failed to save portfolio: ' + (err instanceof Error ? err.message : String(err)), 'error');
       }
     } finally {
       if (isMountedRef.current) {
@@ -499,17 +499,17 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
           q?.calmarRatio?.toFixed(2) || '',
           q?.volatility?.toFixed(2) || '',
           q?.rsi?.toFixed(0) || '',
-          (q as any)?.rsiSignal || '',
+          q?.rsiSignal || '',
           q?.maxDrawdown?.toFixed(2) || '',
           q?.expectedReturn?.toFixed(2) || '',
           q?.beta?.toFixed(2) || '',
           q?.alpha?.toFixed(2) || '',
           q?.var95?.toFixed(2) || '',
-          (q as any)?.cvar95?.toFixed(2) || '',
-          (q as any)?.treynorRatio?.toFixed(2) || '',
-          (q as any)?.informationRatio?.toFixed(2) || '',
-          (q as any)?.trendStrength || '',
-          (q as any)?.momentumScore?.toFixed(0) || '',
+          q?.cvar95?.toFixed(2) || '',
+          q?.treynorRatio?.toFixed(2) || '',
+          q?.informationRatio?.toFixed(2) || '',
+          q?.trendStrength || '',
+          q?.momentumScore?.toFixed(0) || '',
           q?.recommendation || '',
           q?.confidence?.toFixed(0) || '',
           // Fundamentals (extended)
@@ -523,15 +523,15 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
           f?.dividendYield != null ? (f.dividendYield * 100).toFixed(2) : '',
           f?.marketCap?.toFixed(0) || '',
           f?.eps?.toFixed(2) || '',
-          (f as any)?.valueScore?.toFixed(0) || '',
-          (f as any)?.qualityScore?.toFixed(0) || '',
-          (f as any)?.growthScore?.toFixed(0) || '',
+          f?.valueScore?.toFixed(0) || '',
+          f?.qualityScore?.toFixed(0) || '',
+          f?.growthScore?.toFixed(0) || '',
           // Sentiment (extended)
           s?.overallSentiment || '',
           s?.sentimentScore?.toFixed(2) || '',
           s?.newsCount || '',
           s?.buzzScore?.toFixed(2) || '',
-          (s as any)?.sentimentTrend || '',
+          s?.sentimentTrend || '',
           // Analyst data
           a?.consensusRating || '',
           a?.targetPriceMean?.toFixed(2) || '',
@@ -706,7 +706,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
         </div>
         <div className="header-buttons">
           {generatedPortfolio && (
-            <button className="btn-reset" onClick={handleReset}>
+            <button className="btn-reset" onClick={handleReset} disabled={isGenerating || isChatting}>
               <RotateCcw size={16} /> New Portfolio
             </button>
           )}

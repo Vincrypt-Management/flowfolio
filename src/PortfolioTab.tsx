@@ -156,7 +156,7 @@ export function PortfolioTab() {
       setNewTargetPct("");
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error adding holding: " + error, "error");
+        addToast("Error adding holding: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -198,7 +198,7 @@ export function PortfolioTab() {
       });
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error updating prices: " + error, "error");
+        addToast("Error updating prices: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -271,7 +271,7 @@ export function PortfolioTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error generating buy list: " + error, "error");
+        addToast("Error generating buy list: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -298,7 +298,7 @@ export function PortfolioTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error checking rebalance: " + error, "error");
+        addToast("Error checking rebalance: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -328,7 +328,7 @@ export function PortfolioTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error creating allocation: " + error, "error");
+        addToast("Error creating allocation: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -397,7 +397,7 @@ export function PortfolioTab() {
                 placeholder="Enter cash amount"
               />
             </div>
-            <button className="btn-secondary" onClick={updateCash}>
+            <button className="btn-secondary" onClick={updateCash} disabled={isLoading}>
               Update Cash
             </button>
             <button className="btn-secondary" onClick={updatePrices} disabled={isLoading || portfolio.holdings.length === 0}>
