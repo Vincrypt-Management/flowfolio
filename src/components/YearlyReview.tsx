@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "../services/tauri";
+import { useToast } from "./Toast";
 import {
   ClipboardCheck,
   CheckCircle2,
@@ -48,6 +49,7 @@ interface YearlyReviewProps {
 }
 
 export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: YearlyReviewProps) {
+  const { addToast } = useToast();
   const [review, setReview] = useState<YearlyReview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -72,7 +74,7 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
       const categories = new Set(result.checklist.map(item => item.category));
       setExpandedCategories(categories);
     } catch (error) {
-      alert("Error generating review: " + error);
+      addToast("Error generating review: " + error, "error");
     } finally {
       setIsLoading(false);
     }

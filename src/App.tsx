@@ -1,13 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { invoke } from "./services/tauri";
 import VibeStudio from "./components/VibeStudio";
-import { PortfolioTab } from "./PortfolioTab";
-import { BacktestTab } from "./BacktestTab";
-import { JournalTab } from "./JournalTab";
-import { YearlyReviewComponent } from "./components/YearlyReview";
-import { SavedPortfoliosTab } from "./components/SavedPortfoliosTab";
 import { ThemeToggle } from "./components/ThemeToggle";
-import { DataSourcesPage } from "./components/DataSourcesPage";
+import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
@@ -33,11 +28,30 @@ import {
   Save,
   Trash2,
   Plus,
-  ClipboardCheck
+  ClipboardCheck,
+  Menu,
+  X
 } from "lucide-react";
 import "./App.css";
 import "./styles/optimizer.css";
 import "./styles/liveProgress.css";
+
+// Lazy-loaded tab components
+const PortfolioTab = lazy(() => import("./PortfolioTab").then(m => ({ default: m.PortfolioTab })));
+const BacktestTab = lazy(() => import("./BacktestTab").then(m => ({ default: m.BacktestTab })));
+const JournalTab = lazy(() => import("./JournalTab").then(m => ({ default: m.JournalTab })));
+const YearlyReviewComponent = lazy(() => import("./components/YearlyReview").then(m => ({ default: m.YearlyReviewComponent })));
+const SavedPortfoliosTab = lazy(() => import("./components/SavedPortfoliosTab").then(m => ({ default: m.SavedPortfoliosTab })));
+const DataSourcesPage = lazy(() => import("./components/DataSourcesPage").then(m => ({ default: m.DataSourcesPage })));
+
+function TabLoading() {
+  return (
+    <div className="tab-loading" role="status" aria-label="Loading content">
+      <div className="tab-loading-spinner" />
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
 
 interface SymbolScore {
   symbol: string;
@@ -64,12 +78,14 @@ interface Universe {
 }
 
 function App() {
+  const { addToast } = useToast();
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Rankings state
   const [rankingsSymbols, setRankingsSymbols] = useState<string>(DEFAULT_SYMBOLS.join(","));
@@ -193,7 +209,7 @@ function App() {
 
   async function createUniverse() {
     if (!newUniverseName.trim()) {
-      alert("Please enter a universe name");
+      addToast("Please enter a universe name", "warning");
       return;
     }
     
@@ -211,7 +227,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error creating universe: " + error);
+        addToast("Error creating universe: " + error, "error");
       }
     }
   }
@@ -227,14 +243,14 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error deleting universe: " + error);
+        addToast("Error deleting universe: " + error, "error");
       }
     }
   }
 
   async function savePlan() {
     if (!plan) {
-      alert("No plan to save");
+      addToast("No plan to save", "warning");
       return;
     }
     
@@ -242,11 +258,11 @@ function App() {
       await invoke("save_plan", { plan });
       await loadSavedPlans();
       if (isMountedRef.current) {
-        alert("Plan saved successfully!");
+        addToast("Plan saved successfully!", "success");
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error saving plan: " + error);
+        addToast("Error saving plan: " + error, "error");
       }
     }
   }
@@ -262,7 +278,7 @@ function App() {
       await saveFile(bundleJson, filename, "application/json");
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error exporting data: " + error);
+        addToast("Error exporting data: " + error, "error");
       }
     }
   }
@@ -275,13 +291,13 @@ function App() {
       const text = await file.text();
       const result = await invoke<{ success: boolean }>("import_data_bundle", { bundleJson: text });
       if (result.success && isMountedRef.current) {
-        alert("Data imported successfully!");
+        addToast("Data imported successfully!", "success");
         await loadUniverses();
         await loadSavedPlans();
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error importing data: " + error);
+        addToast("Error importing data: " + error, "error");
       }
     }
   }
@@ -295,14 +311,14 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error loading template: " + error);
+        addToast("Error loading template: " + error, "error");
       }
     }
   }
 
   async function scoreSymbols() {
     if (!plan) {
-      alert("Please select a plan first");
+      addToast("Please select a plan first", "warning");
       return;
     }
 
@@ -373,7 +389,7 @@ function App() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error scoring symbols: " + error);
+        addToast("Error scoring symbols: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -382,8 +398,17 @@ function App() {
     }
   }
 
+  const handleNavClick = (tab: string) => {
+    setActiveTab(tab);
+    setIsMobileMenuOpen(false);
+  };
+
   const renderSidebar = () => (
-    <aside className={`sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
+    <aside 
+      className={`sidebar ${isSidebarCollapsed ? "collapsed" : ""} ${isMobileMenuOpen ? "mobile-open" : ""}`}
+      role="navigation"
+      aria-label="Main navigation"
+    >
       <div className="sidebar-header">
         <div className="logo-area">
           <div className="logo-icon-wrapper">
@@ -400,91 +425,113 @@ function App() {
         </button>
       </div>
       
-      <nav className="nav-menu">
+      <nav className="nav-menu" role="menubar" aria-label="Application sections">
         <button 
           className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
-          onClick={() => setActiveTab("dashboard")}
+          onClick={() => handleNavClick("dashboard")}
           title={isSidebarCollapsed ? "Dashboard" : ""}
+          role="menuitem"
+          aria-current={activeTab === "dashboard" ? "page" : undefined}
         >
           <LayoutDashboard className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Dashboard</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "vibe-studio" ? "active" : ""}`}
-          onClick={() => setActiveTab("vibe-studio")}
+          onClick={() => handleNavClick("vibe-studio")}
           title={isSidebarCollapsed ? "Vibe Studio" : ""}
+          role="menuitem"
+          aria-current={activeTab === "vibe-studio" ? "page" : undefined}
         >
           <Sparkles className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Vibe Studio</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "saved-portfolios" ? "active" : ""}`}
-          onClick={() => setActiveTab("saved-portfolios")}
+          onClick={() => handleNavClick("saved-portfolios")}
           title={isSidebarCollapsed ? "Saved Portfolios" : ""}
+          role="menuitem"
+          aria-current={activeTab === "saved-portfolios" ? "page" : undefined}
         >
           <Save className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Saved Portfolios</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
-          onClick={() => setActiveTab("templates")}
+          onClick={() => handleNavClick("templates")}
           title={isSidebarCollapsed ? "Templates" : ""}
+          role="menuitem"
+          aria-current={activeTab === "templates" ? "page" : undefined}
         >
           <FileText className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Templates</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "rankings" ? "active" : ""}`}
-          onClick={() => setActiveTab("rankings")}
+          onClick={() => handleNavClick("rankings")}
           title={isSidebarCollapsed ? "Rankings" : ""}
+          role="menuitem"
+          aria-current={activeTab === "rankings" ? "page" : undefined}
         >
           <TrendingUp className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Rankings</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "portfolio" ? "active" : ""}`}
-          onClick={() => setActiveTab("portfolio")}
+          onClick={() => handleNavClick("portfolio")}
           title={isSidebarCollapsed ? "Portfolio" : ""}
+          role="menuitem"
+          aria-current={activeTab === "portfolio" ? "page" : undefined}
         >
           <PieChart className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Portfolio</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "backtest" ? "active" : ""}`}
-          onClick={() => setActiveTab("backtest")}
+          onClick={() => handleNavClick("backtest")}
           title={isSidebarCollapsed ? "Backtest" : ""}
+          role="menuitem"
+          aria-current={activeTab === "backtest" ? "page" : undefined}
         >
           <FlaskConical className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Backtest</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "journal" ? "active" : ""}`}
-          onClick={() => setActiveTab("journal")}
+          onClick={() => handleNavClick("journal")}
           title={isSidebarCollapsed ? "Journal" : ""}
+          role="menuitem"
+          aria-current={activeTab === "journal" ? "page" : undefined}
         >
           <BookOpen className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Journal</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "yearly-review" ? "active" : ""}`}
-          onClick={() => setActiveTab("yearly-review")}
+          onClick={() => handleNavClick("yearly-review")}
           title={isSidebarCollapsed ? "Yearly Review" : ""}
+          role="menuitem"
+          aria-current={activeTab === "yearly-review" ? "page" : undefined}
         >
           <ClipboardCheck className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Yearly Review</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "universe" ? "active" : ""}`}
-          onClick={() => setActiveTab("universe")}
+          onClick={() => handleNavClick("universe")}
           title={isSidebarCollapsed ? "Universe" : ""}
+          role="menuitem"
+          aria-current={activeTab === "universe" ? "page" : undefined}
         >
           <Globe className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Universe</span>}
         </button>
         <button 
           className={`nav-item ${activeTab === "data" ? "active" : ""}`}
-          onClick={() => setActiveTab("data")}
+          onClick={() => handleNavClick("data")}
           title={isSidebarCollapsed ? "Data Sources" : ""}
+          role="menuitem"
+          aria-current={activeTab === "data" ? "page" : undefined}
         >
           <Database className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Data Sources</span>}
@@ -503,9 +550,26 @@ function App() {
 
   return (
     <div className="app-container">
+      <a href="#main-content" className="skip-nav">Skip to main content</a>
+      
+      <button
+        className="mobile-menu-btn"
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+        aria-expanded={isMobileMenuOpen}
+      >
+        {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+      
+      <div
+        className={`sidebar-overlay ${isMobileMenuOpen ? "visible" : ""}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+        aria-hidden="true"
+      />
+      
       {renderSidebar()}
 
-      <main className="main-content">
+      <main id="main-content" className="main-content" role="main">
         {activeTab === "dashboard" && (
           <div className="animate-fade-in">
             <header className="page-header">
@@ -625,10 +689,12 @@ function App() {
         )}
 
         {activeTab === "saved-portfolios" && (
-          <SavedPortfoliosTab onLoadPortfolio={(portfolio) => {
-            setPortfolioToLoad(portfolio);
-            setActiveTab("vibe-studio");
-          }} />
+          <Suspense fallback={<TabLoading />}>
+            <SavedPortfoliosTab onLoadPortfolio={(portfolio) => {
+              setPortfolioToLoad(portfolio);
+              setActiveTab("vibe-studio");
+            }} />
+          </Suspense>
         )}
 
         {activeTab === "templates" && (
@@ -673,7 +739,9 @@ function App() {
         )}
 
         {activeTab === "data" && (
-          <DataSourcesPage />
+          <Suspense fallback={<TabLoading />}>
+            <DataSourcesPage />
+          </Suspense>
         )}
 
         {activeTab === "rankings" && (
@@ -798,19 +866,25 @@ function App() {
 
         {activeTab === "portfolio" && (
           <div className="animate-fade-in">
-            <PortfolioTab />
+            <Suspense fallback={<TabLoading />}>
+              <PortfolioTab />
+            </Suspense>
           </div>
         )}
 
         {activeTab === "backtest" && (
           <div className="animate-fade-in">
-            <BacktestTab />
+            <Suspense fallback={<TabLoading />}>
+              <BacktestTab />
+            </Suspense>
           </div>
         )}
 
         {activeTab === "journal" && (
           <div className="animate-fade-in">
-            <JournalTab />
+            <Suspense fallback={<TabLoading />}>
+              <JournalTab />
+            </Suspense>
           </div>
         )}
 
@@ -820,7 +894,9 @@ function App() {
               <h1 className="page-title">Yearly Review</h1>
               <p className="page-subtitle">Comprehensive annual strategy and portfolio review checklist</p>
             </header>
-            <YearlyReviewComponent portfolioName={plan?.name || "My Portfolio"} />
+            <Suspense fallback={<TabLoading />}>
+              <YearlyReviewComponent portfolioName={plan?.name || "My Portfolio"} />
+            </Suspense>
           </div>
         )}
 
@@ -937,23 +1013,17 @@ function App() {
                 <h3><Save size={20} /> Saved Plans ({savedPlans.length})</h3>
                 <div className="flex flex-wrap gap-md">
                   {savedPlans.map((planName) => (
-                    <div key={planName} style={{ 
-                      padding: '1rem', 
-                      background: 'var(--bg-secondary)', 
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-color)',
-                      minWidth: '200px'
-                    }}>
-                      <h4 style={{ margin: '0 0 0.5rem 0' }}>{planName}</h4>
+                    <div key={planName} className="saved-plan-card">
+                      <h4 className="saved-plan-name">{planName}</h4>
                       <button 
                         className="btn-small"
                         onClick={async () => {
                           try {
                             const loadedPlan = await invoke<VibePlan>("load_plan", { name: planName });
                             setPlan(loadedPlan);
-                            alert("Plan loaded successfully!");
+                            addToast("Plan loaded successfully!", "success");
                           } catch (error) {
-                            alert("Error loading plan: " + error);
+                            addToast("Error loading plan: " + error, "error");
                           }
                         }}
                       >
@@ -966,9 +1036,9 @@ function App() {
             )}
 
             {plan && (
-              <div className="card" style={{ marginTop: '1.5rem' }}>
+              <div className="card mt-lg">
                 <h3><Save size={20} /> Current Plan: {plan.name}</h3>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                <p className="text-muted mb-md">
                   Save your current plan configuration for later use
                 </p>
                 <button className="btn-primary" onClick={savePlan}>

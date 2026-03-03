@@ -5,6 +5,7 @@ import { chatHistoryService, Conversation } from "../services/chatHistory";
 import { invoke } from "../services/tauri";
 import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
+import { useToast } from "./Toast";
 import { 
   Sparkles, 
   RotateCcw, 
@@ -63,6 +64,7 @@ interface VibeStudioProps {
 }
 
 export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
+  const { addToast } = useToast();
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPortfolio, setGeneratedPortfolio] = useState<GeneratedPortfolio | null>(null);
@@ -227,12 +229,12 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
       });
       
       if (isMountedRef.current) {
-        alert('Portfolio saved successfully! View it in the Saved Portfolios tab.');
+        addToast('Portfolio saved successfully! View it in the Saved Portfolios tab.', 'success');
       }
     } catch (err) {
       if (isMountedRef.current) {
         logger.error('Failed to save portfolio:', err);
-        alert('Failed to save portfolio: ' + err);
+        addToast('Failed to save portfolio: ' + err, 'error');
       }
     } finally {
       if (isMountedRef.current) {

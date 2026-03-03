@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
+import { useToast } from "./components/Toast";
+import { logger } from "./core/logger";
 
 interface JournalEntry {
   id: string;
@@ -20,6 +22,7 @@ interface JournalStats {
 }
 
 export function JournalTab() {
+  const { addToast } = useToast();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [selectedView, setSelectedView] = useState<"timeline" | "stats" | "add">("timeline");
@@ -54,13 +57,13 @@ export function JournalTab() {
         setStats(journalStats);
       }
     } catch (error) {
-      console.error("Error calculating stats:", error);
+      logger.error("Error calculating stats:", error);
     }
   }
 
   async function addEntry() {
     if (!newEntry.title || !newEntry.content) {
-      alert("Please fill in title and content");
+      addToast("Please fill in title and content", "warning");
       return;
     }
 
@@ -85,7 +88,7 @@ export function JournalTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error creating entry: " + error);
+        addToast("Error creating entry: " + error, "error");
       }
     }
   }
@@ -104,7 +107,7 @@ export function JournalTab() {
       URL.revokeObjectURL(url);
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error exporting: " + error);
+        addToast("Error exporting: " + error, "error");
       }
     }
   }

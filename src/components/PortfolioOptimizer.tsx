@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { invoke } from "../services/tauri";
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { LiveProgressPanel } from "./LiveProgressPanel";
+import { useToast } from "./Toast";
 import {
   Zap,
   TrendingDown,
@@ -122,6 +123,7 @@ const DEFAULT_CANDIDATES = [
 ];
 
 export function PortfolioOptimizerComponent({ holdings, portfolioName }: PortfolioOptimizerProps) {
+  const { addToast } = useToast();
   const [report, setReport] = useState<PortfolioOptimizationReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useLiveMode, setUseLiveMode] = useState(true);
@@ -151,7 +153,7 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
 
   async function generateReport() {
     if (holdings.length === 0) {
-      alert("Please add holdings to your portfolio first");
+      addToast("Please add holdings to your portfolio first", "warning");
       return;
     }
 
@@ -187,7 +189,7 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error generating optimization report: " + error);
+        addToast("Error generating optimization report: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {

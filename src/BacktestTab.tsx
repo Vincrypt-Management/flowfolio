@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
+import { useToast } from "./components/Toast";
 import {
   FlaskConical,
   Play,
@@ -104,6 +105,7 @@ const PRESET_STRATEGIES = [
 ];
 
 export function BacktestTab() {
+  const { addToast } = useToast();
   const [config, setConfig] = useState<BacktestConfig>({
     start_date: "2020-01-01",
     end_date: "2024-12-01",
@@ -132,7 +134,7 @@ export function BacktestTab() {
 
   async function runBacktest() {
     if (config.symbols.length === 0) {
-      alert("Please add at least one symbol to backtest");
+      addToast("Please add at least one symbol to backtest", "warning");
       return;
     }
 
@@ -149,7 +151,7 @@ export function BacktestTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error running backtest: " + error);
+        addToast("Error running backtest: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -158,7 +160,7 @@ export function BacktestTab() {
     }
   }
 
-  const updateConfig = (field: keyof BacktestConfig, value: any) => {
+  const updateConfig = (field: keyof BacktestConfig, value: BacktestConfig[keyof BacktestConfig]) => {
     setConfig({ ...config, [field]: value });
   };
 

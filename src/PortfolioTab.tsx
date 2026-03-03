@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "./services/tauri";
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
+import { useToast } from "./components/Toast";
 
 interface Portfolio {
   name: string;
@@ -25,7 +26,7 @@ interface Holding {
 interface AllocationPlan {
   method: string;
   allocations: TargetAllocation[];
-  constraints: any;
+  constraints: Record<string, number | string>;
 }
 
 interface TargetAllocation {
@@ -71,6 +72,7 @@ interface RebalanceAction {
 }
 
 export function PortfolioTab() {
+  const { addToast } = useToast();
   const [portfolio, setPortfolio] = useState<Portfolio>({
     name: "My Portfolio",
     holdings: [],
@@ -103,7 +105,7 @@ export function PortfolioTab() {
 
   async function addHolding() {
     if (!newSymbol || !newShares) {
-      alert("Please enter symbol and shares");
+      addToast("Please enter symbol and shares", "warning");
       return;
     }
 
@@ -154,7 +156,7 @@ export function PortfolioTab() {
       setNewTargetPct("");
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error adding holding: " + error);
+        addToast("Error adding holding: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -196,7 +198,7 @@ export function PortfolioTab() {
       });
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error updating prices: " + error);
+        addToast("Error updating prices: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -245,7 +247,7 @@ export function PortfolioTab() {
 
   async function generateBuyList() {
     if (!portfolio || portfolio.holdings.length === 0 || !allocationPlan) {
-      alert("Please add holdings and create an allocation plan first");
+      addToast("Please add holdings and create an allocation plan first", "warning");
       return;
     }
 
@@ -269,7 +271,7 @@ export function PortfolioTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error generating buy list: " + error);
+        addToast("Error generating buy list: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -280,7 +282,7 @@ export function PortfolioTab() {
 
   async function checkRebalance() {
     if (!portfolio || portfolio.holdings.length === 0) {
-      alert("Please add holdings first");
+      addToast("Please add holdings first", "warning");
       return;
     }
 
@@ -296,7 +298,7 @@ export function PortfolioTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error checking rebalance: " + error);
+        addToast("Error checking rebalance: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {
@@ -307,7 +309,7 @@ export function PortfolioTab() {
 
   async function createAllocation() {
     if (!portfolio || portfolio.holdings.length === 0) {
-      alert("Please add holdings first");
+      addToast("Please add holdings first", "warning");
       return;
     }
 
@@ -326,7 +328,7 @@ export function PortfolioTab() {
       }
     } catch (error) {
       if (isMountedRef.current) {
-        alert("Error creating allocation: " + error);
+        addToast("Error creating allocation: " + error, "error");
       }
     } finally {
       if (isMountedRef.current) {

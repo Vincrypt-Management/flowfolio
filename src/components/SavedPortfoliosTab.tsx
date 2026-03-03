@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '../services/tauri';
 import { GeneratedPortfolio } from '../services/portfolioAgent';
+import { useToast } from './Toast';
 import {
   FolderOpen,
   Trash2,
@@ -36,6 +37,7 @@ interface SavedPortfoliosTabProps {
 }
 
 export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps) {
+  const { addToast } = useToast();
   const [portfolios, setPortfolios] = useState<SavedPortfolioInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
       }
     } catch (err) {
       if (isMountedRef.current) {
-        alert('Failed to load portfolio: ' + err);
+        addToast('Failed to load portfolio: ' + err, 'error');
       }
     } finally {
       if (isMountedRef.current) {
@@ -109,7 +111,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
       }
     } catch (err) {
       if (isMountedRef.current) {
-        alert('Failed to delete portfolio: ' + err);
+        addToast('Failed to delete portfolio: ' + err, 'error');
       }
     }
   }
@@ -125,7 +127,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
         'application/json'
       );
     } catch (err) {
-      alert('Failed to export portfolio: ' + err);
+      addToast('Failed to export portfolio: ' + err, 'error');
     }
   }
 
