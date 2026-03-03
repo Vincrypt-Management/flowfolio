@@ -42,9 +42,7 @@ jobs:
           cache: npm
 
       - name: Install Rust stable
-        uses: dtolnay/rust-action/setup@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -59,8 +57,6 @@ jobs:
 
       - name: Build Tauri (Linux)
         run: npx tauri build --bundles deb appimage
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ''
 
       - name: Rename artifacts
         run: |
@@ -90,9 +86,7 @@ jobs:
           cache: npm
 
       - name: Install Rust stable
-        uses: dtolnay/rust-action/setup@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
