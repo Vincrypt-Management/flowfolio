@@ -3,6 +3,7 @@ import { invoke } from "../services/tauri";
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { LiveProgressPanel } from "./LiveProgressPanel";
 import { useToast } from "./Toast";
+import { useUserMode } from '../contexts/UserModeContext';
 import {
   Zap,
   TrendingDown,
@@ -124,6 +125,7 @@ const DEFAULT_CANDIDATES = [
 
 export function PortfolioOptimizerComponent({ holdings, portfolioName }: PortfolioOptimizerProps) {
   const { addToast } = useToast();
+  const { isAdvanced } = useUserMode();
   const [report, setReport] = useState<PortfolioOptimizationReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useLiveMode, setUseLiveMode] = useState(true);
@@ -306,13 +308,15 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
           </div>
         </div>
         <div className="header-actions">
-          <button
-            className="btn-secondary"
-            onClick={() => setShowSettings(!showSettings)}
-          >
-            <BarChart3 size={16} />
-            {showSettings ? "Hide Settings" : "Settings"}
-          </button>
+          {isAdvanced && (
+            <button
+              className="btn-secondary"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <BarChart3 size={16} />
+              {showSettings ? "Hide Settings" : "Settings"}
+            </button>
+          )}
           <button
             className="btn-primary"
             onClick={generateReport}
@@ -332,7 +336,7 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
       </div>
 
       {/* Settings Panel */}
-      {showSettings && (
+      {isAdvanced && showSettings && (
         <div className="optimizer-settings">
           <h4>Optimization Thresholds</h4>
           <div className="settings-grid">

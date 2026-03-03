@@ -8,6 +8,7 @@ import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
 import { DEFAULT_SYMBOLS } from "./shared/constants";
 import { saveFile } from "./shared/utils/fileSystem";
+import { useUserMode } from "./contexts/UserModeContext";
 import { 
   LayoutDashboard, 
   Sparkles, 
@@ -30,7 +31,9 @@ import {
   Plus,
   ClipboardCheck,
   Menu,
-  X
+  X,
+  ToggleLeft,
+  ToggleRight
 } from "lucide-react";
 import "./App.css";
 import "./styles/optimizer.css";
@@ -79,6 +82,7 @@ interface Universe {
 
 function App() {
   const { addToast } = useToast();
+  const { isAdvanced, toggleMode } = useUserMode();
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
@@ -456,6 +460,7 @@ function App() {
           <Save className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Saved Portfolios</span>}
         </button>
+        {isAdvanced && (
         <button 
           className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
           onClick={() => handleNavClick("templates")}
@@ -466,6 +471,8 @@ function App() {
           <FileText className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Templates</span>}
         </button>
+        )}
+        {isAdvanced && (
         <button 
           className={`nav-item ${activeTab === "rankings" ? "active" : ""}`}
           onClick={() => handleNavClick("rankings")}
@@ -476,6 +483,7 @@ function App() {
           <TrendingUp className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Rankings</span>}
         </button>
+        )}
         <button 
           className={`nav-item ${activeTab === "portfolio" ? "active" : ""}`}
           onClick={() => handleNavClick("portfolio")}
@@ -516,6 +524,7 @@ function App() {
           <ClipboardCheck className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Yearly Review</span>}
         </button>
+        {isAdvanced && (
         <button 
           className={`nav-item ${activeTab === "universe" ? "active" : ""}`}
           onClick={() => handleNavClick("universe")}
@@ -526,6 +535,8 @@ function App() {
           <Globe className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Universe</span>}
         </button>
+        )}
+        {isAdvanced && (
         <button 
           className={`nav-item ${activeTab === "data" ? "active" : ""}`}
           onClick={() => handleNavClick("data")}
@@ -536,9 +547,23 @@ function App() {
           <Database className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Data Sources</span>}
         </button>
+        )}
       </nav>
 
       <div className="sidebar-footer">
+        <button 
+          className={`mode-toggle ${isSidebarCollapsed ? "collapsed" : ""}`}
+          onClick={toggleMode}
+          aria-label={isAdvanced ? "Switch to Simple mode" : "Switch to Advanced mode"}
+          title={isSidebarCollapsed ? (isAdvanced ? "Advanced Mode" : "Simple Mode") : ""}
+        >
+          {isAdvanced ? <ToggleRight className="mode-toggle-icon active" size={20} /> : <ToggleLeft className="mode-toggle-icon" size={20} />}
+          {!isSidebarCollapsed && (
+            <span className="mode-toggle-label">
+              {isAdvanced ? "Advanced" : "Simple"}
+            </span>
+          )}
+        </button>
         <ThemeToggle compact={isSidebarCollapsed} />
         <div className={`status-badge ${isSidebarCollapsed ? "collapsed" : ""}`}>
           <div className={`status-dot ${status.includes("running") || status === "Healthy" ? "online" : "offline"}`}></div>
@@ -579,12 +604,16 @@ function App() {
                   <p className="page-subtitle">Overview of your investment strategy</p>
                 </div>
                 <div className="page-header-actions">
-                  <button className="btn-secondary" onClick={savePlan} disabled={!plan}>
-                    <Save size={16} /> Save Plan
-                  </button>
-                  <button className="btn-secondary" onClick={exportData}>
-                    <Download size={16} /> Export
-                  </button>
+                  {isAdvanced && (
+                    <>
+                      <button className="btn-secondary" onClick={savePlan} disabled={!plan}>
+                        <Save size={16} /> Save Plan
+                      </button>
+                      <button className="btn-secondary" onClick={exportData}>
+                        <Download size={16} /> Export
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </header>
@@ -616,6 +645,7 @@ function App() {
                 )}
               </div>
 
+              {isAdvanced && (
               <div className="card">
                 <h3><Activity size={20} /> Ranking Factors</h3>
                 {plan && (
@@ -629,6 +659,7 @@ function App() {
                   </div>
                 )}
               </div>
+              )}
 
               <div className="card">
                 <h3><Calendar size={20} /> Next Actions</h3>

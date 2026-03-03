@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "./services/tauri";
 import { useToast } from "./components/Toast";
+import { useUserMode } from './contexts/UserModeContext';
 import {
   FlaskConical,
   Play,
@@ -106,6 +107,7 @@ const PRESET_STRATEGIES = [
 
 export function BacktestTab() {
   const { addToast } = useToast();
+  const { isAdvanced } = useUserMode();
   const [config, setConfig] = useState<BacktestConfig>({
     start_date: "2020-01-01",
     end_date: "2024-12-01",
@@ -121,6 +123,9 @@ export function BacktestTab() {
   const [selectedView, setSelectedView] = useState<"overview" | "timeline" | "trades">("overview");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [symbolInput, setSymbolInput] = useState("AAPL, MSFT, GOOGL");
+  const [benchmarkSymbol, setBenchmarkSymbol] = useState("SPY");
+  const [riskFreeRate, setRiskFreeRate] = useState(4.0);
+  const [transactionCost, setTransactionCost] = useState(0.0);
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -367,15 +372,17 @@ export function BacktestTab() {
         </div>
 
         {/* Advanced Settings Toggle */}
-        <button 
-          className="advanced-toggle"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          Advanced Settings
-        </button>
+        {isAdvanced && (
+          <button 
+            className="advanced-toggle"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            Advanced Settings
+          </button>
+        )}
 
-        {showAdvanced && (
+        {isAdvanced && showAdvanced && (
           <div className="config-section advanced">
             <div className="config-row">
               <div className="config-field">
@@ -409,6 +416,41 @@ export function BacktestTab() {
                   <option value="equal_weight">Equal Weight</option>
                   <option value="score_weighted">Score Weighted</option>
                 </select>
+              </div>
+            </div>
+            <div className="config-row">
+              <div className="config-field">
+                <label>Benchmark Symbol</label>
+                <input
+                  type="text"
+                  value={benchmarkSymbol}
+                  onChange={(e) => setBenchmarkSymbol(e.target.value.toUpperCase())}
+                  placeholder="SPY"
+                />
+              </div>
+              <div className="config-field">
+                <label>Risk-Free Rate</label>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    value={riskFreeRate}
+                    onChange={(e) => setRiskFreeRate(parseFloat(e.target.value) || 0)}
+                    step={0.1}
+                  />
+                  <span>%</span>
+                </div>
+              </div>
+              <div className="config-field">
+                <label>Transaction Cost</label>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    value={transactionCost}
+                    onChange={(e) => setTransactionCost(parseFloat(e.target.value) || 0)}
+                    step={0.01}
+                  />
+                  <span>%</span>
+                </div>
               </div>
             </div>
           </div>

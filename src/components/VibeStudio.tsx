@@ -6,6 +6,7 @@ import { invoke } from "../services/tauri";
 import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
 import { useToast } from "./Toast";
+import { useUserMode } from '../contexts/UserModeContext';
 import { 
   Sparkles, 
   RotateCcw, 
@@ -65,6 +66,7 @@ interface VibeStudioProps {
 
 function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const { addToast } = useToast();
+  const { isAdvanced } = useUserMode();
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPortfolio, setGeneratedPortfolio] = useState<GeneratedPortfolio | null>(null);
@@ -850,18 +852,22 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
               <button className="btn-primary" onClick={handleSavePortfolio} disabled={isSaving}>
                 <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
               </button>
-              <button className="btn-secondary" onClick={handleExportCSV}>
-                <FileSpreadsheet size={16} /> Export CSV
-              </button>
-              <button className="btn-secondary" onClick={handleExportPDF} disabled={isExportingPDF}>
-                <FileText size={16} /> {isExportingPDF ? 'Exporting...' : 'Export PDF'}
-              </button>
-              <button className="btn-save" onClick={handleSaveJSON}>
-                <Download size={16} /> Save JSON
-              </button>
-              <button className="btn-chat" onClick={() => setChatMode(!chatMode)}>
-                <MessageSquare size={16} /> {chatMode ? 'Hide Chat' : 'Ask AI'}
-              </button>
+              {isAdvanced && (
+                <>
+                  <button className="btn-secondary" onClick={handleExportCSV}>
+                    <FileSpreadsheet size={16} /> Export CSV
+                  </button>
+                  <button className="btn-secondary" onClick={handleExportPDF} disabled={isExportingPDF}>
+                    <FileText size={16} /> {isExportingPDF ? 'Exporting...' : 'Export PDF'}
+                  </button>
+                  <button className="btn-save" onClick={handleSaveJSON}>
+                    <Download size={16} /> Save JSON
+                  </button>
+                  <button className="btn-chat" onClick={() => setChatMode(!chatMode)}>
+                    <MessageSquare size={16} /> {chatMode ? 'Hide Chat' : 'Ask AI'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1063,7 +1069,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
             </div>
 
             {/* Quantitative Metrics Table */}
-            {sectionVisibility.hasQuantMetrics && (
+            {isAdvanced && sectionVisibility.hasQuantMetrics && (
               <div className="detail-card full-width">
                 <h3><Activity size={20} /> Quantitative Metrics</h3>
                 <div className="detail-content">
@@ -1503,19 +1509,21 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
             )}
 
             {/* Advanced Quant Dashboard Toggle */}
-            <div className="quant-dashboard-toggle">
-              <button 
-                className="btn-quant-toggle"
-                onClick={() => setShowQuantDashboard(!showQuantDashboard)}
-              >
-                <Gauge size={20} />
-                <span>Advanced Quantitative Analysis</span>
-                {showQuantDashboard ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-              </button>
-            </div>
+            {isAdvanced && (
+              <div className="quant-dashboard-toggle">
+                <button 
+                  className="btn-quant-toggle"
+                  onClick={() => setShowQuantDashboard(!showQuantDashboard)}
+                >
+                  <Gauge size={20} />
+                  <span>Advanced Quantitative Analysis</span>
+                  {showQuantDashboard ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
+              </div>
+            )}
 
             {/* Advanced Quant Dashboard */}
-            {showQuantDashboard && (
+            {isAdvanced && showQuantDashboard && (
               <div className="quant-dashboard-container" ref={quantDashboardRef}>
                 <QuantDashboard 
                   assets={generatedPortfolio.assets.map(asset => ({
@@ -1571,7 +1579,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
             </div>
           </div>
 
-          {chatMode && (
+          {isAdvanced && chatMode && (
             <div className="chat-section">
               <div className="chat-header">
                 <h3><MessageSquare size={20} /> Chat with AI about this portfolio</h3>

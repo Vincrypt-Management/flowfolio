@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "./services/tauri";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
+import { useUserMode } from './contexts/UserModeContext';
 
 interface JournalEntry {
   id: string;
@@ -23,6 +24,7 @@ interface JournalStats {
 
 export function JournalTab() {
   const { addToast } = useToast();
+  const { isAdvanced } = useUserMode();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [selectedView, setSelectedView] = useState<"timeline" | "stats" | "add">("timeline");
@@ -162,9 +164,11 @@ export function JournalTab() {
         <h2>Investment Journal</h2>
         <p className="subtitle">Track decisions, learnings, and strategy evolution</p>
         <div className="header-actions">
-          <button className="btn-secondary" onClick={exportToMarkdown}>
-            Export to Markdown
-          </button>
+          {isAdvanced && (
+            <button className="btn-secondary" onClick={exportToMarkdown}>
+              Export to Markdown
+            </button>
+          )}
         </div>
       </div>
 
@@ -175,12 +179,14 @@ export function JournalTab() {
         >
           Timeline ({entries.length})
         </button>
-        <button
-          className={selectedView === "stats" ? "active" : ""}
-          onClick={() => setSelectedView("stats")}
-        >
-          Statistics
-        </button>
+        {isAdvanced && (
+          <button
+            className={selectedView === "stats" ? "active" : ""}
+            onClick={() => setSelectedView("stats")}
+          >
+            Statistics
+          </button>
+        )}
         <button
           className={selectedView === "add" ? "active" : ""}
           onClick={() => setSelectedView("add")}
@@ -357,15 +363,17 @@ export function JournalTab() {
               />
             </div>
 
-            <div className="form-group">
-              <label>Tags (comma-separated)</label>
-              <input
-                type="text"
-                value={newEntry.tags}
-                onChange={(e) => setNewEntry({ ...newEntry, tags: e.target.value })}
-                placeholder="e.g., lesson, psychology, strategy"
-              />
-            </div>
+            {isAdvanced && (
+              <div className="form-group">
+                <label>Tags (comma-separated)</label>
+                <input
+                  type="text"
+                  value={newEntry.tags}
+                  onChange={(e) => setNewEntry({ ...newEntry, tags: e.target.value })}
+                  placeholder="e.g., lesson, psychology, strategy"
+                />
+              </div>
+            )}
 
             <button className="btn-primary" onClick={addEntry}>
               Create Entry

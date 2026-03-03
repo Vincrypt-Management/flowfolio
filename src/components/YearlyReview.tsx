@@ -1,6 +1,7 @@
 import { useState, memo } from "react";
 import { invoke } from "../services/tauri";
 import { useToast } from "./Toast";
+import { useUserMode } from '../contexts/UserModeContext';
 import {
   ClipboardCheck,
   CheckCircle2,
@@ -50,6 +51,7 @@ interface YearlyReviewProps {
 
 export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: YearlyReviewProps) {
   const { addToast } = useToast();
+  const { isAdvanced } = useUserMode();
   const [review, setReview] = useState<YearlyReview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -320,52 +322,54 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
           </div>
 
           {/* Checklist by Category */}
-          <div className="checklist-categories">
-            {Object.entries(groupedItems).map(([category, items]) => (
-              <div key={category} className="category-section">
-                <button 
-                  className="category-header"
-                  onClick={() => toggleCategory(category)}
-                >
-                  <div className="category-title">
-                    {getCategoryIcon(category)}
-                    <span>{category}</span>
-                    <span className="category-count">
-                      {items.filter(i => itemStatuses[i.index] === "PASS").length}/{items.length}
-                    </span>
-                  </div>
-                  {expandedCategories.has(category) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                </button>
-                
-                {expandedCategories.has(category) && (
-                  <div className="category-items">
-                    {items.map((item) => (
-                      <div key={item.index} className={`checklist-item ${itemStatuses[item.index]?.toLowerCase()}`}>
-                        <div className="item-main">
-                          {getStatusIcon(itemStatuses[item.index] || item.status)}
-                          <div className="item-content">
-                            <div className="item-question">{item.question}</div>
-                            <div className="item-notes">{item.notes}</div>
+          {isAdvanced && (
+            <div className="checklist-categories">
+              {Object.entries(groupedItems).map(([category, items]) => (
+                <div key={category} className="category-section">
+                  <button 
+                    className="category-header"
+                    onClick={() => toggleCategory(category)}
+                  >
+                    <div className="category-title">
+                      {getCategoryIcon(category)}
+                      <span>{category}</span>
+                      <span className="category-count">
+                        {items.filter(i => itemStatuses[i.index] === "PASS").length}/{items.length}
+                      </span>
+                    </div>
+                    {expandedCategories.has(category) ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                  
+                  {expandedCategories.has(category) && (
+                    <div className="category-items">
+                      {items.map((item) => (
+                        <div key={item.index} className={`checklist-item ${itemStatuses[item.index]?.toLowerCase()}`}>
+                          <div className="item-main">
+                            {getStatusIcon(itemStatuses[item.index] || item.status)}
+                            <div className="item-content">
+                              <div className="item-question">{item.question}</div>
+                              <div className="item-notes">{item.notes}</div>
+                            </div>
+                          </div>
+                          <div className="item-actions">
+                            <select
+                              value={itemStatuses[item.index] || item.status}
+                              onChange={(e) => updateItemStatus(item.index, e.target.value)}
+                              className={`status-select ${(itemStatuses[item.index] || item.status).toLowerCase()}`}
+                            >
+                              <option value="PASS">✓ Pass</option>
+                              <option value="REVIEW">⚠ Review</option>
+                              <option value="ACTION_NEEDED">✗ Action Needed</option>
+                            </select>
                           </div>
                         </div>
-                        <div className="item-actions">
-                          <select
-                            value={itemStatuses[item.index] || item.status}
-                            onChange={(e) => updateItemStatus(item.index, e.target.value)}
-                            className={`status-select ${(itemStatuses[item.index] || item.status).toLowerCase()}`}
-                          >
-                            <option value="PASS">✓ Pass</option>
-                            <option value="REVIEW">⚠ Review</option>
-                            <option value="ACTION_NEEDED">✗ Action Needed</option>
-                          </select>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Recommendations */}
           <div className="recommendations-section">
@@ -381,14 +385,16 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
           </div>
 
           {/* Export Button */}
-          <div className="review-footer">
-            <button className="btn-secondary" onClick={exportReviewMarkdown}>
-              <Download size={16} /> Export Review to Markdown
-            </button>
-            <span className="review-date">
-              Generated: {new Date(review.date).toLocaleString()}
-            </span>
-          </div>
+          {isAdvanced && (
+            <div className="review-footer">
+              <button className="btn-secondary" onClick={exportReviewMarkdown}>
+                <Download size={16} /> Export Review to Markdown
+              </button>
+              <span className="review-date">
+                Generated: {new Date(review.date).toLocaleString()}
+              </span>
+            </div>
+          )}
         </>
       )}
 

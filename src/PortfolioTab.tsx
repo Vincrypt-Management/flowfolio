@@ -3,6 +3,7 @@ import { invoke } from "./services/tauri";
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
 import { useToast } from "./components/Toast";
+import { useUserMode } from './contexts/UserModeContext';
 
 interface Portfolio {
   name: string;
@@ -73,6 +74,10 @@ interface RebalanceAction {
 
 export function PortfolioTab() {
   const { addToast } = useToast();
+  const { isAdvanced } = useUserMode();
+  const [rebalanceThreshold, setRebalanceThreshold] = useState(5.0);
+  const [maxPosition, setMaxPosition] = useState(25.0);
+  const [cashBuffer, setCashBuffer] = useState(5.0);
   const [portfolio, setPortfolio] = useState<Portfolio>({
     name: "My Portfolio",
     holdings: [],
@@ -290,7 +295,7 @@ export function PortfolioTab() {
     try {
       const report = await invoke<RebalanceReport>("check_portfolio_rebalance", {
         portfolio,
-        thresholdPct: 5.0,
+        thresholdPct: rebalanceThreshold,
       });
 
       if (isMountedRef.current) {
@@ -319,8 +324,8 @@ export function PortfolioTab() {
       
       const plan = await invoke<AllocationPlan>("create_equal_weight_allocation", {
         symbols,
-        maxPositionPct: 25.0,
-        cashBufferPct: 5.0,
+        maxPositionPct: maxPosition,
+        cashBufferPct: cashBuffer,
       });
 
       if (isMountedRef.current) {
@@ -341,6 +346,26 @@ export function PortfolioTab() {
     <div className="portfolio-tab">
       <h2>Portfolio Management</h2>
       <p className="subtitle">Track your holdings, generate buy lists, and manage rebalancing</p>
+
+      {isAdvanced && (
+        <div className="card advanced-settings">
+          <h3>⚙️ Portfolio Thresholds</h3>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Rebalance Threshold (%)</label>
+              <input type="number" value={rebalanceThreshold} onChange={(e) => setRebalanceThreshold(parseFloat(e.target.value) || 0)} min={1} max={20} step={0.5} />
+            </div>
+            <div className="form-group">
+              <label>Max Position Size (%)</label>
+              <input type="number" value={maxPosition} onChange={(e) => setMaxPosition(parseFloat(e.target.value) || 0)} min={5} max={50} step={1} />
+            </div>
+            <div className="form-group">
+              <label>Cash Buffer (%)</label>
+              <input type="number" value={cashBuffer} onChange={(e) => setCashBuffer(parseFloat(e.target.value) || 0)} min={0} max={20} step={1} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Holding Form */}
       <div className="card">
@@ -442,9 +467,9 @@ export function PortfolioTab() {
                         <th scope="col">Shares</th>
                         <th scope="col">Price</th>
                         <th scope="col">Value</th>
-                        <th scope="col">Target %</th>
+                        {isAdvanced && <th scope="col">Target %</th>}
                         <th scope="col">Current %</th>
-                        <th scope="col">Drift</th>
+                        {isAdvanced && <th scope="col">Drift</th>}
                         <th scope="col">Action</th>
                       </tr>
                     </thead>
@@ -455,11 +480,13 @@ export function PortfolioTab() {
                           <td>{holding.shares.toFixed(2)}</td>
                           <td>${holding.current_price.toFixed(2)}</td>
                           <td>${holding.market_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                          <td>{holding.target_pct.toFixed(1)}%</td>
+                          {isAdvanced && <td>{holding.target_pct.toFixed(1)}%</td>}
                           <td>{holding.current_pct.toFixed(1)}%</td>
-                          <td className={holding.drift_pct > 0 ? "drift-positive" : "drift-negative"}>
-                            {holding.drift_pct > 0 ? "+" : ""}{holding.drift_pct.toFixed(1)}%
-                          </td>
+                          {isAdvanced && (
+                            <td className={holding.drift_pct > 0 ? "drift-positive" : "drift-negative"}>
+                              {holding.drift_pct > 0 ? "+" : ""}{holding.drift_pct.toFixed(1)}%
+                            </td>
+                          )}
                           <td>
                             <button 
                               className="btn-small btn-danger" 
@@ -474,14 +501,16 @@ export function PortfolioTab() {
                   </table>
                 </div>
 
-                <div className="actions">
-                  <button className="btn-secondary" onClick={createAllocation} disabled={isLoading}>
-                    Create Allocation Plan
-                  </button>
-                  <button className="btn-secondary" onClick={checkRebalance} disabled={isLoading}>
-                    Check Rebalance
-                  </button>
-                </div>
+                {isAdvanced && (
+                  <div className="actions">
+                    <button className="btn-secondary" onClick={createAllocation} disabled={isLoading}>
+                      Create Allocation Plan
+                    </button>
+                    <button className="btn-secondary" onClick={checkRebalance} disabled={isLoading}>
+                      Check Rebalance
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <p className="empty-state">
@@ -507,25 +536,27 @@ export function PortfolioTab() {
                 ))}
               </div>
 
-              <div className="buy-list-section">
-                <h4>Generate Buy List</h4>
-                <div className="input-group">
-                  <label>Monthly Contribution ($):</label>
-                  <input
-                    type="number"
-                    value={contribution}
-                    onChange={(e) => setContribution(e.target.value)}
-                    className="contribution-input"
-                  />
+              {isAdvanced && (
+                <div className="buy-list-section">
+                  <h4>Generate Buy List</h4>
+                  <div className="input-group">
+                    <label>Monthly Contribution ($):</label>
+                    <input
+                      type="number"
+                      value={contribution}
+                      onChange={(e) => setContribution(e.target.value)}
+                      className="contribution-input"
+                    />
+                  </div>
+                  <button className="btn-primary" onClick={generateBuyList} disabled={isLoading}>
+                    {isLoading ? "Generating..." : "Generate Buy List"}
+                  </button>
                 </div>
-                <button className="btn-primary" onClick={generateBuyList} disabled={isLoading}>
-                  {isLoading ? "Generating..." : "Generate Buy List"}
-                </button>
-              </div>
+              )}
             </div>
           )}
 
-          {buyList && (
+          {isAdvanced && buyList && (
             <div className="card buy-list-card">
               <h3>📅 Monthly Buy List</h3>
               <p className="buy-list-date">Generated: {new Date(buyList.date).toLocaleString()}</p>
@@ -557,7 +588,7 @@ export function PortfolioTab() {
             </div>
           )}
 
-          {rebalanceReport && (
+          {isAdvanced && rebalanceReport && (
             <div className={`card rebalance-card ${rebalanceReport.drift_detected ? "needs-rebalance" : "balanced"}`}>
               <h3>🔄 Rebalance Report</h3>
               <p className="rebalance-date">Checked: {new Date(rebalanceReport.date).toLocaleString()}</p>

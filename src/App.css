@@ -4574,3 +4574,66 @@ body {
   margin: 0 0 0.5rem 0;
   font-size: 1rem;
 }
+
+/* ============ Mode Toggle ============ */
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.mode-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.mode-toggle.collapsed {
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+.mode-toggle-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.mode-toggle-icon.active {
+  color: var(--primary);
+}
+
+.mode-toggle-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Advanced section transitions */
+.advanced-section-enter {
+  animation: advancedReveal 0.3s ease-out;
+}
+
+@keyframes advancedReveal {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    max-height: 2000px;
+    transform: translateY(0);
+  }
+}
