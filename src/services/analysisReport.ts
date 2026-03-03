@@ -13,6 +13,9 @@
 
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import type { GeneratedPortfolio } from './portfolioAgent';
+import { createLogger } from '../core/logger';
+
+const log = createLogger('analysis-report');
 
 // Report generation model (use a capable model for analysis)
 const REPORT_MODEL = import.meta.env.VITE_REPORT_MODEL || 'anthropic/claude-3.5-sonnet';
@@ -217,7 +220,7 @@ class AnalysisReportService {
    */
   configureAutoGeneration(config: Partial<AutoReportConfig>): void {
     this.autoConfig = { ...this.autoConfig, ...config };
-    console.log('[REPORT] Auto-generation configured:', this.autoConfig);
+    log.info('Auto-generation configured', this.autoConfig);
   }
 
   /**
@@ -248,7 +251,7 @@ class AnalysisReportService {
       try {
         cb(report);
       } catch (error) {
-        console.error('[REPORT] Listener error:', error);
+        log.error('Listener error', error);
       }
     });
   }
@@ -258,7 +261,7 @@ class AnalysisReportService {
    */
   async triggerAutoReport(event: ReportTriggerEvent): Promise<AnalysisReport | null> {
     if (!this.autoConfig.enabled) {
-      console.log('[REPORT] Auto-generation disabled, skipping');
+      log.debug('Auto-generation disabled, skipping');
       return null;
     }
 
@@ -273,11 +276,11 @@ class AnalysisReportService {
 
     const triggerType = eventTypeMap[event.type];
     if (!this.autoConfig.triggerOn.includes(triggerType)) {
-      console.log(`[REPORT] Event type ${event.type} not configured for auto-generation`);
+      log.debug(`Event type ${event.type} not configured for auto-generation`);
       return null;
     }
 
-    console.log(`[REPORT] Auto-generating report for event: ${event.type}`);
+    log.info(`Auto-generating report for event: ${event.type}`);
 
     try {
       let report: AnalysisReport;
@@ -297,14 +300,14 @@ class AnalysisReportService {
           report = await this.generateTickerReport(event.data);
           break;
         default:
-          console.warn('[REPORT] Unknown event type');
+          log.warn('Unknown event type');
           return null;
       }
 
       this.notifyListeners(event.type, report);
       return report;
     } catch (error) {
-      console.error('[REPORT] Auto-generation failed:', error);
+      log.error('Auto-generation failed', error);
       return null;
     }
   }
@@ -327,7 +330,7 @@ class AnalysisReportService {
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
 
-    console.log(`[REPORT] Queued report ${queueItem.id} with priority ${priority}`);
+    log.info(`Queued report ${queueItem.id} with priority ${priority}`);
     
     // Start processing if not already running
     if (!this.isProcessingQueue) {
@@ -350,13 +353,13 @@ class AnalysisReportService {
       if (!item) break;
 
       item.status = 'processing';
-      console.log(`[REPORT] Processing queued report ${item.id}`);
+      log.debug(`Processing queued report ${item.id}`);
 
       try {
         await this.triggerAutoReport(item.event);
         item.status = 'completed';
       } catch (error) {
-        console.error(`[REPORT] Failed to process ${item.id}:`, error);
+        log.error(`Failed to process ${item.id}`, error);
         item.status = 'failed';
       }
 
@@ -392,7 +395,7 @@ class AnalysisReportService {
     const startTime = Date.now();
     const depth = options.depth || 'standard';
 
-    console.log(`[REPORT] Generating ${depth} portfolio analysis report...`);
+    log.info(`Generating ${depth} portfolio analysis report`);
 
     // Build comprehensive prompt with all portfolio data
     const portfolioSummary = this.buildPortfolioSummary(portfolio);
@@ -423,10 +426,10 @@ class AnalysisReportService {
         generationTimeMs: Date.now() - startTime,
       };
 
-      console.log(`[REPORT] Generated in ${report.metadata.generationTimeMs}ms`);
+      log.info(`Generated in ${report.metadata.generationTimeMs}ms`);
       return report;
     } catch (error) {
-      console.error('[REPORT] Generation failed:', error);
+      log.error('Generation failed', error);
       throw new Error(`Failed to generate report: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -437,7 +440,7 @@ class AnalysisReportService {
   async generateTickerReport(data: TickerAnalysisData): Promise<AnalysisReport> {
     const startTime = Date.now();
 
-    console.log(`[REPORT] Generating ticker deep-dive for ${data.symbol}...`);
+    log.info(`Generating ticker deep-dive for ${data.symbol}`);
 
     const tickerSummary = this.buildTickerSummary(data);
 
@@ -469,7 +472,7 @@ class AnalysisReportService {
 
       return report;
     } catch (error) {
-      console.error('[REPORT] Ticker report generation failed:', error);
+      log.error('Ticker report generation failed', error);
       throw error;
     }
   }
@@ -480,7 +483,7 @@ class AnalysisReportService {
   async generateOptimizationReport(data: OptimizationData): Promise<AnalysisReport> {
     const startTime = Date.now();
 
-    console.log(`[REPORT] Generating optimization report for ${data.portfolioName}...`);
+    log.info(`Generating optimization report for ${data.portfolioName}`);
 
     const optimizationSummary = this.buildOptimizationSummary(data);
 
@@ -512,7 +515,7 @@ class AnalysisReportService {
 
       return report;
     } catch (error) {
-      console.error('[REPORT] Optimization report generation failed:', error);
+      log.error('Optimization report generation failed', error);
       throw error;
     }
   }
@@ -523,7 +526,7 @@ class AnalysisReportService {
   async generateRiskReport(portfolio: GeneratedPortfolio): Promise<AnalysisReport> {
     const startTime = Date.now();
 
-    console.log('[REPORT] Generating risk assessment report...');
+    log.info('Generating risk assessment report');
 
     const riskSummary = this.buildRiskSummary(portfolio);
 
@@ -555,7 +558,7 @@ class AnalysisReportService {
 
       return report;
     } catch (error) {
-      console.error('[REPORT] Risk report generation failed:', error);
+      log.error('Risk report generation failed', error);
       throw error;
     }
   }

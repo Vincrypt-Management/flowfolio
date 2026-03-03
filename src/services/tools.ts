@@ -5,19 +5,27 @@ export interface Tool {
   description: string;
   parameters: {
     type: string;
-    properties: Record<string, any>;
+    properties: Record<string, ToolParameterSchema>;
     required: string[];
   };
 }
 
+export interface ToolParameterSchema {
+  type: string;
+  description?: string;
+  enum?: string[];
+  items?: ToolParameterSchema;
+  [key: string]: unknown;
+}
+
 export interface ToolCall {
   name: string;
-  arguments: Record<string, any>;
+  arguments: Record<string, unknown>;
 }
 
 export interface ToolResult {
   tool: string;
-  result: any;
+  result: Record<string, unknown> | null;
   error?: string;
 }
 

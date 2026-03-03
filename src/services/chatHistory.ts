@@ -8,7 +8,10 @@
  * - Export/import functionality
  */
 
+import { createLogger } from '../core/logger';
 import { OpenRouterMessage } from './openrouter';
+
+const log = createLogger('chat-history');
 
 const DB_NAME = 'flowfolio_chat_history';
 const DB_VERSION = 1;
@@ -56,13 +59,13 @@ class ChatHistoryService {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = () => {
-        console.error('[ChatHistory] IndexedDB error:', request.error);
+        log.error('IndexedDB error', request.error);
         reject(request.error);
       };
 
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('[ChatHistory] Database initialized');
+        log.info('Database initialized');
         // Run initial cleanup
         this.cleanupOldMessages();
         resolve();
@@ -85,7 +88,7 @@ class ChatHistoryService {
           messageStore.createIndex('timestamp', 'timestamp', { unique: false });
         }
 
-        console.log('[ChatHistory] Database schema created/upgraded');
+        log.info('Database schema created/upgraded');
       };
     });
   }
@@ -165,13 +168,13 @@ class ChatHistoryService {
 
       transaction.oncomplete = () => {
         if (deletedConversations > 0 || deletedMessages > 0) {
-          console.log(`[ChatHistory] Cleanup complete: ${deletedConversations} conversations, ${deletedMessages} messages deleted (older than 30 days)`);
+          log.info(`Cleanup complete: ${deletedConversations} conversations, ${deletedMessages} messages deleted (older than 30 days)`);
         }
         resolve({ deletedConversations, deletedMessages });
       };
 
       transaction.onerror = () => {
-        console.error('[ChatHistory] Cleanup error:', transaction.error);
+        log.error('Cleanup error', transaction.error);
         reject(transaction.error);
       };
     });
@@ -208,12 +211,12 @@ class ChatHistoryService {
       const request = store.add(conversation);
 
       request.onsuccess = () => {
-        console.log('[ChatHistory] Conversation created:', conversation.id);
+        log.debug(`Conversation created: ${conversation.id}`);
         resolve(conversation);
       };
 
       request.onerror = () => {
-        console.error('[ChatHistory] Error creating conversation:', request.error);
+        log.error('Error creating conversation', request.error);
         reject(request.error);
       };
     });
@@ -425,7 +428,7 @@ class ChatHistoryService {
       };
 
       transaction.oncomplete = () => {
-        console.log('[ChatHistory] Conversation deleted:', conversationId);
+        log.debug(`Conversation deleted: ${conversationId}`);
         resolve();
       };
 
@@ -449,7 +452,7 @@ class ChatHistoryService {
       messageStore.clear();
 
       transaction.oncomplete = () => {
-        console.log('[ChatHistory] All data cleared');
+        log.info('All data cleared');
         resolve();
       };
 
@@ -490,7 +493,7 @@ class ChatHistoryService {
         
         imported++;
       } catch (error) {
-        console.error('[ChatHistory] Error importing conversation:', error);
+        log.error('Error importing conversation', error);
       }
     }
 

@@ -2,6 +2,9 @@
 // Industrial-grade API client with circuit breaker, retries, and metrics
 
 import { API_CONFIG, FEATURES } from '../../shared/constants';
+import { createLogger } from '../logger';
+
+const log = createLogger('core-api');
 
 // Check if running in Tauri context
 const isTauri = () => {
@@ -107,7 +110,7 @@ class ApiClient {
       const pending = this.pendingRequests.get(key);
       if (pending && Date.now() - pending.timestamp < API_CONFIG.DEDUP_WINDOW_MS) {
         if (FEATURES.ENABLE_DEBUG_LOGGING) {
-          console.log(`🔄 Deduplicating request: ${command}`);
+          log.debug(`Deduplicating request: ${command}`);
         }
         return pending.promise as Promise<T>;
       }
@@ -181,7 +184,7 @@ class ApiClient {
       lastFailure: 0,
       state: 'closed',
     });
-    console.log(`🔄 Circuit breaker reset for ${service}`);
+    log.info(`Circuit breaker reset for ${service}`);
   }
 
   /**
@@ -216,7 +219,7 @@ class ApiClient {
 
       // If not in Tauri, return mock data
       if (!invoke) {
-        console.log(`🌐 Web mode: returning mock for ${command}`);
+        log.debug(`Web mode: returning mock for ${command}`);
         const mock = WEB_MODE_MOCKS[command];
         if (mock !== undefined) {
           return mock as T;
@@ -249,7 +252,7 @@ class ApiClient {
       const delay = baseDelay + jitter;
 
       if (FEATURES.ENABLE_DEBUG_LOGGING) {
-        console.warn(`⚠️ ${command} attempt ${attempt} failed. Retrying in ${Math.round(delay)}ms...`);
+        log.warn(`${command} attempt ${attempt} failed. Retrying in ${Math.round(delay)}ms...`);
       }
 
       await this.sleep(delay);
@@ -273,7 +276,7 @@ class ApiClient {
           circuit.state = 'half-open';
           circuit.failures = 0;
           this.circuitBreakers.set(service, circuit);
-          console.log(`🔌 Circuit breaker transitioning to half-open for ${service}`);
+          log.info(`Circuit breaker transitioning to half-open for ${service}`);
           return true;
         }
         return false;
@@ -293,7 +296,7 @@ class ApiClient {
     if (circuit) {
       if (circuit.state === 'half-open') {
         circuit.state = 'closed';
-        console.log(`✅ Circuit breaker closed for ${service}`);
+        log.info(`Circuit breaker closed for ${service}`);
       }
       circuit.failures = 0;
       this.circuitBreakers.set(service, circuit);
@@ -314,10 +317,10 @@ class ApiClient {
 
     if (circuit.state === 'half-open') {
       circuit.state = 'open';
-      console.log(`⚡ Circuit breaker reopened for ${service}`);
+      log.info(`Circuit breaker reopened for ${service}`);
     } else if (circuit.failures >= API_CONFIG.CIRCUIT_BREAKER.FAILURE_THRESHOLD) {
       circuit.state = 'open';
-      console.log(`⚡ Circuit breaker opened for ${service} after ${circuit.failures} failures`);
+      log.info(`Circuit breaker opened for ${service} after ${circuit.failures} failures`);
     }
 
     this.circuitBreakers.set(service, circuit);

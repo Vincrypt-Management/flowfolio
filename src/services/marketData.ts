@@ -3,6 +3,9 @@
 // ALL API calls are proxied through the Tauri backend for security
 import { invokeWithResilience, apiClient } from './apiClient';
 import { localCacheService } from './localCache';
+import { createLogger } from '../core/logger';
+
+const log = createLogger('market-data');
 
 export interface QuantMetrics {
   symbol: string;
@@ -107,7 +110,7 @@ class MarketDataService {
     
     if (missingSymbols.length === 0) {
       apiClient.recordCacheHit();
-      console.log(`All ${symbols.length} prices from local cache`);
+      log.debug(`All ${symbols.length} prices from local cache`);
       return cached;
     }
     
@@ -125,13 +128,13 @@ class MarketDataService {
         for (const [symbol, price] of Object.entries(result)) {
           localCacheService.setPrice(symbol, price);
         }
-        console.log(`Backend: Got ${Object.keys(result).length}/${missingSymbols.length} prices`);
+        log.info(`Backend: Got ${Object.keys(result).length}/${missingSymbols.length} prices`);
         return { ...cached, ...result };
       }
       
       return cached;
     } catch (error) {
-      console.error('Backend price fetch failed:', error);
+      log.error('Backend price fetch failed:', error);
       return cached;
     }
   }
@@ -144,7 +147,7 @@ class MarketDataService {
     try {
       return await invokeWithResilience<QuantMetrics[]>('get_quant_metrics_batch', { symbols });
     } catch (error) {
-      console.error('Failed to fetch quant metrics batch:', error);
+      log.error('Failed to fetch quant metrics batch:', error);
       return symbols.map(symbol => ({
         symbol,
         sharpe_ratio: 0,
@@ -176,7 +179,7 @@ class MarketDataService {
       localCacheService.setPrice(symbol, price);
       return price;
     } catch (error) {
-      console.error(`Failed to fetch current price for ${symbol}:`, error);
+      log.error(`Failed to fetch current price for ${symbol}:`, error);
       return 0;
     }
   }
@@ -188,7 +191,7 @@ class MarketDataService {
     try {
       return await invokeWithResilience<QuantMetrics>('get_quant_metrics_single', { symbol });
     } catch (error) {
-      console.error(`Failed to fetch quant metrics for ${symbol}:`, error);
+      log.error(`Failed to fetch quant metrics for ${symbol}:`, error);
       return {
         symbol,
         sharpe_ratio: 0,
@@ -208,9 +211,9 @@ class MarketDataService {
   async prefetchSymbols(symbols: string[]): Promise<void> {
     try {
       await invokeWithResilience('prefetch_symbols', { symbols });
-      console.log(`Prefetched ${symbols.length} symbols`);
+      log.info(`Prefetched ${symbols.length} symbols`);
     } catch (error) {
-      console.warn('Prefetch failed:', error);
+      log.warn('Prefetch failed:', error);
     }
   }
 
@@ -221,7 +224,7 @@ class MarketDataService {
     try {
       return await invokeWithResilience<CacheStats>('get_cache_stats');
     } catch (error) {
-      console.error('Failed to get cache stats:', error);
+      log.error('Failed to get cache stats:', error);
       return null;
     }
   }
@@ -234,9 +237,9 @@ class MarketDataService {
       await invokeWithResilience('clear_all_caches', {});
       this.cache.clear();
       await localCacheService.clearAll();
-      console.log('[INFO] All caches cleared');
+      log.info('All caches cleared');
     } catch (error) {
-      console.error('Failed to clear caches:', error);
+      log.error('Failed to clear caches:', error);
     }
   }
 
@@ -247,7 +250,7 @@ class MarketDataService {
     try {
       return await invokeWithResilience<DataConnectionTestResult>('test_data_connection', {});
     } catch (error) {
-      console.error('Failed to test data connection:', error);
+      log.error('Failed to test data connection:', error);
       return null;
     }
   }
@@ -293,7 +296,7 @@ class MarketDataService {
       
       return response;
     } catch (error) {
-      console.error(`Failed to get market data for ${symbol}:`, error);
+      log.error(`Failed to get market data for ${symbol}:`, error);
       throw error;
     }
   }

@@ -214,15 +214,16 @@ function App() {
                 <h3>Results ({scores.length} symbols ranked)</h3>
                 <div className="scores-table">
                   <table>
+                    <caption className="sr-only">Symbol Rankings</caption>
                     <thead>
                       <tr>
-                        <th>Rank</th>
-                        <th>Symbol</th>
-                        <th>Total Score</th>
+                        <th scope="col">Rank</th>
+                        <th scope="col">Symbol</th>
+                        <th scope="col">Total Score</th>
                         {scores[0].factors.map((f, i) => (
-                          <th key={i}>{f.name.toUpperCase()}</th>
+                          <th scope="col" key={i}>{f.name.toUpperCase()}</th>
                         ))}
-                        <th>Details</th>
+                        <th scope="col">Details</th>
                       </tr>
                     </thead>
                     <tbody>

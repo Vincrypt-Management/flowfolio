@@ -1,4 +1,7 @@
+import { createLogger } from '../core/logger';
 import { invoke } from '@tauri-apps/api/core';
+
+const log = createLogger('openrouter');
 
 export interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
@@ -35,7 +38,7 @@ class OpenRouterService {
       response_format?: { type: 'json_object' };
     }
   ): Promise<string> {
-    console.log('[OPENROUTER] chat called with model:', model);
+    log.debug(`chat called with model: ${model}`);
     try {
       const response = await invoke<string>('ai_chat', {
         messages,
@@ -49,10 +52,10 @@ class OpenRouterService {
         throw new Error('AI service returned empty response');
       }
       
-      console.log('[OPENROUTER] chat success, response length:', response.length);
+      log.debug(`chat success, response length: ${response.length}`);
       return response;
     } catch (error) {
-      console.error('[OPENROUTER] chat invoke failed:', error);
+      log.error('chat invoke failed', error);
       
       // Re-throw with more context if needed
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -91,16 +94,16 @@ class OpenRouterService {
     // For now, use non-streaming and yield the full response
     // TODO: Implement proper streaming via Tauri events
     try {
-      console.log('[OPENROUTER] chatStream called with model:', model);
+      log.debug(`chatStream called with model: ${model}`);
       const response = await this.chat(messages, model, options);
-      console.log('[OPENROUTER] chatStream response received, length:', response?.length);
+      log.debug(`chatStream response received, length: ${response?.length}`);
       
       // First yield the content with done: false so it gets captured
       yield { content: response, done: false };
       // Then signal completion
       yield { content: '', done: true };
     } catch (error) {
-      console.error('[OPENROUTER] chatStream error:', error);
+      log.error('chatStream error', error);
       throw error;
     }
   }

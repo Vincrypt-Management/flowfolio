@@ -4,6 +4,9 @@
 import { CACHE_CONFIG, STORAGE_KEYS } from '../../shared/constants';
 import { CacheError, handleError } from '../errors';
 import type { CacheStats } from '../../shared/types';
+import { createLogger } from '../logger';
+
+const log = createLogger('cache-service');
 
 // ============ Types ============
 
@@ -61,7 +64,7 @@ class CacheService {
 
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('[INFO] Cache service initialized');
+        log.info('Cache service initialized');
         this.runBackgroundCleanup();
         resolve();
       };
@@ -77,7 +80,7 @@ class CacheService {
           }
         }
 
-        console.log('📦 Cache stores created');
+        log.info('Cache stores created');
       };
     });
   }
@@ -196,7 +199,7 @@ class CacheService {
         });
       }
 
-      console.log('🗑️ Cache cleared');
+      log.info('Cache cleared');
     } catch (error) {
       handleError(error);
     }
@@ -306,7 +309,7 @@ class CacheService {
             this.stats.evictions++;
             cursor.continue();
           } else {
-            console.log(`🗑️ Evicted ${evicted} entries from ${storeName}`);
+            log.info(`Evicted ${evicted} entries from ${storeName}`);
             resolve();
           }
         };
@@ -349,7 +352,7 @@ class CacheService {
             cursor.continue();
           } else {
             if (deleted > 0) {
-              console.log(`🧹 Cleaned ${deleted} expired entries from ${storeName}`);
+              log.info(`Cleaned ${deleted} expired entries from ${storeName}`);
             }
             resolve();
           }

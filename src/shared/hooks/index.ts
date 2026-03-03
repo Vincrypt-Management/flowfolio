@@ -2,6 +2,9 @@
 // Reusable hooks for common patterns
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createLogger } from '../../core/logger';
+
+const log = createLogger('shared-hooks');
 
 // ============ useDebounce ============
 
@@ -104,7 +107,7 @@ export function useLocalStorage<T>(
         setStoredValue(valueToStore);
         window.localStorage.setItem(key, JSON.stringify(valueToStore));
       } catch (error) {
-        console.error('useLocalStorage error:', error);
+        log.error('useLocalStorage error', error);
       }
     },
     [key, storedValue]

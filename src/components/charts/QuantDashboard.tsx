@@ -632,17 +632,18 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
           <h3><Shield size={18} /> Detailed Risk Metrics</h3>
           <div className="metrics-table-container">
             <table className="risk-metrics-table">
+              <caption className="sr-only">Detailed Risk Metrics</caption>
               <thead>
                 <tr>
-                  <th>Asset</th>
-                  <th>Sharpe</th>
-                  <th>Sortino</th>
-                  <th>Calmar</th>
-                  <th>Beta</th>
-                  <th>Alpha</th>
-                  <th>VaR 95%</th>
-                  <th>CVaR 95%</th>
-                  <th>Info Ratio</th>
+                  <th scope="col">Asset</th>
+                  <th scope="col">Sharpe</th>
+                  <th scope="col">Sortino</th>
+                  <th scope="col">Calmar</th>
+                  <th scope="col">Beta</th>
+                  <th scope="col">Alpha</th>
+                  <th scope="col">VaR 95%</th>
+                  <th scope="col">CVaR 95%</th>
+                  <th scope="col">Info Ratio</th>
                 </tr>
               </thead>
               <tbody>
@@ -685,17 +686,18 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
           <h3><Zap size={18} /> Advanced Quant Metrics</h3>
           <div className="metrics-table-container">
             <table className="risk-metrics-table">
+              <caption className="sr-only">Advanced Quant Metrics</caption>
               <thead>
                 <tr>
-                  <th>Asset</th>
-                  <th>Omega</th>
-                  <th>Tail Ratio</th>
-                  <th>Skewness</th>
-                  <th>Kurtosis</th>
-                  <th>Ulcer Index</th>
-                  <th>Gain/Loss</th>
-                  <th>Win Rate</th>
-                  <th>Treynor</th>
+                  <th scope="col">Asset</th>
+                  <th scope="col">Omega</th>
+                  <th scope="col">Tail Ratio</th>
+                  <th scope="col">Skewness</th>
+                  <th scope="col">Kurtosis</th>
+                  <th scope="col">Ulcer Index</th>
+                  <th scope="col">Gain/Loss</th>
+                  <th scope="col">Win Rate</th>
+                  <th scope="col">Treynor</th>
                 </tr>
               </thead>
               <tbody>

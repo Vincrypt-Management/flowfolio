@@ -3,6 +3,9 @@
 
 import { globalRateLimiter } from './rateLimiter';
 // localCacheService will be used in future updates for caching web search results
+import { createLogger } from '../core/logger';
+
+const log = createLogger('web-search');
 
 export interface WebSearchResult {
   title: string;
@@ -49,6 +52,40 @@ export interface SECFiling {
   description: string;
 }
 
+export interface CompanyProfile {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  industry: string;
+  description?: string;
+  website?: string | null;
+  employees?: number | null;
+  headquarters?: string | null;
+  [key: string]: unknown;
+}
+
+export interface InsiderTransaction {
+  name: string;
+  relation: string;
+  transactionType: string;
+  shares: number;
+  value: number;
+  date: string;
+}
+
+export interface InstitutionalHoldings {
+  insidersPercentHeld: number;
+  institutionsPercentHeld: number;
+  institutionsFloatPercentHeld?: number;
+  institutionsCount?: number;
+  topInstitutions: Array<{
+    name: string;
+    shares: number;
+    value: number;
+    percentHeld: number;
+  }>;
+}
+
 // Trusted financial data sources
 const TRUSTED_SOURCES = [
   'reuters.com',
@@ -82,12 +119,12 @@ class WebSearchService {
     // Check cache
     const cached = this.newsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.NEWS_CACHE_TTL) {
-      console.log(`News cache hit for ${symbol}`);
+      log.debug(`News cache hit for ${symbol}`);
       return cached.data;
     }
 
     await globalRateLimiter.waitForSlot();
-    console.log(`[INFO] Searching news for ${symbol}...`);
+    log.info(`Searching news for ${symbol}...`);
 
     try {
       // Use Yahoo Finance search API for news
@@ -106,25 +143,25 @@ class WebSearchService {
       const data = await response.json();
       const newsItems = data.news || [];
 
-      const results: FinancialNewsItem[] = newsItems.map((item: any) => ({
-        title: item.title || '',
-        summary: item.title || '', // Yahoo doesn't provide summary in search
-        source: item.publisher || 'Unknown',
-        url: item.link || '',
+      const results: FinancialNewsItem[] = newsItems.map((item: Record<string, unknown>) => ({
+        title: (item.title as string) || '',
+        summary: (item.title as string) || '',
+        source: (item.publisher as string) || 'Unknown',
+        url: (item.link as string) || '',
         publishedAt: item.providerPublishTime 
-          ? new Date(item.providerPublishTime * 1000).toISOString()
+          ? new Date((item.providerPublishTime as number) * 1000).toISOString()
           : new Date().toISOString(),
         symbols: [symbol],
-        sentiment: this.analyzeSentiment(item.title || '')
+        sentiment: this.analyzeSentiment((item.title as string) || '')
       }));
 
       // Cache results
       this.newsCache.set(cacheKey, { data: results, timestamp: Date.now() });
       
-      console.log(`Found ${results.length} news items for ${symbol}`);
+      log.info(`Found ${results.length} news items for ${symbol}`);
       return results;
     } catch (error) {
-      console.error(`Failed to search news for ${symbol}:`, error);
+      log.error(`Failed to search news for ${symbol}:`, error);
       return [];
     }
   }
@@ -136,12 +173,12 @@ class WebSearchService {
     // Check cache
     const cached = this.newsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.NEWS_CACHE_TTL) {
-      console.log(`Market news cache hit`);
+      log.debug(`Market news cache hit`);
       return cached.data;
     }
 
     await globalRateLimiter.waitForSlot();
-    console.log(`[INFO] Fetching market news...`);
+    log.info(`Fetching market news...`);
 
     try {
       // Use Yahoo Finance trending tickers for market-wide news
@@ -174,7 +211,7 @@ class WebSearchService {
       
       return allNews;
     } catch (error) {
-      console.error('Failed to fetch market news:', error);
+      log.error('Failed to fetch market news:', error);
       return [];
     }
   }
@@ -182,7 +219,7 @@ class WebSearchService {
   // Get earnings calendar/data for a symbol
   async getEarningsData(symbol: string): Promise<EarningsData[]> {
     await globalRateLimiter.waitForSlot();
-    console.log(`Fetching earnings data for ${symbol}...`);
+    log.info(`Fetching earnings data for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=earnings`;
@@ -200,28 +237,34 @@ class WebSearchService {
       const data = await response.json();
       const earningsHistory = data.quoteSummary?.result?.[0]?.earnings?.earningsChart?.quarterly || [];
 
-      return earningsHistory.map((item: any) => ({
-        symbol,
-        fiscalDateEnding: item.date || '',
-        reportedEPS: item.actual?.raw || null,
-        estimatedEPS: item.estimate?.raw || null,
-        surprise: item.actual?.raw && item.estimate?.raw 
-          ? item.actual.raw - item.estimate.raw 
-          : null,
-        surprisePercentage: item.actual?.raw && item.estimate?.raw && item.estimate.raw !== 0
-          ? ((item.actual.raw - item.estimate.raw) / Math.abs(item.estimate.raw)) * 100
-          : null
-      }));
+      return earningsHistory.map((item: Record<string, unknown>) => {
+        const actual = item.actual as Record<string, unknown> | undefined;
+        const estimate = item.estimate as Record<string, unknown> | undefined;
+        const actualRaw = (actual?.raw as number) ?? null;
+        const estimateRaw = (estimate?.raw as number) ?? null;
+        return {
+          symbol,
+          fiscalDateEnding: (item.date as string) || '',
+          reportedEPS: actualRaw,
+          estimatedEPS: estimateRaw,
+          surprise: actualRaw !== null && estimateRaw !== null
+            ? actualRaw - estimateRaw
+            : null,
+          surprisePercentage: actualRaw !== null && estimateRaw !== null && estimateRaw !== 0
+            ? ((actualRaw - estimateRaw) / Math.abs(estimateRaw)) * 100
+            : null
+        };
+      });
     } catch (error) {
-      console.error(`Failed to fetch earnings for ${symbol}:`, error);
+      log.error(`Failed to fetch earnings for ${symbol}:`, error);
       return [];
     }
   }
 
   // Get company profile and overview
-  async getCompanyProfile(symbol: string): Promise<any> {
+  async getCompanyProfile(symbol: string): Promise<CompanyProfile> {
     await globalRateLimiter.waitForSlot();
-    console.log(`🏢 Fetching company profile for ${symbol}...`);
+    log.info(`Fetching company profile for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=assetProfile,summaryProfile`;
@@ -254,15 +297,15 @@ class WebSearchService {
         ...summary
       };
     } catch (error) {
-      console.error(`Failed to fetch profile for ${symbol}:`, error);
+      log.error(`Failed to fetch profile for ${symbol}:`, error);
       return { symbol, companyName: symbol, sector: 'Unknown', industry: 'Unknown' };
     }
   }
 
   // Get insider trading activity
-  async getInsiderActivity(symbol: string): Promise<any[]> {
+  async getInsiderActivity(symbol: string): Promise<InsiderTransaction[]> {
     await globalRateLimiter.waitForSlot();
-    console.log(`👔 Fetching insider activity for ${symbol}...`);
+    log.info(`Fetching insider activity for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=insiderTransactions`;
@@ -280,24 +323,24 @@ class WebSearchService {
       const data = await response.json();
       const transactions = data.quoteSummary?.result?.[0]?.insiderTransactions?.transactions || [];
 
-      return transactions.slice(0, 10).map((t: any) => ({
-        name: t.filerName || 'Unknown',
-        relation: t.filerRelation || 'Unknown',
-        transactionType: t.transactionText || 'Unknown',
-        shares: t.shares?.raw || 0,
-        value: t.value?.raw || 0,
-        date: t.startDate?.fmt || ''
+      return transactions.slice(0, 10).map((t: Record<string, unknown>) => ({
+        name: (t.filerName as string) || 'Unknown',
+        relation: (t.filerRelation as string) || 'Unknown',
+        transactionType: (t.transactionText as string) || 'Unknown',
+        shares: ((t.shares as Record<string, unknown>)?.raw as number) || 0,
+        value: ((t.value as Record<string, unknown>)?.raw as number) || 0,
+        date: ((t.startDate as Record<string, unknown>)?.fmt as string) || ''
       }));
     } catch (error) {
-      console.error(`Failed to fetch insider activity for ${symbol}:`, error);
+      log.error(`Failed to fetch insider activity for ${symbol}:`, error);
       return [];
     }
   }
 
   // Get institutional holdings
-  async getInstitutionalHoldings(symbol: string): Promise<any> {
+  async getInstitutionalHoldings(symbol: string): Promise<InstitutionalHoldings> {
     await globalRateLimiter.waitForSlot();
-    console.log(`🏛️ Fetching institutional holdings for ${symbol}...`);
+    log.info(`Fetching institutional holdings for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=institutionOwnership,majorHoldersBreakdown`;
@@ -322,15 +365,15 @@ class WebSearchService {
         institutionsPercentHeld: breakdown.institutionsPercentHeld?.raw || 0,
         institutionsFloatPercentHeld: breakdown.institutionsFloatPercentHeld?.raw || 0,
         institutionsCount: breakdown.institutionsCount?.raw || 0,
-        topInstitutions: institutions.slice(0, 5).map((i: any) => ({
-          name: i.organization || 'Unknown',
-          shares: i.position?.raw || 0,
-          value: i.value?.raw || 0,
-          percentHeld: i.pctHeld?.raw || 0
+        topInstitutions: institutions.slice(0, 5).map((i: Record<string, unknown>) => ({
+          name: (i.organization as string) || 'Unknown',
+          shares: ((i.position as Record<string, unknown>)?.raw as number) || 0,
+          value: ((i.value as Record<string, unknown>)?.raw as number) || 0,
+          percentHeld: ((i.pctHeld as Record<string, unknown>)?.raw as number) || 0
         }))
       };
     } catch (error) {
-      console.error(`Failed to fetch institutional holdings for ${symbol}:`, error);
+      log.error(`Failed to fetch institutional holdings for ${symbol}:`, error);
       return { insidersPercentHeld: 0, institutionsPercentHeld: 0, topInstitutions: [] };
     }
   }
@@ -400,8 +443,8 @@ class WebSearchService {
 
       // Insider activity insight
       if (insider.length > 0) {
-        const buys = insider.filter((t: any) => t.transactionType?.toLowerCase().includes('buy') || t.shares > 0);
-        const sells = insider.filter((t: any) => t.transactionType?.toLowerCase().includes('sale') || t.shares < 0);
+        const buys = insider.filter((t: InsiderTransaction) => t.transactionType?.toLowerCase().includes('buy') || t.shares > 0);
+        const sells = insider.filter((t: InsiderTransaction) => t.transactionType?.toLowerCase().includes('sale') || t.shares < 0);
         
         if (buys.length > sells.length) {
           insights.push({
@@ -426,7 +469,7 @@ class WebSearchService {
 
       return insights;
     } catch (error) {
-      console.error(`Failed to generate insights for ${symbol}:`, error);
+      log.error(`Failed to generate insights for ${symbol}:`, error);
       return [];
     }
   }

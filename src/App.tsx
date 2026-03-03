@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { invoke } from "./services/tauri";
 import VibeStudio from "./components/VibeStudio";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -189,7 +189,7 @@ function App() {
     }
   }
 
-  async function loadMarketOverview() {
+  const loadMarketOverview = useCallback(async () => {
     if (isMountedRef.current) {
       setIsLoadingMarket(true);
     }
@@ -205,9 +205,9 @@ function App() {
         setIsLoadingMarket(false);
       }
     }
-  }
+  }, []);
 
-  async function createUniverse() {
+  const createUniverse = useCallback(async () => {
     if (!newUniverseName.trim()) {
       addToast("Please enter a universe name", "warning");
       return;
@@ -230,9 +230,9 @@ function App() {
         addToast("Error creating universe: " + error, "error");
       }
     }
-  }
+  }, [newUniverseName, newUniverseSymbols, universes, addToast]);
 
-  async function deleteUniverse(id: string) {
+  const deleteUniverse = useCallback(async (id: string) => {
     try {
       await invoke("delete_universe", { id });
       if (isMountedRef.current) {
@@ -246,9 +246,9 @@ function App() {
         addToast("Error deleting universe: " + error, "error");
       }
     }
-  }
+  }, [universes, selectedUniverse, addToast]);
 
-  async function savePlan() {
+  const savePlan = useCallback(async () => {
     if (!plan) {
       addToast("No plan to save", "warning");
       return;
@@ -265,9 +265,9 @@ function App() {
         addToast("Error saving plan: " + error, "error");
       }
     }
-  }
+  }, [plan, addToast]);
 
-  async function exportData() {
+  const exportData = useCallback(async () => {
     try {
       const bundleJson = await invoke<string>("export_data_bundle", {
         plan,
@@ -281,9 +281,9 @@ function App() {
         addToast("Error exporting data: " + error, "error");
       }
     }
-  }
+  }, [plan, addToast]);
 
-  async function importData(event: React.ChangeEvent<HTMLInputElement>) {
+  const importData = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
@@ -300,9 +300,9 @@ function App() {
         addToast("Error importing data: " + error, "error");
       }
     }
-  }
+  }, [addToast]);
 
-  async function loadTemplate(templateName: string) {
+  const loadTemplate = useCallback(async (templateName: string) => {
     try {
       const template = await invoke<VibePlan>("get_template", { name: templateName });
       if (isMountedRef.current) {
@@ -314,9 +314,9 @@ function App() {
         addToast("Error loading template: " + error, "error");
       }
     }
-  }
+  }, [addToast]);
 
-  async function scoreSymbols() {
+  const scoreSymbols = useCallback(async () => {
     if (!plan) {
       addToast("Please select a plan first", "warning");
       return;
@@ -396,12 +396,12 @@ function App() {
         setIsScoring(false);
       }
     }
-  }
+  }, [plan, rankingsSymbols, addToast]);
 
-  const handleNavClick = (tab: string) => {
+  const handleNavClick = useCallback((tab: string) => {
     setActiveTab(tab);
     setIsMobileMenuOpen(false);
-  };
+  }, []);
 
   const renderSidebar = () => (
     <aside 
@@ -633,15 +633,15 @@ function App() {
               <div className="card">
                 <h3><Calendar size={20} /> Next Actions</h3>
                 <div className="plan-summary">
-                  <div className="stat-row clickable" onClick={() => setActiveTab("portfolio")}>
+                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => e.key === 'Enter' && setActiveTab("portfolio")}>
                     <span className="stat-label">Monthly Buy List</span>
                     <span className="stat-value action-link">Generate →</span>
                   </div>
-                  <div className="stat-row clickable" onClick={() => setActiveTab("portfolio")}>
+                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => e.key === 'Enter' && setActiveTab("portfolio")}>
                     <span className="stat-label">Quarterly Rebalance</span>
                     <span className="stat-value action-link">Check →</span>
                   </div>
-                  <div className="stat-row clickable" onClick={() => setActiveTab("yearly-review")}>
+                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("yearly-review")} onKeyDown={(e) => e.key === 'Enter' && setActiveTab("yearly-review")}>
                     <span className="stat-label">Yearly Review</span>
                     <span className="stat-value action-link">Start →</span>
                   </div>
@@ -784,15 +784,16 @@ function App() {
                 <h3>Results ({scores.length} symbols ranked)</h3>
                 <div className="overflow-x-auto">
                   <table className="data-table">
+                    <caption className="sr-only">Symbol Rankings</caption>
                     <thead>
                       <tr>
-                        <th>Rank</th>
-                        <th>Symbol</th>
-                        <th>Total Score</th>
+                        <th scope="col">Rank</th>
+                        <th scope="col">Symbol</th>
+                        <th scope="col">Total Score</th>
                         {scores[0]?.factors.map((f, i) => (
-                          <th key={i}>{f.name.toUpperCase()}</th>
+                          <th scope="col" key={i}>{f.name.toUpperCase()}</th>
                         ))}
-                        <th>Details</th>
+                        <th scope="col">Details</th>
                       </tr>
                     </thead>
                     <tbody>

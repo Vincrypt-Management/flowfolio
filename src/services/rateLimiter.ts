@@ -2,6 +2,10 @@
 // Ensures all services share the same rate limit for APIs with strict limits
 // OPTIMIZED: Conservative limits to stay within free tiers
 
+import { createLogger } from '../core/logger';
+
+const log = createLogger('rate-limiter');
+
 class GlobalRateLimiter {
   private lastRequestTime: number = 0;
   private requestQueue: Array<() => void> = [];
@@ -30,7 +34,7 @@ class GlobalRateLimiter {
       
       if (timeSinceLastRequest < this.MIN_INTERVAL) {
         const waitTime = this.MIN_INTERVAL - timeSinceLastRequest;
-        console.log(`[INFO] Rate limit (free tier): waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
+        log.debug(`Rate limit (free tier): waiting ${waitTime}ms (queue: ${this.requestQueue.length})...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
       

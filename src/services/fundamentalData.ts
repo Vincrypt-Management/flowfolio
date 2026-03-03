@@ -4,6 +4,9 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { localCacheService } from './localCache';
+import { createLogger } from '../core/logger';
+
+const log = createLogger('fundamental-data');
 
 export interface FundamentalMetrics {
   symbol: string;
@@ -132,7 +135,7 @@ class FundamentalDataService {
     // Check in-memory cache
     const cached = this.cache.get(symbol);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log(`Fundamental cache hit for ${symbol}`);
+      log.debug(`Fundamental cache hit for ${symbol}`);
       return cached.data;
     }
     
@@ -142,13 +145,13 @@ class FundamentalDataService {
       if (stored) {
         const parsed: CacheEntry<FundamentalMetrics> = JSON.parse(stored);
         if (Date.now() - parsed.timestamp < this.CACHE_TTL) {
-          console.log(`Persistent fundamental cache hit for ${symbol}`);
+          log.debug(`Persistent fundamental cache hit for ${symbol}`);
           this.cache.set(symbol, parsed);
           return parsed.data;
         }
       }
     } catch (error) {
-      console.warn('Error reading fundamental cache:', error);
+      log.warn('Error reading fundamental cache:', error);
     }
     
     return null;
@@ -165,7 +168,7 @@ class FundamentalDataService {
     try {
       localStorage.setItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`, JSON.stringify(entry));
     } catch (error) {
-      console.warn('Error writing to fundamental cache:', error);
+      log.warn('Error writing to fundamental cache:', error);
     }
   }
 
@@ -221,11 +224,11 @@ class FundamentalDataService {
     try {
       const indexedDBCached = await localCacheService.getFundamentals(symbol);
       if (indexedDBCached) {
-        console.log(`IndexedDB cache hit for ${symbol} fundamentals`);
+        log.debug(`IndexedDB cache hit for ${symbol} fundamentals`);
         return indexedDBCached as FundamentalMetrics;
       }
     } catch (e) {
-      console.warn('IndexedDB read error:', e);
+      log.warn('IndexedDB read error:', e);
     }
 
     // 2. Check in-memory/localStorage cache
@@ -233,7 +236,7 @@ class FundamentalDataService {
     if (cached) return cached;
     
     // 3. Fetch from backend (which handles all API calls securely)
-    console.log(`🔄 Fetching fundamentals for ${symbol} from backend...`);
+    log.info(`Fetching fundamentals for ${symbol} from backend...`);
     
     try {
       const backendData = await invoke<BackendFundamentals>('get_fundamentals', { symbol });
@@ -244,20 +247,20 @@ class FundamentalDataService {
       
       // Also cache in IndexedDB for persistence
       localCacheService.setFundamentals(symbol, data).catch(e => {
-        console.warn('Failed to cache in IndexedDB:', e);
+        log.warn('Failed to cache in IndexedDB:', e);
       });
       
-      console.log(`✅ Successfully fetched ${symbol} fundamentals from ${data.source}`);
+      log.info(`Successfully fetched ${symbol} fundamentals from ${data.source}`);
       return data;
     } catch (error) {
-      console.error(`Failed to fetch fundamentals for ${symbol}:`, error);
+      log.error(`Failed to fetch fundamentals for ${symbol}:`, error);
       throw error;
     }
   }
 
   // Batch fetch with concurrency control
   async getBatchFundamentals(symbols: string[]): Promise<Record<string, FundamentalMetrics>> {
-    console.log(`🔄 Fetching fundamentals for ${symbols.length} symbols...`);
+    log.info(`Fetching fundamentals for ${symbols.length} symbols...`);
     
     try {
       const backendData = await invoke<Record<string, BackendFundamentals>>('get_fundamentals_batch', { symbols });
@@ -269,10 +272,10 @@ class FundamentalDataService {
         this.setCachedData(symbol, converted);
       }
       
-      console.log(`✅ Fetched fundamentals for ${Object.keys(results).length}/${symbols.length} symbols`);
+      log.info(`Fetched fundamentals for ${Object.keys(results).length}/${symbols.length} symbols`);
       return results;
     } catch (error) {
-      console.error('Failed to fetch batch fundamentals:', error);
+      log.error('Failed to fetch batch fundamentals:', error);
       return {};
     }
   }
@@ -284,7 +287,7 @@ class FundamentalDataService {
       try {
         localStorage.removeItem(`${this.PERSISTENT_CACHE_KEY}_${symbol}`);
       } catch (e) {
-        console.warn('Error clearing cache:', e);
+        log.warn('Error clearing cache:', e);
       }
     } else {
       this.cache.clear();
@@ -296,7 +299,7 @@ class FundamentalDataService {
           }
         }
       } catch (e) {
-        console.warn('Error clearing cache:', e);
+        log.warn('Error clearing cache:', e);
       }
     }
   }

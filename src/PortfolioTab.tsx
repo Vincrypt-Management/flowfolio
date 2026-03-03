@@ -435,16 +435,17 @@ export function PortfolioTab() {
                 <h4>Holdings</h4>
                 <div className="holdings-table">
                   <table>
+                    <caption className="sr-only">Portfolio Holdings</caption>
                     <thead>
                       <tr>
-                        <th>Symbol</th>
-                        <th>Shares</th>
-                        <th>Price</th>
-                        <th>Value</th>
-                        <th>Target %</th>
-                        <th>Current %</th>
-                        <th>Drift</th>
-                        <th>Action</th>
+                        <th scope="col">Symbol</th>
+                        <th scope="col">Shares</th>
+                        <th scope="col">Price</th>
+                        <th scope="col">Value</th>
+                        <th scope="col">Target %</th>
+                        <th scope="col">Current %</th>
+                        <th scope="col">Drift</th>
+                        <th scope="col">Action</th>
                       </tr>
                     </thead>
                     <tbody>

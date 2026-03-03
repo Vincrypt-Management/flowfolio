@@ -1,7 +1,10 @@
 // MCP (Model Context Protocol) Web Search Service
 // Provides internet search capabilities for the AI agent to find real-time information
 
+import { createLogger } from '../core/logger';
 import { globalRateLimiter } from './rateLimiter';
+
+const log = createLogger('mcp-web-search');
 
 export interface SearchResult {
   title: string;
@@ -69,14 +72,14 @@ class MCPWebSearchService {
     // Check cache
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log(`[MCP] Cache hit for: ${query}`);
+      log.debug(`Cache hit for: ${query}`);
       return cached.data;
     }
 
     await globalRateLimiter.waitForSlot();
     const startTime = Date.now();
     
-    console.log(`[MCP] Searching: "${query}" (type: ${type})`);
+    log.info(`Searching: "${query}" (type: ${type})`);
 
     // Try providers in order of preference
     let response: WebSearchResponse | null = null;
@@ -146,19 +149,19 @@ class MCPWebSearchService {
       });
 
       if (!response.ok) {
-        console.warn(`[MCP] Tavily error: ${response.status}`);
+        log.warn(`Tavily error: ${response.status}`);
         return null;
       }
 
       const data = await response.json();
       
-      const results: SearchResult[] = (data.results || []).map((r: any) => ({
-        title: r.title || '',
-        url: r.url || '',
-        snippet: r.content || r.snippet || '',
-        source: this.extractDomain(r.url),
-        publishedDate: r.published_date,
-        relevanceScore: r.score
+      const results: SearchResult[] = (data.results || []).map((r: Record<string, unknown>) => ({
+        title: (r.title as string) || '',
+        url: (r.url as string) || '',
+        snippet: (r.content as string) || (r.snippet as string) || '',
+        source: this.extractDomain(r.url as string),
+        publishedDate: r.published_date as string | undefined,
+        relevanceScore: r.score as number | undefined
       }));
 
       return {
@@ -169,7 +172,7 @@ class MCPWebSearchService {
         provider: 'tavily'
       };
     } catch (error) {
-      console.error('[MCP] Tavily search failed:', error);
+      log.error('Tavily search failed', error);
       return null;
     }
   }
@@ -201,19 +204,19 @@ class MCPWebSearchService {
       });
 
       if (!response.ok) {
-        console.warn(`[MCP] Brave error: ${response.status}`);
+        log.warn(`Brave error: ${response.status}`);
         return null;
       }
 
       const data = await response.json();
       const rawResults = type === 'news' ? data.results : data.web?.results || [];
       
-      const results: SearchResult[] = rawResults.map((r: any) => ({
-        title: r.title || '',
-        url: r.url || '',
-        snippet: r.description || r.snippet || '',
-        source: this.extractDomain(r.url),
-        publishedDate: r.age || r.published_time
+      const results: SearchResult[] = rawResults.map((r: Record<string, unknown>) => ({
+        title: (r.title as string) || '',
+        url: (r.url as string) || '',
+        snippet: (r.description as string) || (r.snippet as string) || '',
+        source: this.extractDomain(r.url as string),
+        publishedDate: (r.age as string) || (r.published_time as string)
       }));
 
       return {
@@ -224,7 +227,7 @@ class MCPWebSearchService {
         provider: 'brave'
       };
     } catch (error) {
-      console.error('[MCP] Brave search failed:', error);
+      log.error('Brave search failed', error);
       return null;
     }
   }
@@ -248,7 +251,7 @@ class MCPWebSearchService {
       const response = await fetch(url.toString());
       
       if (!response.ok) {
-        console.warn(`[MCP] DuckDuckGo error: ${response.status}`);
+        log.warn(`DuckDuckGo error: ${response.status}`);
         return null;
       }
 
@@ -293,7 +296,7 @@ class MCPWebSearchService {
         provider: 'duckduckgo'
       };
     } catch (error) {
-      console.error('[MCP] DuckDuckGo search failed:', error);
+      log.error('DuckDuckGo search failed', error);
       return null;
     }
   }
@@ -316,17 +319,17 @@ class MCPWebSearchService {
       const data = await response.json();
       const newsItems = data.news || [];
 
-      return newsItems.map((item: any) => ({
-        title: item.title || '',
-        url: item.link || '',
-        snippet: item.title || '',
-        source: item.publisher || 'Yahoo Finance',
+      return newsItems.map((item: Record<string, unknown>) => ({
+        title: (item.title as string) || '',
+        url: (item.link as string) || '',
+        snippet: (item.title as string) || '',
+        source: (item.publisher as string) || 'Yahoo Finance',
         publishedDate: item.providerPublishTime 
-          ? new Date(item.providerPublishTime * 1000).toISOString()
+          ? new Date((item.providerPublishTime as number) * 1000).toISOString()
           : undefined
       }));
     } catch (error) {
-      console.error('[MCP] Yahoo Finance news failed:', error);
+      log.error('Yahoo Finance news failed', error);
       return [];
     }
   }
@@ -445,7 +448,7 @@ class MCPWebSearchService {
    */
   clearCache(): void {
     this.cache.clear();
-    console.log('[MCP] Search cache cleared');
+    log.info('Search cache cleared');
   }
 }
 

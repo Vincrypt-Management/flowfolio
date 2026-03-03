@@ -1,7 +1,10 @@
 // Industrial-Grade API Client
 // Features: Request deduplication, automatic retries, circuit breaker pattern
 
+import { createLogger } from '../core/logger';
 import { invoke } from './tauri';
+
+const log = createLogger('api-client');
 
 interface PendingRequest<T> {
   promise: Promise<T>;
@@ -75,7 +78,7 @@ class ApiClient {
     // Check for duplicate in-flight request
     const pending = this.pendingRequests.get(key);
     if (pending && Date.now() - pending.timestamp < this.REQUEST_DEDUP_TTL) {
-      console.log(`🔄 Deduplicating request: ${command}`);
+      log.debug(`Deduplicating request: ${command}`);
       return pending.promise as Promise<T>;
     }
 
@@ -123,7 +126,7 @@ class ApiClient {
       this.recordLatency(latency);
 
       if (attempt >= this.MAX_RETRIES) {
-        console.error(`${command} failed after ${attempt} attempts:`, error);
+        log.error(`${command} failed after ${attempt} attempts`, error);
         throw error;
       }
 
@@ -135,7 +138,7 @@ class ApiClient {
       const jitter = baseDelay * 0.5 * Math.random();
       const delay = baseDelay + jitter;
 
-      console.warn(`${command} attempt ${attempt} failed. Retrying in ${Math.round(delay)}ms...`);
+      log.warn(`${command} attempt ${attempt} failed. Retrying in ${Math.round(delay)}ms...`);
       
       await this.sleep(delay);
       return this.executeWithRetry(command, args, attempt + 1);
@@ -155,7 +158,7 @@ class ApiClient {
       case 'open':
         // Check if recovery timeout has passed
         if (now - this.circuitBreaker.lastFailure >= this.RECOVERY_TIMEOUT) {
-          console.log('🔌 Circuit breaker transitioning to half-open');
+          log.info('Circuit breaker transitioning to half-open');
           this.circuitBreaker.state = 'half-open';
           this.circuitBreaker.failures = 0;
           return true;
@@ -179,7 +182,7 @@ class ApiClient {
     if (this.circuitBreaker.state === 'half-open') {
       // After enough successes in half-open, close the circuit
       if (this.circuitBreaker.failures === 0) {
-        console.log('[INFO] Circuit breaker closed after recovery');
+        log.info('Circuit breaker closed after recovery');
         this.circuitBreaker.state = 'closed';
       }
     }
@@ -198,10 +201,10 @@ class ApiClient {
 
     if (this.circuitBreaker.state === 'half-open') {
       // Any failure in half-open reopens the circuit
-      console.log('⚡ Circuit breaker reopened from half-open');
+      log.info('Circuit breaker reopened from half-open');
       this.circuitBreaker.state = 'open';
     } else if (this.circuitBreaker.failures >= this.FAILURE_THRESHOLD) {
-      console.log(`⚡ Circuit breaker opened after ${this.circuitBreaker.failures} failures`);
+      log.info(`Circuit breaker opened after ${this.circuitBreaker.failures} failures`);
       this.circuitBreaker.state = 'open';
     }
   }
@@ -270,7 +273,7 @@ class ApiClient {
       lastFailure: 0,
       state: 'closed',
     };
-    console.log('🔄 Circuit breaker manually reset');
+    log.info('Circuit breaker manually reset');
   }
 
   /**

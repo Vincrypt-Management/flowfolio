@@ -1,41 +1,115 @@
+import { createLogger } from '../core/logger';
 import { ToolCall, ToolResult } from './tools';
 import { marketDataService } from './marketData';
 import { quantAnalyzer } from './quantAnalysis';
 import { mcpWebSearch } from './mcpWebSearch';
 
+const log = createLogger('tool-executor');
+
+interface FetchStockDataArgs {
+  symbol: string;
+  includeHistorical?: boolean;
+}
+
+interface FetchMultipleStocksArgs {
+  symbols: string[];
+}
+
+interface TechnicalIndicatorsArgs {
+  symbol: string;
+  indicators: string[];
+}
+
+interface PortfolioMetricsArgs {
+  symbols: string[];
+}
+
+interface MonteCarloArgs {
+  symbols: string[];
+  allocations: number[];
+  timeHorizon: number;
+}
+
+interface BacktestArgs {
+  symbols: string[];
+  allocations: number[];
+  startDate: string;
+  endDate: string;
+  rebalanceFrequency?: string;
+}
+
+interface WebSearchArgs {
+  query: string;
+  type?: 'news' | 'general' | 'finance';
+  count?: number;
+}
+
+interface StockNewsArgs {
+  symbol: string;
+  query?: string;
+  days?: number;
+}
+
+interface MarketTrendsArgs {
+  topic: string;
+  timeframe?: 'today' | 'week' | 'month';
+}
+
+interface MACDResult {
+  macd: number;
+  signal: number;
+  histogram: number;
+}
+
+interface BollingerBandsResult {
+  upper: number;
+  middle: number;
+  lower: number;
+}
+
+interface TechnicalIndicatorResults {
+  symbol: string;
+  rsi?: number;
+  macd?: MACDResult;
+  bollingerBands?: BollingerBandsResult;
+  sma20?: number;
+  sma50?: number;
+  sma200?: number;
+}
+
 export class ToolExecutor {
   async executeTool(toolCall: ToolCall): Promise<ToolResult> {
     try {
-      console.log(`[INFO] Executing tool: ${toolCall.name}`, toolCall.arguments);
+      log.info(`Executing tool: ${toolCall.name}`, toolCall.arguments);
 
       switch (toolCall.name) {
         case 'fetch_stock_data':
-          return await this.fetchStockData(toolCall.arguments);
+          return await this.fetchStockData(toolCall.arguments as unknown as FetchStockDataArgs);
         
         case 'fetch_multiple_stocks':
-          return await this.fetchMultipleStocks(toolCall.arguments);
+          return await this.fetchMultipleStocks(toolCall.arguments as unknown as FetchMultipleStocksArgs);
         
         case 'calculate_technical_indicators':
-          return await this.calculateTechnicalIndicators(toolCall.arguments);
+          return await this.calculateTechnicalIndicators(toolCall.arguments as unknown as TechnicalIndicatorsArgs);
         
         case 'analyze_portfolio_metrics':
-          return await this.analyzePortfolioMetrics(toolCall.arguments);
+          return await this.analyzePortfolioMetrics(toolCall.arguments as unknown as PortfolioMetricsArgs);
         
         case 'run_monte_carlo_simulation':
-          return await this.runMonteCarloSimulation(toolCall.arguments);
+          return await this.runMonteCarloSimulation(toolCall.arguments as unknown as MonteCarloArgs);
         
         case 'backtest_portfolio':
-          return await this.backtestPortfolio(toolCall.arguments);
+          return await this.backtestPortfolio(toolCall.arguments as unknown as BacktestArgs);
         
         // Web search tools
         case 'web_search':
-          return await this.webSearch(toolCall.arguments);
+          return await this.webSearch(toolCall.arguments as unknown as WebSearchArgs);
         
         case 'search_stock_news':
-          return await this.searchStockNews(toolCall.arguments);
+          return await this.searchStockNews(toolCall.arguments as unknown as StockNewsArgs);
         
         case 'search_market_trends':
-          return await this.searchMarketTrends(toolCall.arguments);
+          return await this.searchMarketTrends(toolCall.arguments as unknown as MarketTrendsArgs);
         
         default:
           return {
@@ -61,7 +135,7 @@ export class ToolExecutor {
     return results;
   }
 
-  private async fetchStockData(args: any): Promise<ToolResult> {
+  private async fetchStockData(args: FetchStockDataArgs): Promise<ToolResult> {
     const { symbol, includeHistorical = true } = args;
     
     const marketData = await marketDataService.getMarketData(symbol);
@@ -80,13 +154,13 @@ export class ToolExecutor {
           dataPoints: marketData.historical.length,
           startDate: marketData.historical[0]?.date,
           endDate: marketData.historical[marketData.historical.length - 1]?.date,
-          prices: marketData.historical.map((d: any) => ({ date: d.date, close: d.close }))
+          prices: marketData.historical.map((d) => ({ date: d.date, close: d.close }))
         } : null
       }
     };
   }
 
-  private async fetchMultipleStocks(args: any): Promise<ToolResult> {
+  private async fetchMultipleStocks(args: FetchMultipleStocksArgs): Promise<ToolResult> {
     const { symbols } = args;
     
     // Fetch all stocks in parallel
@@ -121,13 +195,13 @@ export class ToolExecutor {
     };
   }
 
-  private async calculateTechnicalIndicators(args: any): Promise<ToolResult> {
+  private async calculateTechnicalIndicators(args: TechnicalIndicatorsArgs): Promise<ToolResult> {
     const { symbol, indicators } = args;
     
     const marketData = await marketDataService.getMarketData(symbol);
-    const prices = marketData.historical.map((d: any) => d.close);
+    const prices = marketData.historical.map((d) => d.close);
     
-    const results: any = { symbol };
+    const results: TechnicalIndicatorResults = { symbol };
     
     for (const indicator of indicators) {
       switch (indicator.toLowerCase()) {
@@ -154,11 +228,11 @@ export class ToolExecutor {
     
     return {
       tool: 'calculate_technical_indicators',
-      result: results
+      result: results as unknown as Record<string, unknown>
     };
   }
 
-  private async analyzePortfolioMetrics(args: any): Promise<ToolResult> {
+  private async analyzePortfolioMetrics(args: PortfolioMetricsArgs): Promise<ToolResult> {
     const { symbols } = args;
     
     // Fetch historical data for all symbols
@@ -184,11 +258,11 @@ export class ToolExecutor {
     
     return {
       tool: 'analyze_portfolio_metrics',
-      result: metrics
+      result: metrics as unknown as Record<string, unknown>
     };
   }
 
-  private async runMonteCarloSimulation(args: any): Promise<ToolResult> {
+  private async runMonteCarloSimulation(args: MonteCarloArgs): Promise<ToolResult> {
     const { symbols, allocations, timeHorizon } = args;
     
     const historicalDataArray = await Promise.all(
@@ -232,11 +306,11 @@ export class ToolExecutor {
     
     return {
       tool: 'run_monte_carlo_simulation',
-      result
+      result: result as unknown as Record<string, unknown>
     };
   }
 
-  private async backtestPortfolio(_args: any): Promise<ToolResult> {
+  private async backtestPortfolio(_args: BacktestArgs): Promise<ToolResult> {
     // This is a simplified implementation
     // In production, you'd want more sophisticated backtesting
     
@@ -253,7 +327,7 @@ export class ToolExecutor {
   }
 
   // Web search tools
-  private async webSearch(args: any): Promise<ToolResult> {
+  private async webSearch(args: WebSearchArgs): Promise<ToolResult> {
     const { query, type = 'general', count = 5 } = args;
     
     const response = await mcpWebSearch.search(query, type, Math.min(count, 10));
@@ -276,7 +350,7 @@ export class ToolExecutor {
     };
   }
 
-  private async searchStockNews(args: any): Promise<ToolResult> {
+  private async searchStockNews(args: StockNewsArgs): Promise<ToolResult> {
     const { symbol, query, days = 7 } = args;
     
     const results = await mcpWebSearch.searchStockNews(symbol, query, days);
@@ -304,7 +378,7 @@ export class ToolExecutor {
     };
   }
 
-  private async searchMarketTrends(args: any): Promise<ToolResult> {
+  private async searchMarketTrends(args: MarketTrendsArgs): Promise<ToolResult> {
     const { topic, timeframe = 'week' } = args;
     
     const response = await mcpWebSearch.searchMarketTrends(topic, timeframe);
@@ -346,7 +420,7 @@ export class ToolExecutor {
     return 100 - (100 / (1 + rs));
   }
 
-  private calculateMACD(prices: number[]): any {
+  private calculateMACD(prices: number[]): MACDResult {
     const ema12 = this.calculateEMA(prices, 12);
     const ema26 = this.calculateEMA(prices, 26);
     const macdLine = ema12 - ema26;
@@ -358,7 +432,7 @@ export class ToolExecutor {
     };
   }
 
-  private calculateBollingerBands(prices: number[], period: number = 20): any {
+  private calculateBollingerBands(prices: number[], period: number = 20): BollingerBandsResult {
     const sma = this.calculateSMA(prices, period);
     const recentPrices = prices.slice(-period);
     const variance = recentPrices.reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period;

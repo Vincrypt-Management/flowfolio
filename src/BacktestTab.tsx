@@ -540,13 +540,14 @@ export function BacktestTab() {
               {selectedView === "timeline" && (
                 <div className="timeline-content">
                   <table className="data-table">
+                    <caption className="sr-only">Portfolio Timeline</caption>
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Portfolio Value</th>
-                        <th>Cash</th>
-                        <th>Invested</th>
-                        <th>Positions</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Portfolio Value</th>
+                        <th scope="col">Cash</th>
+                        <th scope="col">Invested</th>
+                        <th scope="col">Positions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -570,15 +571,16 @@ export function BacktestTab() {
               {selectedView === "trades" && (
                 <div className="trades-content">
                   <table className="data-table">
+                    <caption className="sr-only">Trade History</caption>
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Symbol</th>
-                        <th>Action</th>
-                        <th>Shares</th>
-                        <th>Price</th>
-                        <th>Amount</th>
-                        <th>Reason</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Symbol</th>
+                        <th scope="col">Action</th>
+                        <th scope="col">Shares</th>
+                        <th scope="col">Price</th>
+                        <th scope="col">Amount</th>
+                        <th scope="col">Reason</th>
                       </tr>
                     </thead>
                     <tbody>

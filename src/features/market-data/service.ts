@@ -4,6 +4,9 @@
 import { apiClient, invokeCommand } from '../../core/api';
 import { cacheService } from '../../core/cache';
 import { handleError } from '../../core/errors';
+import { createLogger } from '../../core/logger';
+
+const log = createLogger('market-data-feature');
 import type { 
   QuantMetrics, 
   HistoricalData, 
@@ -188,7 +191,7 @@ class MarketDataService {
   async prefetch(symbols: string[]): Promise<void> {
     try {
       await invokeCommand('prefetch_symbols', { symbols });
-      console.log(`✅ Prefetched ${symbols.length} symbols`);
+      log.info(`Prefetched ${symbols.length} symbols`);
     } catch (error) {
       handleError(error);
     }
@@ -202,7 +205,7 @@ class MarketDataService {
     await cacheService.clear('prices');
     await cacheService.clear('quant');
     await cacheService.clear('historical');
-    console.log('[INFO] Market data cache cleared');
+    log.info('Market data cache cleared');
   }
 
   // ============ Health & Metrics ============

@@ -1,5 +1,8 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { createLogger } from '../../core/logger';
+
+const log = createLogger('file-system');
 
 /**
  * Platform-agnostic file saving utility
@@ -40,7 +43,7 @@ export async function saveFile(
           }
         } catch (dialogError) {
           // Dialog might not be supported on this platform/version
-          console.warn('Save dialog failed, trying direct write:', dialogError);
+          log.warn('Save dialog failed, trying direct write', dialogError);
           
           // Fallback to Downloads folder
           await writeTextFile(filename, content, { baseDir: BaseDirectory.Download });
@@ -63,14 +66,14 @@ export async function saveFile(
             return;
           }
         } catch (dialogError) {
-          console.warn('Save dialog failed, trying direct write:', dialogError);
+          log.warn('Save dialog failed, trying direct write', dialogError);
           await writeFile(filename, content, { baseDir: BaseDirectory.Download });
           alert(`File saved to Downloads: ${filename}`);
           return;
         }
       }
     } catch (fsError) {
-      console.error('Tauri FS save failed:', fsError);
+      log.error('Tauri FS save failed', fsError);
       // Fallback to browser method if Tauri FS fails
     }
   }

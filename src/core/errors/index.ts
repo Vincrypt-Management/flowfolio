@@ -1,6 +1,10 @@
 // Core Error Handling
 // Structured error types for the frontend application
 
+import { createLogger } from '../logger';
+
+const log = createLogger('errors');
+
 // ============ Error Classes ============
 
 export class AppError extends Error {
@@ -181,7 +185,7 @@ export function handleError(error: unknown): void {
   
   // Log to console in development
   if (import.meta.env.DEV) {
-    console.error('[AppError]', {
+    log.error('AppError', {
       code: appError.code,
       message: appError.message,
       recoverable: appError.recoverable,

@@ -1,6 +1,10 @@
 // Industrial-Grade Local Database Cache Service
 // Uses IndexedDB for persistent local caching with LRU eviction and compression hints
 
+import { createLogger } from '../core/logger';
+
+const log = createLogger('local-cache');
+
 const DB_NAME = 'flowfolio_cache_v2';
 const DB_VERSION = 2;
 
@@ -59,13 +63,13 @@ class LocalCacheService {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = () => {
-        console.error('IndexedDB error:', request.error);
+        log.error('IndexedDB error:', request.error);
         reject(request.error);
       };
 
       request.onsuccess = () => {
         this.db = request.result;
-        console.log('[INFO] IndexedDB cache initialized (v2)');
+        log.info('IndexedDB cache initialized (v2)');
         this.cleanupExpiredEntries(); // Background cleanup
         resolve();
       };
@@ -84,7 +88,7 @@ class LocalCacheService {
           }
         }
 
-        console.log('📦 IndexedDB stores created with indexes');
+        log.info('IndexedDB stores created with indexes');
       };
     });
   }
@@ -123,7 +127,7 @@ class LocalCacheService {
             store.put(entry); // Update in background
             
             this.stats.hits++;
-            console.log(`Cache hit [${storeName}]: ${symbol}`);
+            log.debug(`Cache hit [${storeName}]: ${symbol}`);
             resolve(entry.data);
           } else {
             this.stats.misses++;
@@ -132,7 +136,7 @@ class LocalCacheService {
         };
       });
     } catch (error) {
-      console.warn(`Cache read error [${storeName}]:`, error);
+      log.warn(`Cache read error [${storeName}]:`, error);
       this.stats.misses++;
       return null;
     }
@@ -161,12 +165,12 @@ class LocalCacheService {
         const request = store.put(entry);
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
-          console.log(`💾 Cached [${storeName}]: ${symbol}`);
+          log.debug(`Cached [${storeName}]: ${symbol}`);
           resolve();
         };
       });
     } catch (error) {
-      console.warn(`Cache write error [${storeName}]:`, error);
+      log.warn(`Cache write error [${storeName}]:`, error);
     }
   }
 
@@ -192,7 +196,7 @@ class LocalCacheService {
         await this.evictOldest(storeName, toEvict);
       }
     } catch (error) {
-      console.warn(`Eviction check failed for ${storeName}:`, error);
+      log.warn(`Eviction check failed for ${storeName}:`, error);
     }
   }
 
@@ -216,7 +220,7 @@ class LocalCacheService {
             this.stats.evictions++;
             cursor.continue();
           } else {
-            console.log(`🗑️ Evicted ${evicted} entries from ${storeName}`);
+            log.debug(`Evicted ${evicted} entries from ${storeName}`);
             resolve();
           }
         };
@@ -224,7 +228,7 @@ class LocalCacheService {
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
-      console.warn(`Eviction failed for ${storeName}:`, error);
+      log.warn(`Eviction failed for ${storeName}:`, error);
     }
   }
 
@@ -260,7 +264,7 @@ class LocalCacheService {
             cursor.continue();
           } else {
             if (deleted > 0) {
-              console.log(`[INFO] Cleaned up ${deleted} expired entries from ${storeName}`);
+              log.info(`Cleaned up ${deleted} expired entries from ${storeName}`);
             }
             resolve();
           }
@@ -269,7 +273,7 @@ class LocalCacheService {
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
-      console.warn(`Cleanup failed for ${storeName}:`, error);
+      log.warn(`Cleanup failed for ${storeName}:`, error);
     }
   }
 
@@ -366,7 +370,7 @@ class LocalCacheService {
     
     // Reset stats
     this.stats = { hits: 0, misses: 0, evictions: 0, storeCounts: {} };
-    console.log('🗑️ Cache cleared');
+    log.info('Cache cleared');
   }
 
   async getCacheStats(): Promise<CacheStats & { hitRate: number }> {
@@ -393,7 +397,7 @@ class LocalCacheService {
 
   // Force garbage collection of expired entries
   async gc(): Promise<void> {
-    console.log('[INFO] Running cache garbage collection...');
+    log.info('Running cache garbage collection...');
     await this.cleanupExpiredEntries();
   }
 }

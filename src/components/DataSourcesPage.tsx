@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { createLogger } from '../core/logger';
+
+const log = createLogger('data-sources');
 import { 
   Database, 
   Activity, 
@@ -94,7 +97,7 @@ export function DataSourcesPage() {
         const result = await invoke<ConnectionTestResult>('test_data_connection');
         setConnectionResult(result);
       } catch (error) {
-        console.error('Connection test failed:', error);
+        log.error('Connection test failed', error);
         setConnectionResult({
           status: 'failed',
           test_symbol: 'AAPL',
@@ -147,7 +150,7 @@ export function DataSourcesPage() {
 
       setLastRefresh(new Date());
     } catch (error) {
-      console.error('Failed to load data source info:', error);
+      log.error('Failed to load data source info', error);
     } finally {
       setIsLoading(false);
     }

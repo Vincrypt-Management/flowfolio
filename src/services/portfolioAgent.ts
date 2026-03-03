@@ -1,10 +1,12 @@
 import { openRouterService, OpenRouterMessage } from './openrouter';
-import { marketDataService, HistoricalData } from './marketData';
-import { fundamentalDataService } from './fundamentalData';
-import { newsService } from './newsService';
-import { comprehensiveFundamentalsService } from './comprehensiveFundamentals';
+import { marketDataService, HistoricalData, QuantMetrics } from './marketData';
+import { fundamentalDataService, FundamentalMetrics } from './fundamentalData';
+import { newsService, SentimentAnalysis, AnalystRating } from './newsService';
+import { comprehensiveFundamentalsService, ComprehensiveFundamentalAnalysis } from './comprehensiveFundamentals';
 import type { MarketInsight } from './webSearch';
-// FundamentalMetrics type is used in the PortfolioAsset interface
+import { createLogger } from '../core/logger';
+
+const log = createLogger('portfolio-agent');
 
 // Risk protection configuration
 const RISK_PROTECTION_CONFIG = {
@@ -663,7 +665,7 @@ class PortfolioAgentService {
     const stockScore = stockKeywords.filter(kw => promptLower.includes(kw)).length;
     const mixedScore = mixedKeywords.filter(kw => promptLower.includes(kw)).length;
     
-    console.log(`[ASSET DETECTION] ETF: ${etfScore}, Stock: ${stockScore}, Mixed: ${mixedScore}`);
+    log.debug(`ETF: ${etfScore}, Stock: ${stockScore}, Mixed: ${mixedScore}`);
     
     // If mixed keywords found, use mixed
     if (mixedScore > 0) {
@@ -686,28 +688,28 @@ class PortfolioAgentService {
 
   async generatePortfolio(userPrompt: string): Promise<GeneratedPortfolio> {
     const assetType = this.detectAssetType(userPrompt);
-    console.log('[INFO] Starting expert portfolio generation for:', userPrompt, 'Detected asset type:', assetType);
+    log.info(`Starting expert portfolio generation for: ${userPrompt} Detected asset type: ${assetType}`);
 
     // Single AI call with comprehensive prompt - no separate intent analysis
     const portfolioStructure = await this.generatePortfolioStructureOptimized(userPrompt);
-    console.log('[INFO] Portfolio structure:', portfolioStructure);
+    log.debug('Portfolio structure', portfolioStructure);
 
     // Parallel data fetching from backend (optimized)
     const enrichedPortfolio = await this.enrichWithMarketDataFast(portfolioStructure);
-    console.log('[INFO] Enriched portfolio:', enrichedPortfolio);
+    log.debug('Enriched portfolio', enrichedPortfolio);
 
     // Fast optimization (no AI call needed)
     const optimizedPortfolio = this.optimizePortfolioFast(enrichedPortfolio);
-    console.log('[INFO] Optimized portfolio:', optimizedPortfolio);
+    log.debug('Optimized portfolio', optimizedPortfolio);
 
     // Apply quant feedback loop to improve recommendations
     const feedbackImprovedPortfolio = await this.applyQuantFeedbackLoop(optimizedPortfolio);
-    console.log('[INFO] Feedback improved portfolio:', feedbackImprovedPortfolio);
+    log.debug('Feedback improved portfolio', feedbackImprovedPortfolio);
 
     // Generate AI descriptions for each asset recommendation
     // Skip AI descriptions for faster generation - use fallback descriptions
     const portfolioWithDescriptions = this.generateFastDescriptions(feedbackImprovedPortfolio);
-    console.log('[INFO] Portfolio with descriptions generated');
+    log.info('Portfolio with descriptions generated');
 
     return portfolioWithDescriptions;
   }
@@ -734,7 +736,7 @@ class PortfolioAgentService {
     portfolio: GeneratedPortfolio,
     userContext: string
   ): Promise<GeneratedPortfolio> {
-    console.log('[AI DESCRIPTION] Generating detailed descriptions for portfolio assets...');
+    log.info('Generating detailed descriptions for portfolio assets...');
     
     // Build a comprehensive prompt for all assets at once (more efficient than individual calls)
     const assetsSummary = portfolio.assets.map(asset => {
@@ -889,14 +891,14 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
         };
       });
 
-      console.log(`[AI DESCRIPTION] Generated descriptions for ${descriptions.length}/${portfolio.assets.length} assets`);
+      log.info(`Generated descriptions for ${descriptions.length}/${portfolio.assets.length} assets`);
       
       return {
         ...portfolio,
         assets: assetsWithDescriptions,
       };
     } catch (error) {
-      console.error('[AI DESCRIPTION] Failed to generate descriptions:', error);
+      log.error('Failed to generate descriptions', error);
       // Return portfolio with fallback descriptions
       return {
         ...portfolio,
@@ -933,7 +935,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       const lastBracket = cleaned.lastIndexOf(']');
       
       if (firstBracket === -1 || lastBracket === -1) {
-        console.warn('[AI DESCRIPTION] No JSON array found in response');
+        log.warn('No JSON array found in response');
         return [];
       }
       
@@ -941,13 +943,13 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       const parsed = JSON.parse(jsonStr);
       
       if (!Array.isArray(parsed)) {
-        console.warn('[AI DESCRIPTION] Response is not an array');
+        log.warn('Response is not an array');
         return [];
       }
       
       return parsed;
     } catch (error) {
-      console.error('[AI DESCRIPTION] Failed to parse descriptions:', error);
+      log.error('Failed to parse descriptions', error);
       return [];
     }
   }
@@ -1018,7 +1020,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
    * Uses different thresholds for ETFs vs stocks.
    */
   private async applyQuantFeedbackLoop(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('[QUANT FEEDBACK] Starting feedback loop analysis...');
+    log.info('Starting feedback loop analysis...');
     
     let assets = [...portfolio.assets];
     const feedbackActions: string[] = [];
@@ -1028,7 +1030,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     const etfCount = assets.filter(a => a.assetType === 'etf' || this.isETFSymbol(a.symbol)).length;
     const isETFHeavy = etfCount > assets.length / 2;
     
-    console.log(`[QUANT FEEDBACK] Portfolio type: ${isETFHeavy ? 'ETF-heavy' : 'Stock-heavy'} (${etfCount}/${assets.length} ETFs)`);
+    log.info(`Portfolio type: ${isETFHeavy ? 'ETF-heavy' : 'Stock-heavy'} (${etfCount}/${assets.length} ETFs)`);
     
     // Step 1: Identify underperforming assets based on quant metrics AND fundamentals
     const assetAnalysis = assets.map(asset => {
@@ -1324,10 +1326,10 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     const strongAssets = assetAnalysis.filter(a => a.isStrong).length;
     const weakAssets = assetAnalysis.filter(a => a.needsAttention).length;
     
-    console.log(`[QUANT FEEDBACK] Applied ${feedbackActions.length} adjustments`);
-    console.log(`[QUANT FEEDBACK] ${assetsToFlag.length} assets flagged for attention`);
-    console.log(`[QUANT FEEDBACK] ${replacementSuggestions.length} replacement suggestions`);
-    console.log(`[QUANT FEEDBACK] Portfolio fundamentals: ${strongAssets} strong, ${weakAssets} weak, avg score: ${avgFundamentalScore.toFixed(0)}`);
+    log.info(`Applied ${feedbackActions.length} adjustments`);
+    log.info(`${assetsToFlag.length} assets flagged for attention`);
+    log.info(`${replacementSuggestions.length} replacement suggestions`);
+    log.info(`Portfolio fundamentals: ${strongAssets} strong, ${weakAssets} weak, avg score: ${avgFundamentalScore.toFixed(0)}`);
     
     return {
       ...portfolio,
@@ -1402,15 +1404,15 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
           
           // If we succeeded on a retry, log it
           if (attempt > 0) {
-            console.log(`[SUCCESS] Portfolio generated successfully on retry attempt ${attempt}`);
+            log.info(`Portfolio generated successfully on retry attempt ${attempt}`);
             yield { type: 'progress', step: 'retry', message: `✓ Retry ${attempt} succeeded`, progress: 18 };
           }
           
           break; // Success, exit retry loop
         } catch (parseError) {
           const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown parse error';
-          console.error(`[ERROR] Parse attempt ${attempt + 1}/${maxRetries + 1} failed:`, errorMsg);
-          console.error('[DEBUG] Raw AI response (first 500 chars):', streamedContent?.substring(0, 500) || '(empty)');
+          log.error(`Parse attempt ${attempt + 1}/${maxRetries + 1} failed: ${errorMsg}`);
+          log.debug(`Raw AI response (first 500 chars): ${streamedContent?.substring(0, 500) || '(empty)'}`);
           
           // Yield error progress to frontend
           if (attempt < maxRetries) {
@@ -1738,7 +1740,7 @@ Suggest better alternatives with similar exposure.`
         !droppedSymbols.has(r.symbol.toUpperCase())
       );
     } catch (error) {
-      console.error('[AGENT LOOP] Failed to generate replacements:', error);
+      log.error('Failed to generate replacements', error);
       return [];
     }
   }
@@ -1754,16 +1756,16 @@ Suggest better alternatives with similar exposure.`
       
       const parsed = JSON.parse(jsonMatch[0]);
       
-      return parsed.map((item: any) => ({
-        symbol: item.symbol?.toUpperCase() || '',
-        name: item.name || item.symbol,
-        sector: item.sector || 'General',
-        rationale: item.rationale || 'AI-selected replacement',
-        allocation: item.allocation || 5,
-        assetType: this.isETFSymbol(item.symbol) ? 'etf' : 'stock',
+      return parsed.map((item: Record<string, unknown>) => ({
+        symbol: ((item.symbol as string) ?? '').toUpperCase(),
+        name: (item.name as string) || (item.symbol as string),
+        sector: (item.sector as string) || 'General',
+        rationale: (item.rationale as string) || 'AI-selected replacement',
+        allocation: (item.allocation as number) || 5,
+        assetType: this.isETFSymbol(item.symbol as string) ? 'etf' : 'stock',
       })).filter((a: PortfolioAsset) => a.symbol);
     } catch (error) {
-      console.error('[AGENT LOOP] Failed to parse replacements:', error);
+      log.error('Failed to parse replacements', error);
       return [];
     }
   }
@@ -1782,13 +1784,13 @@ Suggest better alternatives with similar exposure.`
         ]),
         Promise.race([
           marketDataService.getQuantMetricsBatch(symbols),
-          new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 5000))
+          new Promise<QuantMetrics[]>((resolve) => setTimeout(() => resolve([]), 5000))
         ]),
       ]);
       
       const pricesMap = pricesResult.status === 'fulfilled' ? pricesResult.value : {};
       const quantMetrics = quantResult.status === 'fulfilled' ? quantResult.value : [];
-      const metricsMap = new Map(quantMetrics.map((m: any) => [m.symbol, m]));
+      const metricsMap = new Map(quantMetrics.map((m: QuantMetrics) => [m.symbol, m]));
       
       return assets.map(asset => {
         const metrics = metricsMap.get(asset.symbol);
@@ -1796,24 +1798,19 @@ Suggest better alternatives with similar exposure.`
           ...asset,
           currentPrice: pricesMap[asset.symbol],
           quantMetrics: metrics ? {
-            sharpeRatio: metrics.sharpeRatio || 0,
+            sharpeRatio: metrics.sharpe_ratio || 0,
             volatility: metrics.volatility || 20,
-            expectedReturn: metrics.expectedReturn || 0,
-            maxDrawdown: metrics.maxDrawdown || -15,
+            expectedReturn: metrics.annualized_return || 0,
+            maxDrawdown: metrics.max_drawdown || -15,
             rsi: metrics.rsi || 50,
             recommendation: metrics.signal || 'Hold',
             confidence: metrics.confidence || 50,
-            sortinoRatio: metrics.sortinoRatio,
-            calmarRatio: metrics.calmarRatio,
-            beta: metrics.beta,
-            alpha: metrics.alpha,
-            var95: metrics.var95,
           } : undefined,
-          compositeScore: metrics ? this.calculateCompositeScore(metrics, null, null, null, null, asset.assetType === 'etf') : 50,
+          compositeScore: metrics ? this.calculateCompositeScore(metrics, undefined, undefined, undefined, null, asset.assetType === 'etf') : 50,
         };
       });
     } catch (error) {
-      console.error('[AGENT LOOP] Failed to enrich replacements:', error);
+      log.error('Failed to enrich replacements', error);
       return assets;
     }
   }
@@ -2154,7 +2151,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       attempts++;
       
       try {
-        console.log(`[INFO] Attempt ${attempts}/${maxAttempts} to generate portfolio...`);
+        log.info(`Attempt ${attempts}/${maxAttempts} to generate portfolio...`);
         
         // Try with JSON mode first, fall back to regular mode if not supported
         let response: string;
@@ -2164,10 +2161,11 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             max_tokens: 4000,
             response_format: { type: 'json_object' } // Enable JSON mode
           });
-        } catch (error: any) {
+        } catch (error: unknown) {
           // If JSON mode fails (not supported by model), retry without it
-          if (error.message?.includes('response_format') || error.message?.includes('json_object')) {
-            console.warn('[WARN] Model does not support JSON mode, retrying without it...');
+          const errMsg = error instanceof Error ? error.message : '';
+          if (errMsg.includes('response_format') || errMsg.includes('json_object')) {
+            log.warn('Model does not support JSON mode, retrying without it...');
             response = await openRouterService.chat(messages, this.vibeModel, {
               temperature: 0.7,
               max_tokens: 4000
@@ -2177,7 +2175,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
           }
         }
 
-        console.log('[DEBUG] Raw response preview:', response.substring(0, 200));
+        log.debug(`Raw response preview: ${response.substring(0, 200)}`);
 
         // Clean the response - remove markdown code blocks and extra text
         let cleanedResponse = response.trim();
@@ -2211,7 +2209,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         jsonStr = jsonStr.replace(/:\s*Infinity/g, ': 100');
         jsonStr = jsonStr.replace(/:\s*-Infinity/g, ': 0');
         
-        console.log('[DEBUG] Cleaned JSON preview:', jsonStr.substring(0, 200));
+        log.debug(`Cleaned JSON preview: ${jsonStr.substring(0, 200)}`);
 
         // Parse JSON
         const portfolio = JSON.parse(jsonStr);
@@ -2243,25 +2241,25 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         }
 
         // Normalize allocations to 100%
-        const totalAllocation = portfolio.assets.reduce((sum: number, asset: any) => sum + (asset.allocation || 0), 0);
+        const totalAllocation = portfolio.assets.reduce((sum: number, asset: Record<string, unknown>) => sum + ((asset.allocation as number) || 0), 0);
         
         if (totalAllocation === 0) {
           throw new Error('Total allocation is zero');
         }
         
         if (Math.abs(totalAllocation - 100) > 1) {
-          console.log(`Normalizing allocations from ${totalAllocation}% to 100%`);
-          portfolio.assets = portfolio.assets.map((asset: any) => ({
+          log.info(`Normalizing allocations from ${totalAllocation}% to 100%`);
+          portfolio.assets = portfolio.assets.map((asset: Record<string, unknown>) => ({
             ...asset,
-            allocation: parseFloat(((asset.allocation / totalAllocation) * 100).toFixed(2))
+            allocation: parseFloat((((asset.allocation as number) / totalAllocation) * 100).toFixed(2))
           }));
         }
 
-        console.log(`Successfully parsed portfolio with ${portfolio.assets.length} assets`);
+        log.info(`Successfully parsed portfolio with ${portfolio.assets.length} assets`);
         return portfolio;
         
       } catch (error) {
-        console.error(`Attempt ${attempts} failed:`, error);
+        log.error(`Attempt ${attempts} failed`, error);
         
         if (attempts >= maxAttempts) {
           throw new Error(
@@ -2273,7 +2271,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         
         // Wait before retry with exponential backoff
         const delayMs = 1000 * attempts;
-        console.log(`[INFO] Waiting ${delayMs}ms before retry...`);
+        log.info(`Waiting ${delayMs}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
@@ -2331,7 +2329,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private async enrichWithMarketDataFast(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('[INFO] Fast market data enrichment starting...');
+    log.info('Fast market data enrichment starting...');
     
     const symbols = portfolio.assets.map(a => a.symbol);
     const startTime = Date.now();
@@ -2347,20 +2345,20 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         // Quant metrics with 10s timeout
         Promise.race([
           marketDataService.getQuantMetricsBatch(symbols),
-          new Promise<any[]>((_, reject) => setTimeout(() => reject('timeout'), 10000))
+          new Promise<QuantMetrics[]>((_, reject) => setTimeout(() => reject('timeout'), 10000))
         ]),
         // Optional data with 5s timeout - fail silently for speed
         Promise.race([
           fundamentalDataService.getBatchFundamentals(symbols),
-          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 5000))
+          new Promise<Record<string, FundamentalMetrics>>((resolve) => setTimeout(() => resolve({}), 5000))
         ]),
         Promise.race([
           newsService.getBatchSentiment(symbols),
-          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 4000))
+          new Promise<Record<string, SentimentAnalysis>>((resolve) => setTimeout(() => resolve({}), 4000))
         ]),
         Promise.race([
           newsService.getBatchAnalystRatings(symbols),
-          new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 4000))
+          new Promise<Record<string, AnalystRating>>((resolve) => setTimeout(() => resolve({}), 4000))
         ]),
       ]);
 
@@ -2371,9 +2369,9 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       const sentimentMap = sentimentResult.status === 'fulfilled' ? sentimentResult.value : {};
       const analystMap = analystResult.status === 'fulfilled' ? analystResult.value : {};
 
-      console.log(`[INFO] Data fetched in ${Date.now() - startTime}ms: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} quant`);
+      log.info(`Data fetched in ${Date.now() - startTime}ms: ${Object.keys(pricesMap).length} prices, ${quantMetricsArray.length} quant`);
       
-      const metricsMap = new Map(quantMetricsArray.map((m: any) => [m.symbol, m]));
+      const metricsMap = new Map(quantMetricsArray.map((m: QuantMetrics) => [m.symbol, m]));
 
       // Enrich assets
       const enrichedAssets = portfolio.assets.map((asset) => {
@@ -2482,9 +2480,9 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             marginOfSafety: fundamentals.marginOfSafety,
             
             // Factor scores
-            valueScore: fundamentals.valueScore,
-            qualityScore: fundamentals.qualityScore,
-            growthScore: fundamentals.growthScore,
+            valueScore: fundamentals.valueScore ?? undefined,
+            qualityScore: fundamentals.qualityScore ?? undefined,
+            growthScore: fundamentals.growthScore ?? undefined,
             
             // Data quality
             dataSource: fundamentals.dataSource,
@@ -2496,11 +2494,11 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         };
       });
 
-      console.log(`[INFO] Enrichment complete in ${Date.now() - startTime}ms`);
+      log.info(`Enrichment complete in ${Date.now() - startTime}ms`);
       return { ...portfolio, assets: enrichedAssets };
       
     } catch (error) {
-      console.error('[ERROR] Market data enrichment failed:', error);
+      log.error('Market data enrichment failed', error);
       // Return portfolio with whatever data we have
       return portfolio;
     }
@@ -2509,7 +2507,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   /**
    * Calculate fundamental score from advanced metrics (0-100)
    */
-  private calculateFundamentalScore(fundamentals: any): number {
+  private calculateFundamentalScore(fundamentals: FundamentalMetrics | undefined): number {
     if (!fundamentals) return 50; // Default neutral score
     
     let score = 50;
@@ -2601,7 +2599,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
    * Provides in-depth analysis for stocks, ETFs, and bonds
    */
   private async enrichWithFundamentalAnalysis(portfolio: GeneratedPortfolio): Promise<GeneratedPortfolio> {
-    console.log('[FUNDAMENTALS] Starting comprehensive fundamental analysis...');
+    log.info('Starting comprehensive fundamental analysis...');
     const startTime = Date.now();
     
     try {
@@ -2614,7 +2612,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       // Fetch comprehensive fundamentals in batch
       const fundamentalsMap = await Promise.race([
         comprehensiveFundamentalsService.getBatchAnalysis(symbolsWithTypes),
-        new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 15000))
+        new Promise<Record<string, ComprehensiveFundamentalAnalysis>>((resolve) => setTimeout(() => resolve({}), 15000))
       ]);
       
       // Enrich assets with fundamental data
@@ -2648,14 +2646,14 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         };
       });
       
-      console.log(`[FUNDAMENTALS] Analysis complete in ${Date.now() - startTime}ms`);
+      log.info(`Analysis complete in ${Date.now() - startTime}ms`);
       
       return {
         ...portfolio,
         assets: enrichedAssets,
       };
     } catch (error) {
-      console.error('[FUNDAMENTALS] Analysis failed:', error);
+      log.error('Analysis failed', error);
       return portfolio;
     }
   }
@@ -2693,10 +2691,10 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   // Calculate a composite score (0-100) based on all available data
   // ETFs use different weighting since they don't have individual fundamentals
   private calculateCompositeScore(
-    metrics: any,
-    fundamentals: any,
-    sentiment: any,
-    analyst: any,
+    metrics: QuantMetrics | undefined,
+    fundamentals: FundamentalMetrics | undefined,
+    sentiment: SentimentAnalysis | undefined,
+    analyst: AnalystRating | undefined,
     upside: number | null,
     isETF: boolean = false
   ): number {
@@ -2834,7 +2832,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
   }
 
   private optimizePortfolioFast(portfolio: GeneratedPortfolio): GeneratedPortfolio {
-    console.log('[INFO] Fast portfolio optimization with risk protection started');
+    log.info('Fast portfolio optimization with risk protection started');
 
     let assets = [...portfolio.assets];
     const riskAdjustments: string[] = [];
@@ -2918,7 +2916,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
 
     // If no valid metrics, use conservative default assumptions based on asset types
     if (validMetricsCount === 0 || (totalReturn === 0 && totalVol === 0)) {
-      console.log('[WARN] No valid quant metrics found, using conservative defaults based on asset composition');
+      log.warn('No valid quant metrics found, using conservative defaults based on asset composition');
       
       // Calculate defaults based on asset type composition
       const n = assets.length;
@@ -2959,7 +2957,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       
       totalVolSq = Math.pow(totalVol / 100, 2) * n;
       
-      console.log(`[INFO] Default estimates: Return=${totalReturn.toFixed(1)}%, Vol=${totalVol.toFixed(1)}% (Bond: ${(bondAlloc*100).toFixed(0)}%, ETF: ${(equityEtfAlloc*100).toFixed(0)}%, Stock: ${(stockAlloc*100).toFixed(0)}%)`);
+      log.info(`Default estimates: Return=${totalReturn.toFixed(1)}%, Vol=${totalVol.toFixed(1)}% (Bond: ${(bondAlloc*100).toFixed(0)}%, ETF: ${(equityEtfAlloc*100).toFixed(0)}%, Stock: ${(stockAlloc*100).toFixed(0)}%)`);
     }
 
     // Portfolio volatility (simplified - assumes partial correlation for conservative estimate)
@@ -2982,7 +2980,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     
     while (monteCarloResult.probabilityOfLoss > RISK_PROTECTION_CONFIG.maxProbabilityOfLoss && iterations < maxIterations) {
       iterations++;
-      console.log(`[RISK] Probability of loss ${monteCarloResult.probabilityOfLoss.toFixed(1)}% > ${RISK_PROTECTION_CONFIG.maxProbabilityOfLoss}%. Applying risk reduction...`);
+      log.warn(`Probability of loss ${monteCarloResult.probabilityOfLoss.toFixed(1)}% > ${RISK_PROTECTION_CONFIG.maxProbabilityOfLoss}%. Applying risk reduction...`);
       
       // Strategy 1: Reduce allocation to high-volatility assets
       const highVolAssets = assets.filter(a => a.quantMetrics && a.quantMetrics.volatility > 25);
@@ -3083,10 +3081,10 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       ? ((totalReturn - riskFreeRate) / portfolioVolatility) 
       : 0;
 
-    console.log(`[INFO] Risk-protected portfolio: Sharpe=${sharpeRatioEstimate.toFixed(2)}, Diversification=${diversificationScore}%, ProbLoss=${monteCarloResult.probabilityOfLoss.toFixed(1)}%`);
+    log.info(`Risk-protected portfolio: Sharpe=${sharpeRatioEstimate.toFixed(2)}, Diversification=${diversificationScore}%, ProbLoss=${monteCarloResult.probabilityOfLoss.toFixed(1)}%`);
     
     if (riskAdjustments.length > 0) {
-      console.log(`[INFO] Risk adjustments applied: ${riskAdjustments.join('; ')}`);
+      log.info(`Risk adjustments applied: ${riskAdjustments.join('; ')}`);
     }
 
     return {
@@ -3403,7 +3401,7 @@ Provide specific rebalancing recommendations with:
 
   // Deep market analysis with real data
   async analyzeMarketOpportunity(symbol: string, context?: string): Promise<string> {
-    console.log(`[INFO] Performing deep analysis on ${symbol}...`);
+    log.info(`Performing deep analysis on ${symbol}...`);
 
     const marketData = await marketDataService.getMarketData(symbol);
     const technical = this.calculateTechnicalIndicators(marketData.historical);
@@ -3534,7 +3532,7 @@ Provide:
    * This is an expensive operation so it's separate from the main generation flow
    */
   async enhanceWithAIDescriptions(portfolio: GeneratedPortfolio, userContext: string): Promise<GeneratedPortfolio> {
-    console.log('[AI ENHANCE] Generating detailed AI descriptions...');
+    log.info('Generating detailed AI descriptions...');
     return this.generateAssetDescriptions(portfolio, userContext);
   }
 }

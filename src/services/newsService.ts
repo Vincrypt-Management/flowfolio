@@ -3,6 +3,9 @@
 
 import { globalRateLimiter } from './rateLimiter';
 import { localCacheService } from './localCache';
+import { createLogger } from '../core/logger';
+
+const log = createLogger('news-service');
 
 export interface NewsArticle {
   title: string;
@@ -70,7 +73,7 @@ class NewsService {
         }
       }
     } catch (error) {
-      console.warn('Error reading sentiment cache:', error);
+      log.warn('Error reading sentiment cache:', error);
     }
     
     return null;
@@ -83,7 +86,7 @@ class NewsService {
     try {
       localStorage.setItem(`${this.PERSISTENT_CACHE_KEY}_sentiment_${symbol}`, JSON.stringify(entry));
     } catch (error) {
-      console.warn('Error writing to sentiment cache:', error);
+      log.warn('Error writing to sentiment cache:', error);
     }
   }
 
@@ -93,24 +96,24 @@ class NewsService {
     try {
       const indexedDBCached = await localCacheService.getSentiment(symbol);
       if (indexedDBCached) {
-        console.log(`IndexedDB sentiment cache hit for ${symbol}`);
+        log.debug(`IndexedDB sentiment cache hit for ${symbol}`);
         return indexedDBCached as SentimentAnalysis;
       }
     } catch (e) {
-      console.warn('IndexedDB read error:', e);
+      log.warn('IndexedDB read error:', e);
     }
 
     // 2. Check in-memory/localStorage cache
     const cached = this.getCachedSentiment(symbol);
     if (cached) {
-      console.log(`Sentiment cache hit for ${symbol}`);
+      log.debug(`Sentiment cache hit for ${symbol}`);
       return cached;
     }
 
     // 3. Fetch from network
     // Use global rate limiter
     await globalRateLimiter.waitForSlot();
-    console.log(`📰 Fetching news for ${symbol}...`);
+    log.info(`Fetching news for ${symbol}...`);
 
     try {
       // Use Yahoo Finance news endpoint
@@ -130,16 +133,16 @@ class NewsService {
       const news = data.news || [];
 
       // Analyze sentiment based on headlines
-      const analyzedNews: NewsArticle[] = news.slice(0, 5).map((article: any) => {
-        const title = article.title || '';
+      const analyzedNews: NewsArticle[] = news.slice(0, 5).map((article: Record<string, unknown>) => {
+        const title = (article.title as string) || '';
         const sentiment = this.analyzeSentiment(title);
         
         return {
           title: title,
-          summary: article.publisher || '',
-          source: article.publisher || 'Unknown',
-          url: article.link || '',
-          publishedAt: new Date(article.providerPublishTime * 1000).toISOString(),
+          summary: (article.publisher as string) || '',
+          source: (article.publisher as string) || 'Unknown',
+          url: (article.link as string) || '',
+          publishedAt: new Date((article.providerPublishTime as number) * 1000).toISOString(),
           sentiment,
           relevanceScore: 0.8
         };
@@ -174,14 +177,14 @@ class NewsService {
       
       // Also cache in IndexedDB for persistence
       localCacheService.setSentiment(symbol, result).catch(e => {
-        console.warn('Failed to cache sentiment in IndexedDB:', e);
+        log.warn('Failed to cache sentiment in IndexedDB:', e);
       });
       
-      console.log(`Sentiment analysis complete for ${symbol}: ${overallSentiment}`);
+      log.info(`Sentiment analysis complete for ${symbol}: ${overallSentiment}`);
       
       return result;
     } catch (error) {
-      console.error(`Failed to fetch news for ${symbol}:`, error);
+      log.error(`Failed to fetch news for ${symbol}:`, error);
       
       // Return neutral sentiment on error
       return {
@@ -237,24 +240,24 @@ class NewsService {
     try {
       const indexedDBCached = await localCacheService.getAnalyst(symbol);
       if (indexedDBCached) {
-        console.log(`IndexedDB analyst cache hit for ${symbol}`);
+        log.debug(`IndexedDB analyst cache hit for ${symbol}`);
         return indexedDBCached as AnalystRating;
       }
     } catch (e) {
-      console.warn('IndexedDB read error:', e);
+      log.warn('IndexedDB read error:', e);
     }
 
     // 2. Check in-memory cache
     const cached = this.analystCache.get(symbol);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      console.log(`Analyst ratings cache hit for ${symbol}`);
+      log.debug(`Analyst ratings cache hit for ${symbol}`);
       return cached.data;
     }
 
     // 3. Fetch from network
     // Use global rate limiter
     await globalRateLimiter.waitForSlot();
-    console.log(`Fetching analyst ratings for ${symbol}...`);
+    log.info(`Fetching analyst ratings for ${symbol}...`);
 
     try {
       const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=recommendationTrend,financialData`;
@@ -319,13 +322,13 @@ class NewsService {
 
       // Also cache in IndexedDB for persistence
       localCacheService.setAnalyst(symbol, rating).catch(e => {
-        console.warn('Failed to cache analyst in IndexedDB:', e);
+        log.warn('Failed to cache analyst in IndexedDB:', e);
       });
 
-      console.log(`Analyst ratings complete for ${symbol}: ${consensusRating}`);
+      log.info(`Analyst ratings complete for ${symbol}: ${consensusRating}`);
       return rating;
     } catch (error) {
-      console.error(`Failed to fetch analyst ratings for ${symbol}:`, error);
+      log.error(`Failed to fetch analyst ratings for ${symbol}:`, error);
       
       return {
         symbol,
@@ -349,13 +352,13 @@ class NewsService {
   async getBatchSentiment(symbols: string[]): Promise<Record<string, SentimentAnalysis>> {
     const results: Record<string, SentimentAnalysis> = {};
     
-    console.log(`📰 Fetching sentiment for ${symbols.length} symbols...`);
+    log.info(`Fetching sentiment for ${symbols.length} symbols...`);
     
     for (const symbol of symbols) {
       try {
         results[symbol] = await this.getSentiment(symbol);
       } catch (error) {
-        console.error(`Failed to fetch sentiment for ${symbol}:`, error);
+        log.error(`Failed to fetch sentiment for ${symbol}:`, error);
       }
       
       // Small delay between requests
@@ -368,13 +371,13 @@ class NewsService {
   async getBatchAnalystRatings(symbols: string[]): Promise<Record<string, AnalystRating>> {
     const results: Record<string, AnalystRating> = {};
     
-    console.log(`Fetching analyst ratings for ${symbols.length} symbols...`);
+    log.info(`Fetching analyst ratings for ${symbols.length} symbols...`);
     
     for (const symbol of symbols) {
       try {
         results[symbol] = await this.getAnalystRatings(symbol);
       } catch (error) {
-        console.error(`Failed to fetch analyst ratings for ${symbol}:`, error);
+        log.error(`Failed to fetch analyst ratings for ${symbol}:`, error);
       }
       
       // Small delay between requests

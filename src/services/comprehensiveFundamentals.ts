@@ -10,6 +10,9 @@
  */
 
 import { openRouterService, OpenRouterMessage } from './openrouter';
+import { createLogger } from '../core/logger';
+
+const log = createLogger('comprehensive-fundamentals');
 
 // ==================== STOCK INTERFACES ====================
 
@@ -317,7 +320,7 @@ class ComprehensiveFundamentalsService {
       const key = `${this.CACHE_PREFIX}${symbol}`;
       localStorage.setItem(key, JSON.stringify(data));
     } catch (e) {
-      console.warn('[FUNDAMENTALS] Cache storage failed:', e);
+      log.warn('Cache storage failed', e);
     }
   }
   
@@ -328,11 +331,11 @@ class ComprehensiveFundamentalsService {
     // Check cache
     const cached = this.getCached(symbol);
     if (cached) {
-      console.log(`[FUNDAMENTALS] Cache hit for ${symbol}`);
+      log.debug(`Cache hit for ${symbol}`);
       return cached;
     }
     
-    console.log(`[FUNDAMENTALS] Generating comprehensive analysis for ${symbol} (${assetType})`);
+    log.info(`Generating comprehensive analysis for ${symbol} (${assetType})`);
     
     // Generate analysis using AI
     const analysis = await this.generateAnalysis(symbol, assetType);
@@ -392,7 +395,7 @@ class ComprehensiveFundamentalsService {
       
       return this.parseAnalysisResponse(response, symbol, assetType);
     } catch (error) {
-      console.error(`[FUNDAMENTALS] Failed to generate analysis for ${symbol}:`, error);
+      log.error(`Failed to generate analysis for ${symbol}`, error);
       return this.createFallbackAnalysis(symbol, assetType);
     }
   }
@@ -1065,7 +1068,7 @@ ${schema}`;
         lastUpdated: parsed.lastUpdated || new Date().toISOString(),
       };
     } catch (error) {
-      console.error('[FUNDAMENTALS] Failed to parse response:', error);
+      log.error('Failed to parse response', error);
       return this.createFallbackAnalysis(symbol, assetType);
     }
   }

@@ -3,6 +3,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { createLogger } from '../core/logger';
+
+const log = createLogger('live-progress');
 
 // Progress event types matching Rust structs
 export interface ProgressDetail {
@@ -279,7 +282,7 @@ export function useLiveProgress(eventName: string = "optimization_progress") {
           });
         });
       } catch (error) {
-        console.error("Failed to setup progress listener:", error);
+        log.error("Failed to setup progress listener", error);
       }
     };
 
