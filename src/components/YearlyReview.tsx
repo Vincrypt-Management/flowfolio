@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { invoke } from "../services/tauri";
 import { useToast } from "./Toast";
 import {
@@ -409,4 +409,4 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
   );
 }
 
-export default YearlyReviewComponent;
+export default memo(YearlyReviewComponent);

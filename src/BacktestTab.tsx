@@ -358,7 +358,9 @@ export function BacktestTab() {
             />
           </div>
           <div className="symbol-tags">
-            {config.symbols.map((symbol) => (
+            {config.symbols.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No symbols selected. Enter symbols above or choose a preset.</p>
+            ) : config.symbols.map((symbol) => (
               <span key={symbol} className="symbol-tag">{symbol}</span>
             ))}
           </div>

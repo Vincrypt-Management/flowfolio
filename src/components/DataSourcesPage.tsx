@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { createLogger } from '../core/logger';
 
 const log = createLogger('data-sources');
+
+// Auto-refresh interval (milliseconds)
+const DATA_REFRESH_INTERVAL_MS = 30000;
+
 import { 
   Database, 
   Activity, 
@@ -68,7 +72,7 @@ interface HealthReport {
   error_rate: number;
 }
 
-export function DataSourcesPage() {
+function DataSourcesPage() {
   const [connectionResult, setConnectionResult] = useState<ConnectionTestResult | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
@@ -159,7 +163,7 @@ export function DataSourcesPage() {
   // Auto-load on mount and refresh every 30 seconds
   useEffect(() => {
     loadAllData();
-    const interval = setInterval(loadAllData, 30000);
+    const interval = setInterval(loadAllData, DATA_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [loadAllData]);
 
@@ -454,3 +458,6 @@ VITE_ALPACA_PAPER_TRADING=true`}
     </div>
   );
 }
+
+export { DataSourcesPage };
+export default memo(DataSourcesPage);

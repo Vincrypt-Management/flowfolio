@@ -23,6 +23,9 @@ import {
 import type { AnalysisReport, ActionItem } from '../services/analysisReport';
 import './ReportViewer.css';
 
+// UI feedback duration (milliseconds)
+const COPY_FEEDBACK_DURATION_MS = 2000;
+
 interface ReportViewerProps {
   report: AnalysisReport;
   onClose?: () => void;
@@ -66,7 +69,7 @@ export default function ReportViewer({
       if (markdown) {
         await navigator.clipboard.writeText(markdown);
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
       }
     }
   };

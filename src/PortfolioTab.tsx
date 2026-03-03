@@ -494,7 +494,9 @@ export function PortfolioTab() {
             <div className="card">
               <h3>Allocation Plan ({allocationPlan.method})</h3>
               <div className="allocation-list">
-                {allocationPlan.allocations.map((alloc) => (
+                {allocationPlan.allocations.length === 0 ? (
+                  <p className="empty-state" style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No allocations generated</p>
+                ) : allocationPlan.allocations.map((alloc) => (
                   <div key={alloc.symbol} className="allocation-item">
                     <div className="alloc-header">
                       <span className="alloc-symbol">{alloc.symbol}</span>
@@ -532,7 +534,9 @@ export function PortfolioTab() {
 
               <h4>Recommendations ({buyList.recommendations.length})</h4>
               <div className="buy-recommendations">
-                {buyList.recommendations.map((rec) => (
+                {buyList.recommendations.length === 0 ? (
+                  <p className="empty-state" style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No recommendations available</p>
+                ) : buyList.recommendations.map((rec) => (
                   <div key={rec.symbol} className="buy-rec-item">
                     <div className="rec-header">
                       <span className="rec-priority">#{rec.priority}</span>

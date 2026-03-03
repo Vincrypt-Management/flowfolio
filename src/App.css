@@ -34,6 +34,31 @@
   --success: #00e599;
   --error: #ef4444;
   --warning: #f59e0b;
+
+  /* Semantic colors for component logic */
+  --color-success: #22c55e;
+  --color-success-light: #4ade80;
+  --color-danger: #ef4444;
+  --color-danger-light: #f87171;
+  --color-warning: #f59e0b;
+  --color-warning-light: #fbbf24;
+  --color-info: #3b82f6;
+  --color-buy: #22c55e;
+  --color-sell: #f97316;
+  --color-hold: #f59e0b;
+  --color-neutral: #6b7280;
+  --color-trade: #2196f3;
+  --color-strategy: #ff9800;
+  --color-rebalance: #9c27b0;
+  --color-review: #4caf50;
+  --color-reflection: #607d8b;
+  --color-creation: #e91e63;
+  --color-correlation-high: #ef4444;
+  --color-correlation-med: #f59e0b;
+  --color-correlation-low: #10b981;
+  --color-correlation-neutral: #6366f1;
+  --color-correlation-neg: #3b82f6;
+  --color-correlation-strong-neg: #8b5cf6;
   
   /* Design Tokens */
   --radius-sm: 4px;

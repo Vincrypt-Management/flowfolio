@@ -8,6 +8,27 @@ import { createLogger } from '../core/logger';
 
 const log = createLogger('portfolio-agent');
 
+// Timeout constants (milliseconds)
+const MARKET_DATA_TIMEOUT_MS = 20000;
+const ENRICHMENT_TIMEOUT_MS = 15000;
+const PRICE_FETCH_TIMEOUT_MS = 8000;
+const QUANT_METRICS_TIMEOUT_MS = 10000;
+const REPLACEMENT_ENRICHMENT_TIMEOUT_MS = 5000;
+const FUNDAMENTALS_TIMEOUT_MS = 5000;
+const SENTIMENT_TIMEOUT_MS = 4000;
+const ANALYST_RATINGS_TIMEOUT_MS = 4000;
+
+// AI/Model constants
+const AI_MAX_TOKENS = 4000;
+const AI_MAX_TOKENS_SMALL = 1000;
+const AI_MAX_TOKENS_MEDIUM = 1500;
+const AI_MAX_TOKENS_STANDARD = 2000;
+const AI_MAX_TOKENS_LARGE = 2500;
+
+// Simulation constants
+const MONTE_CARLO_ITERATIONS = 10000;
+const TRADING_DAYS_PER_YEAR = 252;
+
 // Risk protection configuration
 const RISK_PROTECTION_CONFIG = {
   maxProbabilityOfLoss: 15, // Maximum allowed probability of loss (%)
@@ -867,7 +888,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     try {
       const response = await openRouterService.chat(messages, this.vibeModel, {
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: AI_MAX_TOKENS,
       });
 
       // Parse the AI response
@@ -1460,7 +1481,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
       let currentPortfolio = await Promise.race([
         this.enrichWithMarketDataFast(portfolioStructure),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Market data fetch timeout')), 20000)
+          setTimeout(() => reject(new Error('Market data fetch timeout')), MARKET_DATA_TIMEOUT_MS)
         )
       ]);
       
@@ -1736,7 +1757,7 @@ Suggest better alternatives with similar exposure.`
     try {
       const response = await openRouterService.chat(messages, this.vibeModel, {
         temperature: 0.5,
-        max_tokens: 1000,
+        max_tokens: AI_MAX_TOKENS_SMALL,
       });
       
       const replacements = this.parseReplacementAssets(response);
@@ -1787,11 +1808,11 @@ Suggest better alternatives with similar exposure.`
       const [pricesResult, quantResult] = await Promise.allSettled([
         Promise.race([
           marketDataService.getCurrentPricesBatch(symbols),
-          new Promise<Record<string, number>>((resolve) => setTimeout(() => resolve({}), 5000))
+          new Promise<Record<string, number>>((resolve) => setTimeout(() => resolve({}), REPLACEMENT_ENRICHMENT_TIMEOUT_MS))
         ]),
         Promise.race([
           marketDataService.getQuantMetricsBatch(symbols),
-          new Promise<QuantMetrics[]>((resolve) => setTimeout(() => resolve([]), 5000))
+          new Promise<QuantMetrics[]>((resolve) => setTimeout(() => resolve([]), REPLACEMENT_ENRICHMENT_TIMEOUT_MS))
         ]),
       ]);
       
@@ -1843,7 +1864,7 @@ Suggest better alternatives with similar exposure.`
 
     for await (const chunk of openRouterService.chatStream(messages, this.vibeModel, {
       temperature: 0.7,
-      max_tokens: 2500, // Reduced from 3000 for faster response
+      max_tokens: AI_MAX_TOKENS_LARGE, // Reduced from 3000 for faster response
     })) {
       if (!chunk.done) {
         yield chunk.content;
@@ -2165,7 +2186,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         try {
           response = await openRouterService.chat(messages, this.vibeModel, {
             temperature: 0.7,
-            max_tokens: 4000,
+            max_tokens: AI_MAX_TOKENS,
             response_format: { type: 'json_object' } // Enable JSON mode
           });
         } catch (error: unknown) {
@@ -2175,7 +2196,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             log.warn('Model does not support JSON mode, retrying without it...');
             response = await openRouterService.chat(messages, this.vibeModel, {
               temperature: 0.7,
-              max_tokens: 4000
+              max_tokens: AI_MAX_TOKENS
             });
           } else {
             throw error;
@@ -2347,25 +2368,25 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         // Core data with 8s timeout (prices are critical)
         Promise.race([
           marketDataService.getCurrentPricesBatch(symbols),
-          new Promise<Record<string, number>>((_, reject) => setTimeout(() => reject('timeout'), 8000))
+          new Promise<Record<string, number>>((_, reject) => setTimeout(() => reject('timeout'), PRICE_FETCH_TIMEOUT_MS))
         ]),
         // Quant metrics with 10s timeout
         Promise.race([
           marketDataService.getQuantMetricsBatch(symbols),
-          new Promise<QuantMetrics[]>((_, reject) => setTimeout(() => reject('timeout'), 10000))
+          new Promise<QuantMetrics[]>((_, reject) => setTimeout(() => reject('timeout'), QUANT_METRICS_TIMEOUT_MS))
         ]),
         // Optional data with 5s timeout - fail silently for speed
         Promise.race([
           fundamentalDataService.getBatchFundamentals(symbols),
-          new Promise<Record<string, FundamentalMetrics>>((resolve) => setTimeout(() => resolve({}), 5000))
+          new Promise<Record<string, FundamentalMetrics>>((resolve) => setTimeout(() => resolve({}), FUNDAMENTALS_TIMEOUT_MS))
         ]),
         Promise.race([
           newsService.getBatchSentiment(symbols),
-          new Promise<Record<string, SentimentAnalysis>>((resolve) => setTimeout(() => resolve({}), 4000))
+          new Promise<Record<string, SentimentAnalysis>>((resolve) => setTimeout(() => resolve({}), SENTIMENT_TIMEOUT_MS))
         ]),
         Promise.race([
           newsService.getBatchAnalystRatings(symbols),
-          new Promise<Record<string, AnalystRating>>((resolve) => setTimeout(() => resolve({}), 4000))
+          new Promise<Record<string, AnalystRating>>((resolve) => setTimeout(() => resolve({}), ANALYST_RATINGS_TIMEOUT_MS))
         ]),
       ]);
 
@@ -2619,7 +2640,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       // Fetch comprehensive fundamentals in batch
       const fundamentalsMap = await Promise.race([
         comprehensiveFundamentalsService.getBatchAnalysis(symbolsWithTypes),
-        new Promise<Record<string, ComprehensiveFundamentalAnalysis>>((resolve) => setTimeout(() => resolve({}), 15000))
+        new Promise<Record<string, ComprehensiveFundamentalAnalysis>>((resolve) => setTimeout(() => resolve({}), ENRICHMENT_TIMEOUT_MS))
       ]);
       
       // Enrich assets with fundamental data
@@ -2979,7 +3000,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       : 0;
 
     // Initial Monte Carlo simulation
-    let monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+    let monteCarloResult = this.runMonteCarlo(MONTE_CARLO_ITERATIONS, totalReturn, portfolioVolatility, TRADING_DAYS_PER_YEAR);
 
     // === RISK PROTECTION: Ensure low probability of loss ===
     let iterations = 0;
@@ -3046,7 +3067,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       const adjustedVolatility = portfolioVolatility * (1 - 0.1 * iterations);
       
       // Run Monte Carlo with adjusted parameters
-      monteCarloResult = this.runMonteCarlo(10000, totalReturn, adjustedVolatility, 252);
+      monteCarloResult = this.runMonteCarlo(MONTE_CARLO_ITERATIONS, totalReturn, adjustedVolatility, TRADING_DAYS_PER_YEAR);
     }
 
     // === RISK PROTECTION: Ensure positive expected returns ===
@@ -3054,7 +3075,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       // Boost expected return estimation conservatively (market historically returns ~7-10%)
       totalReturn = Math.max(totalReturn, 5); // Floor at 5%
       riskAdjustments.push('Adjusted expected return floor to ensure positive outlook');
-      monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+      monteCarloResult = this.runMonteCarlo(MONTE_CARLO_ITERATIONS, totalReturn, portfolioVolatility, TRADING_DAYS_PER_YEAR);
     }
 
     // === RISK PROTECTION: Ensure minimum Sharpe ratio ===
@@ -3072,7 +3093,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
       portfolioVolatility = RISK_PROTECTION_CONFIG.maxVolatility;
       totalReturn = totalReturn * volReductionFactor; // Conservative adjustment
       riskAdjustments.push(`Capped portfolio volatility to ${RISK_PROTECTION_CONFIG.maxVolatility}%`);
-      monteCarloResult = this.runMonteCarlo(10000, totalReturn, portfolioVolatility, 252);
+      monteCarloResult = this.runMonteCarlo(MONTE_CARLO_ITERATIONS, totalReturn, portfolioVolatility, TRADING_DAYS_PER_YEAR);
     }
 
     // Recalculate diversification score after adjustments
@@ -3359,7 +3380,7 @@ Be conversational but professional. Cite specific data points from the portfolio
 
     return openRouterService.chat(messages, this.vibeModel, {
       temperature: 0.8,
-      max_tokens: 1500
+      max_tokens: AI_MAX_TOKENS_MEDIUM
     });
   }
 
@@ -3402,7 +3423,7 @@ Provide specific rebalancing recommendations with:
 
     return openRouterService.chat(messages, this.vibeModel, {
       temperature: 0.6,
-      max_tokens: 2000
+      max_tokens: AI_MAX_TOKENS_STANDARD
     });
   }
 
@@ -3467,7 +3488,7 @@ Provide a comprehensive investment analysis with:
 
     return openRouterService.chat(messages, this.vibeModel, {
       temperature: 0.7,
-      max_tokens: 2500
+      max_tokens: AI_MAX_TOKENS_LARGE
     });
   }
 
@@ -3502,7 +3523,7 @@ Provide:
 
     return openRouterService.chat(messages, this.vibeModel, {
       temperature: 0.6,
-      max_tokens: 2000
+      max_tokens: AI_MAX_TOKENS_STANDARD
     });
   }
 

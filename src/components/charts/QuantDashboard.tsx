@@ -159,7 +159,8 @@ interface QuantDashboardProps {
   };
 }
 
-// Color schemes
+// Color schemes — hex values kept here because they are used for canvas/chart rendering
+// (e.g. Recharts) where CSS variables cannot be resolved.
 const COLORS = {
   primary: '#6366f1',
   success: '#10b981',
@@ -172,6 +173,7 @@ const COLORS = {
   gradient: ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef'],
 };
 
+// Hex values kept because Recharts/canvas cannot resolve CSS variables
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#3b82f6'];
 
 export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashboardProps) {
@@ -1085,12 +1087,12 @@ function MetricCard({ title, value, format, icon, color, description, trend }: M
 // Correlation Heatmap Component
 function CorrelationHeatmap({ data }: { data: CorrelationData }) {
   const getColor = (value: number) => {
-    if (value >= 0.7) return '#ef4444';
-    if (value >= 0.4) return '#f59e0b';
-    if (value >= 0.1) return '#10b981';
-    if (value >= -0.1) return '#6366f1';
-    if (value >= -0.4) return '#3b82f6';
-    return '#8b5cf6';
+    if (value >= 0.7) return 'var(--color-correlation-high)';
+    if (value >= 0.4) return 'var(--color-correlation-med)';
+    if (value >= 0.1) return 'var(--color-correlation-low)';
+    if (value >= -0.1) return 'var(--color-correlation-neutral)';
+    if (value >= -0.4) return 'var(--color-correlation-neg)';
+    return 'var(--color-correlation-strong-neg)';
   };
 
   return (

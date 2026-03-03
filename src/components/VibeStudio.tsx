@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, memo } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage } from "../services/openrouter";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
@@ -63,7 +63,7 @@ interface VibeStudioProps {
   onPortfolioLoaded?: () => void;
 }
 
-export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
+function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const { addToast } = useToast();
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -246,6 +246,7 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
   // Disabled preloading to avoid rate limit issues
   // Data is fetched on-demand when portfolio is generated
 
+  // Hex values kept because Recharts/canvas cannot resolve CSS variables
   const CHART_COLORS = ['#00e599', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
   const examplePrompts = [
@@ -824,7 +825,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
                     </strong>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    {generatedPortfolio.quantFeedbackSummary.actions.slice(0, 5).map((action, i) => (
+                    {generatedPortfolio.quantFeedbackSummary.actions.length === 0 ? (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No action items available</span>
+                    ) : generatedPortfolio.quantFeedbackSummary.actions.slice(0, 5).map((action, i) => (
                       <span key={i} style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{action}</span>
                     ))}
                     {generatedPortfolio.quantFeedbackSummary.actions.length > 5 && (
@@ -897,10 +900,10 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
                           style={{ 
                             width: `${((generatedPortfolio.activityLevel.score + 1) / 2) * 100}%`,
                             background: generatedPortfolio.activityLevel.score <= -0.2 
-                              ? 'linear-gradient(90deg, #22c55e, #4ade80)' 
+                              ? 'linear-gradient(90deg, var(--color-success), var(--color-success-light))' 
                               : generatedPortfolio.activityLevel.score <= 0.2 
-                                ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
-                                : 'linear-gradient(90deg, #ef4444, #f87171)'
+                                ? 'linear-gradient(90deg, var(--color-warning), var(--color-warning-light))'
+                                : 'linear-gradient(90deg, var(--color-danger), var(--color-danger-light))'
                           }}
                         />
                       </div>
@@ -984,7 +987,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
                     <div className="th">Analyst</div>
                     <div className="th">Sentiment</div>
                   </div>
-                  {generatedPortfolio.assets.map((asset, i) => (
+                  {generatedPortfolio.assets.length === 0 ? (
+                    <p className="empty-state" style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No assets in portfolio</p>
+                  ) : generatedPortfolio.assets.map((asset, i) => (
                     <div key={i} className="table-row">
                       <div className="td symbol">
                         {asset.symbol}
@@ -1372,7 +1377,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
                     overflowY: 'auto'
                   }}>
                     <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>All Adjustments Made:</h4>
-                    {generatedPortfolio.quantFeedbackSummary.actions.map((action, i) => (
+                    {generatedPortfolio.quantFeedbackSummary.actions.length === 0 ? (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>No action items available</p>
+                    ) : generatedPortfolio.quantFeedbackSummary.actions.map((action, i) => (
                       <div key={i} style={{ 
                         fontSize: '0.85rem', 
                         padding: '0.25rem 0',
@@ -1550,7 +1557,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
             <div className="detail-card full-width" ref={tickerAnalysisRef}>
               <h3><Eye size={20} /> Individual Ticker Analysis</h3>
               <div className="all-tickers-analysis">
-                {generatedPortfolio.assets.map((asset) => (
+                {generatedPortfolio.assets.length === 0 ? (
+                  <p className="empty-state" style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No assets to analyze</p>
+                ) : generatedPortfolio.assets.map((asset) => (
                   <TickerAnalysis
                     key={asset.symbol}
                     symbol={asset.symbol}
@@ -1634,7 +1643,9 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
               )}
               
               <div className="chat-messages">
-                {chatHistory.map((msg, i) => (
+                {chatHistory.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No messages yet. Start chatting to analyze your portfolio!</p>
+                ) : chatHistory.map((msg, i) => (
                   <div key={i} className={`chat-message ${msg.role}`}>
                     <strong>{msg.role === 'user' ? 'You' : 'AI'}</strong>
                     <p>{msg.content}</p>
@@ -1706,3 +1717,5 @@ export default function VibeStudio({ initialPortfolio, onPortfolioLoaded }: Vibe
     </div>
   );
 }
+
+export default memo(VibeStudio);

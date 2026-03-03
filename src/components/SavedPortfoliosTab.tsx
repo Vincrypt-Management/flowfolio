@@ -3,7 +3,7 @@
  * Displays all saved portfolios with options to load, view, and delete
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { invoke } from '../services/tauri';
 import { GeneratedPortfolio } from '../services/portfolioAgent';
 import { useToast } from './Toast';
@@ -329,4 +329,4 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
   );
 }
 
-export default SavedPortfoliosTab;
+export default memo(SavedPortfoliosTab);

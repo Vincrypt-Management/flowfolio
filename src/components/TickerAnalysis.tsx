@@ -36,6 +36,9 @@ import './TickerAnalysis.css';
 import { useAnalysisReport } from '../hooks/useAnalysisReport';
 import type { TickerAnalysisData } from '../services/analysisReport';
 
+// UI feedback duration (milliseconds)
+const COPY_FEEDBACK_DURATION_MS = 2000;
+
 interface TickerAnalysisProps {
   symbol: string;
   onClose: () => void;
@@ -309,7 +312,7 @@ export default function TickerAnalysis({
     if (markdown) {
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
     }
   };
 
@@ -334,9 +337,9 @@ export default function TickerAnalysis({
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 70) return '#22c55e';
-    if (score >= 50) return '#f59e0b';
-    return '#ef4444';
+    if (score >= 70) return 'var(--color-success)';
+    if (score >= 50) return 'var(--color-warning)';
+    return 'var(--color-danger)';
   };
 
   const getSignalClass = (signal: string) => {

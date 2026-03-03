@@ -134,19 +134,19 @@ export function JournalTab() {
   const getEventColor = (eventType: string) => {
     switch (eventType) {
       case "trade_decision":
-        return "#2196f3";
+        return "var(--color-trade)";
       case "strategy_change":
-        return "#ff9800";
+        return "var(--color-strategy)";
       case "rebalance":
-        return "#9c27b0";
+        return "var(--color-rebalance)";
       case "review":
-        return "#4caf50";
+        return "var(--color-review)";
       case "reflection":
-        return "#607d8b";
+        return "var(--color-reflection)";
       case "strategy_creation":
-        return "#e91e63";
+        return "var(--color-creation)";
       default:
-        return "#757575";
+        return "var(--color-neutral)";
     }
   };
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useRef, memo, type ReactNode } from "react";
 
 type ToastType = "success" | "error" | "warning" | "info";
 
@@ -50,7 +50,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
+const ToastContainer = memo(function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
   if (toasts.length === 0) return null;
 
   return (
@@ -74,7 +74,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
       ))}
     </div>
   );
-}
+});
 
 function getIcon(type: ToastType): string {
   switch (type) {

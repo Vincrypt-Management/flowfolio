@@ -82,9 +82,9 @@ export function LiveProgressPanel({ progress, totalHoldings, totalCandidates }: 
   const getSignalColor = (signal: string) => {
     switch (signal) {
       case "STRONG BUY": return "var(--success)";
-      case "BUY": return "#22c55e";
+      case "BUY": return "var(--color-buy)";
       case "HOLD": return "var(--text-muted)";
-      case "SELL": return "#f97316";
+      case "SELL": return "var(--color-sell)";
       case "STRONG SELL": return "var(--error)";
       default: return "var(--text-muted)";
     }

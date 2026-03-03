@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, memo } from "react";
 import { invoke } from "../services/tauri";
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { LiveProgressPanel } from "./LiveProgressPanel";
@@ -220,9 +220,9 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
   function getGradeColor(grade: string): string {
     switch (grade) {
       case "A": return "var(--success)";
-      case "B": return "#22c55e";
+      case "B": return "var(--color-success)";
       case "C": return "var(--warning)";
-      case "D": return "#f97316";
+      case "D": return "var(--color-sell)";
       case "F": return "var(--error)";
       default: return "var(--text-muted)";
     }
@@ -735,4 +735,4 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
   );
 }
 
-export default PortfolioOptimizerComponent;
+export default memo(PortfolioOptimizerComponent);
