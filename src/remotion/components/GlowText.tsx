@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 
 interface GlowTextProps {
@@ -21,13 +21,15 @@ export const GlowText: React.FC<GlowTextProps> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  const opacity = interpolate(frame - delay, [0, 22], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 39], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const y = interpolate(frame - delay, [0, 22], [8, 0], {
+  const y = interpolate(frame - delay, [0, 39], [8, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (

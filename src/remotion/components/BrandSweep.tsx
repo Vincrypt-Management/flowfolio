@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame, Easing } from 'remotion';
 import { colors } from '../styles';
 
 /**
@@ -23,6 +23,7 @@ export const BrandSweep: React.FC<BrandSweepProps> = ({
   const sweepX = interpolate(frame, [0, mid, durationInFrames], [-120, 50, 220], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Overall opacity: fade in → peak → fade out
@@ -30,7 +31,7 @@ export const BrandSweep: React.FC<BrandSweepProps> = ({
     frame,
     [0, mid * 0.4, mid, mid * 1.6, durationInFrames],
     [0, 1, 1, 1, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
 
   // Flash bloom at midpoint
@@ -38,13 +39,14 @@ export const BrandSweep: React.FC<BrandSweepProps> = ({
     frame,
     [mid - 8, mid, mid + 8],
     [0, 0.25, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
 
   // Thin accent line that leads the sweep
   const lineX = interpolate(frame, [0, durationInFrames], [-50, 250], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (

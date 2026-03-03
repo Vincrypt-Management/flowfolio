@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sequence, interpolate, useVideoConfig } from 'remotion';
+import { Sequence, interpolate, useVideoConfig , Easing } from 'remotion';
 import { Audio } from '@remotion/media';
 import { staticFile } from 'remotion';
 import type { NarrationSegment } from '../lib/narrationScripts';
@@ -38,10 +38,12 @@ export const VoiceOver: React.FC<VoiceOverProps> = ({
                 const vIn = interpolate(f, [0, fadeIn], [0, 1], {
                   extrapolateLeft: 'clamp',
                   extrapolateRight: 'clamp',
+                easing: Easing.out(Easing.cubic),
                 });
                 const vOut = interpolate(f, [totalFrames - fadeOut, totalFrames], [1, 0], {
                   extrapolateLeft: 'clamp',
                   extrapolateRight: 'clamp',
+                easing: Easing.out(Easing.cubic),
                 });
                 return volume * Math.min(vIn, vOut);
               }}

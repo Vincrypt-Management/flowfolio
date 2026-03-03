@@ -4,8 +4,7 @@ import {
   interpolate,
   spring,
   useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+  useVideoConfig, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { GlassCard } from '../components/GlassCard';
@@ -134,7 +133,7 @@ export const JournalDemo: React.FC = () => {
   ];
 
   return (
-    <SceneTransition durationInFrames={200}>
+    <SceneTransition durationInFrames={400}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={4} />
@@ -148,7 +147,7 @@ export const JournalDemo: React.FC = () => {
               gap: 22,
             }}
           >
-            {/* Header */}
+            {/* Header — gentle float up with quick timing */}
             <div>
               <div
                 style={{
@@ -158,10 +157,12 @@ export const JournalDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [10, 49], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [10, 49], [8, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Journal
@@ -173,13 +174,15 @@ export const JournalDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [16, 55], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [16, 55], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Investment Journal
+                Decision Log
               </div>
               <div
                 style={{
@@ -187,13 +190,15 @@ export const JournalDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [24, 63], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [24, 63], [6, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Track decisions, reflect on strategy, and build an investment record
+                Structured trade rationale, post-mortems, and strategy evolution tracking
               </div>
             </div>
 
@@ -201,14 +206,16 @@ export const JournalDemo: React.FC = () => {
               {/* Timeline entries */}
               <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {entries.map((entry, i) => {
-                  const entryDelay = 25 + i * 18;
-                  const entryOp = interpolate(frame - entryDelay, [0, 16], [0, 1], {
+                  const entryDelay = 60 + i * 44;
+                  const entryOp = interpolate(frame - entryDelay, [0, 30], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
-                  const entryX = interpolate(frame - entryDelay, [0, 16], [-20, 0], {
+                  const entryX = interpolate(frame - entryDelay, [0, 30], [-20, 0], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
 
                   return (
@@ -284,15 +291,16 @@ export const JournalDemo: React.FC = () => {
               <div style={{ flex: 0.7, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {/* Stat cards */}
                 {dynamicStats.map((s, i) => {
-                  const sDelay = 40 + i * 12;
+                  const sDelay = 110 + i * 32;
                   const sScale = spring({
                     frame: Math.max(0, frame - sDelay),
                     fps,
                     config: { damping: 14, stiffness: 120, mass: 0.4 },
                   });
-                  const sOp = interpolate(frame - sDelay, [0, 12], [0, 1], {
+                  const sOp = interpolate(frame - sDelay, [0, 30], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
 
                   return (
@@ -318,20 +326,22 @@ export const JournalDemo: React.FC = () => {
                 })}
 
                 {/* Entries by type bar chart */}
-                <GlassCard delay={70} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <GlassCard delay={170} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
                     Entries by Type
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {typeBars.map((bar, i) => {
-                      const barDelay = 85 + i * 8;
+                      const barDelay = 200 + i * 20;
                       const barWidth = interpolate(frame - barDelay, [0, 30], [0, (bar.count / 14) * 100], {
                         extrapolateLeft: 'clamp',
                         extrapolateRight: 'clamp',
+                      easing: Easing.out(Easing.cubic),
                       });
-                      const barOp = interpolate(frame - barDelay, [0, 10], [0, 1], {
+                      const barOp = interpolate(frame - barDelay, [0, 30], [0, 1], {
                         extrapolateLeft: 'clamp',
                         extrapolateRight: 'clamp',
+                      easing: Easing.out(Easing.cubic),
                       });
 
                       return (

@@ -2,8 +2,7 @@ import React from 'react';
 import {
   AbsoluteFill,
   interpolate,
-  useCurrentFrame,
-} from 'remotion';
+  useCurrentFrame, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { GlassCard } from '../components/GlassCard';
@@ -55,13 +54,13 @@ export const AIChatDemo: React.FC = () => {
   }));
 
   // Typing indicator dots
-  const dotCycle = frame % 30;
-  const dot1 = dotCycle < 10 ? 1 : 0.3;
-  const dot2 = dotCycle >= 10 && dotCycle < 20 ? 1 : 0.3;
-  const dot3 = dotCycle >= 20 ? 1 : 0.3;
+  const dotCycle = frame % 60;
+  const dot1 = dotCycle < 20 ? 1 : 0.3;
+  const dot2 = dotCycle >= 20 && dotCycle < 40 ? 1 : 0.3;
+  const dot3 = dotCycle >= 40 ? 1 : 0.3;
 
   return (
-    <SceneTransition durationInFrames={200}>
+    <SceneTransition durationInFrames={400}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={0} />
@@ -75,7 +74,7 @@ export const AIChatDemo: React.FC = () => {
               gap: 22,
             }}
           >
-            {/* Header */}
+            {/* Header — slide-in from left */}
             <div>
               <div
                 style={{
@@ -85,10 +84,12 @@ export const AIChatDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [16, 49], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateX(${interpolate(frame, [16, 49], [-20, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 AI Portfolio Agent
@@ -100,10 +101,12 @@ export const AIChatDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [24, 63], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateX(${interpolate(frame, [24, 63], [-15, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Chat with Your Portfolio
@@ -114,30 +117,34 @@ export const AIChatDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [34, 64], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateX(${interpolate(frame, [34, 64], [-10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Ask natural language questions about your holdings, risk, and strategy
+                Ask natural language questions about holdings, exposure, and risk posture
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 22, flex: 1 }}>
               {/* Chat messages */}
-              <GlassCard delay={15} style={{ flex: 2, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }} glowColor={colors.accentDim20}>
+              <GlassCard delay={30} style={{ flex: 2, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }} glowColor={colors.accentDim20}>
                 {/* Chat area */}
                 <div style={{ flex: 1, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
                   {conversation.map((msg, i) => {
-                    const msgDelay = 25 + i * 30;
-                    const msgOp = interpolate(frame - msgDelay, [0, 18], [0, 1], {
+                    const msgDelay = 60 + i * 72;
+                    const msgOp = interpolate(frame - msgDelay, [0, 32], [0, 1], {
                       extrapolateLeft: 'clamp',
                       extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
                     });
-                    const msgY = interpolate(frame - msgDelay, [0, 18], [15, 0], {
+                    const msgY = interpolate(frame - msgDelay, [0, 32], [15, 0], {
                       extrapolateLeft: 'clamp',
                       extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
                     });
 
                     const isUser = msg.role === 'user';
@@ -191,12 +198,13 @@ export const AIChatDemo: React.FC = () => {
                   })}
 
                   {/* Typing indicator (appears after last message) */}
-                  {frame > 140 && (
+                  {frame > 300 && (
                     <div
                       style={{
-                        opacity: interpolate(frame, [140, 150], [0, 1], {
+                        opacity: interpolate(frame, [300, 336], [0, 1], {
                           extrapolateLeft: 'clamp',
                           extrapolateRight: 'clamp',
+                        easing: Easing.out(Easing.cubic),
                         }),
                         display: 'flex',
                         alignItems: 'flex-start',
@@ -280,16 +288,22 @@ export const AIChatDemo: React.FC = () => {
 
               {/* Chat history sidebar */}
               <div style={{ flex: 0.65, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <GlassCard delay={30} style={{ display: 'flex', flexDirection: 'column' }}>
+                <GlassCard delay={80} style={{ display: 'flex', flexDirection: 'column' }}>
                   <div style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>
                     Saved Conversations
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {historyItems.map((item, i) => {
-                      const hDelay = 50 + i * 14;
-                      const hOp = interpolate(frame - hDelay, [0, 14], [0, 1], {
+                      const hDelay = 120 + i * 36;
+                      const hOp = interpolate(frame - hDelay, [0, 35], [0, 1], {
                         extrapolateLeft: 'clamp',
                         extrapolateRight: 'clamp',
+                      easing: Easing.out(Easing.cubic),
+                      });
+                      const hX = interpolate(frame - hDelay, [0, 35], [12, 0], {
+                        extrapolateLeft: 'clamp',
+                        extrapolateRight: 'clamp',
+                      easing: Easing.out(Easing.cubic),
                       });
 
                       return (
@@ -301,6 +315,7 @@ export const AIChatDemo: React.FC = () => {
                             background: i === 0 ? `${colors.accent}08` : 'rgba(255,255,255,0.03)',
                             border: `1px solid ${i === 0 ? colors.accentDim20 : colors.glassBorder}`,
                             opacity: hOp,
+                            transform: `translateX(${hX}px)`,
                           }}
                         >
                           <div style={{ fontSize: 12, fontFamily: fonts.sans, color: colors.text, fontWeight: 500, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -322,15 +337,16 @@ export const AIChatDemo: React.FC = () => {
                 </GlassCard>
 
                 {/* AI capabilities badges */}
-                <GlassCard delay={80} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <GlassCard delay={200} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.textDim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
                     AI Capabilities
                   </div>
                   {['Portfolio analysis', 'Risk assessment', 'Rebalancing advice', 'Market research'].map((cap, i) => {
-                    const cDelay = 95 + i * 8;
-                    const cOp = interpolate(frame - cDelay, [0, 10], [0, 1], {
+                    const cDelay = 230 + i * 20;
+                    const cOp = interpolate(frame - cDelay, [0, 30], [0, 1], {
                       extrapolateLeft: 'clamp',
                       extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
                     });
                     return (
                       <div

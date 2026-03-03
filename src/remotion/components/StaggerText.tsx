@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 
 /**
@@ -47,13 +47,15 @@ export const StaggerText: React.FC<StaggerTextProps> = ({
     >
       {units.map((unit, i) => {
         const unitDelay = delay + i * (mode === 'chars' ? 1.5 : 4);
-        const op = interpolate(frame - unitDelay, [0, 14], [0, 1], {
+        const op = interpolate(frame - unitDelay, [0, 35], [0, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         });
-        const y = interpolate(frame - unitDelay, [0, 14], [8, 0], {
+        const y = interpolate(frame - unitDelay, [0, 35], [8, 0], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         });
 
         return (

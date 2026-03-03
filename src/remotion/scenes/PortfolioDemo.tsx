@@ -2,8 +2,7 @@ import React from 'react';
 import {
   AbsoluteFill,
   interpolate,
-  useCurrentFrame,
-} from 'remotion';
+  useCurrentFrame, Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { AnimatedChart } from '../components/AnimatedChart';
@@ -34,9 +33,10 @@ export const PortfolioDemo: React.FC = () => {
   }));
 
   // Pie chart animation
-  const pieProgress = interpolate(frame, [30, 90], [0, 1], {
+  const pieProgress = interpolate(frame, [60, 180], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   const pieSize = 200;
@@ -68,7 +68,7 @@ export const PortfolioDemo: React.FC = () => {
   });
 
   return (
-    <SceneTransition durationInFrames={230}>
+    <SceneTransition durationInFrames={460}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={1} />
@@ -82,7 +82,7 @@ export const PortfolioDemo: React.FC = () => {
               gap: 22,
             }}
           >
-            {/* Header */}
+            {/* Header — spring scale bounce */}
             <div>
               <div
                 style={{
@@ -92,9 +92,10 @@ export const PortfolioDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [12, 48], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
                 }}
               >
@@ -107,13 +108,16 @@ export const PortfolioDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [20, 59], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `scale(${interpolate(frame, [20, 59], [1.04, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })})`,
+                  transformOrigin: 'left center',
                 }}
               >
-                Portfolio Dashboard
+                Holdings & Allocation
               </div>
               <div
                 style={{
@@ -121,28 +125,29 @@ export const PortfolioDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [32, 71], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
                 }}
               >
-                Real-time holdings, allocation breakdown, and performance tracking
+                Real-time NAV, sector allocation breakdown, and risk-adjusted performance
               </div>
             </div>
 
             {/* Metrics */}
             <div style={{ display: 'flex', gap: 14 }}>
-              <MetricCard label="Total Value" value={Math.round(data.totalValue)} prefix="$" delay={15} color={colors.text} />
-              <MetricCard label="Total Return" value={Math.round(data.totalReturn * 10) / 10} suffix="%" decimals={1} delay={22} color={colors.primary} />
-              <MetricCard label="Daily P&L" value={Math.round(data.dayChange * 1000)} prefix="+$" delay={29} color={colors.primary} />
-              <MetricCard label="Sharpe Ratio" value={Math.round(data.sharpeRatio * 100) / 100} decimals={2} delay={36} color={colors.accent} />
+              <MetricCard label="Total Value" value={Math.round(data.totalValue)} prefix="$" delay={40} color={colors.text} />
+              <MetricCard label="Total Return" value={Math.round(data.totalReturn * 10) / 10} suffix="%" decimals={1} delay={60} color={colors.primary} />
+              <MetricCard label="Daily P&L" value={Math.round(data.dayChange * 1000)} prefix="+$" delay={80} color={colors.primary} />
+              <MetricCard label="Sharpe Ratio" value={Math.round(data.sharpeRatio * 100) / 100} decimals={2} delay={100} color={colors.accent} />
             </div>
 
             {/* Charts row */}
             <div style={{ display: 'flex', gap: 20, flex: 1 }}>
               {/* Performance chart */}
-              <GlassCard delay={20} style={{ flex: 2, display: 'flex', flexDirection: 'column' }} glowColor={colors.primaryDim20}>
+              <GlassCard delay={70} style={{ flex: 2, display: 'flex', flexDirection: 'column' }} glowColor={colors.primaryDim20}>
                 <div
                   style={{
                     fontSize: 12,
@@ -160,13 +165,13 @@ export const PortfolioDemo: React.FC = () => {
                   data={perfData}
                   width={700}
                   height={310}
-                  delay={25}
+                  delay={90}
                   duration={100}
                 />
               </GlassCard>
 
               {/* Allocation donut */}
-              <GlassCard delay={30} style={{ flex: 0.9, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <GlassCard delay={100} style={{ flex: 0.9, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div
                   style={{
                     fontSize: 12,
@@ -201,12 +206,18 @@ export const PortfolioDemo: React.FC = () => {
                 {/* Legend */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 14, width: '100%' }}>
                   {allocations.map((a, i) => {
-                    const lo = interpolate(frame, [65 + i * 8, 78 + i * 8], [0, 1], {
+                    const lo = interpolate(frame, [80 + i * 10, 95 + i * 10], [0, 1], {
                       extrapolateLeft: 'clamp',
                       extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
+                    });
+                    const lY = interpolate(frame, [80 + i * 10, 95 + i * 10], [6, 0], {
+                      extrapolateLeft: 'clamp',
+                      extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
                     });
                     return (
-                      <div key={a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: lo }}>
+                      <div key={a.name} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: lo, transform: `translateY(${lY}px)` }}>
                         <div style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: a.color }} />
                         <span style={{ fontSize: 11, color: colors.textMuted, fontFamily: fonts.mono, flex: 1 }}>
                           {a.name}

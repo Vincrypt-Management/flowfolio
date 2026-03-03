@@ -28,8 +28,8 @@ interface AudioTrackProps {
 export const AudioTrack: React.FC<AudioTrackProps> = ({
   generator,
   volume = 0.7,
-  fadeInFrames = 15,
-  fadeOutFrames = 20,
+  fadeInFrames = 30,
+  fadeOutFrames = 40,
 }) => {
   const [handle] = useState(() => delayRender('Generating audio...'));
   const [audioSrc, setAudioSrc] = useState<string | null>(null);

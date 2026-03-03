@@ -1,6 +1,6 @@
 [package]
 name = "flowfolio"
-version = "0.1.0"
+version = "0.2.0"
 description = "FlowFolio - AI-Powered Vibe-Based Investing"
 authors = ["evintleovonzko"]
 edition = "2021"
@@ -71,3 +71,10 @@ base64 = "0.22"                                          # Base64 encoding
 
 [target.'cfg(target_os = "ios")'.dependencies]
 # iOS-specific dependencies if needed
+
+[profile.release]
+lto = true              # Full link-time optimization — biggest size reduction
+codegen-units = 1        # Single codegen unit for maximum optimization
+strip = true             # Strip debug symbols from binary
+opt-level = "s"          # Optimize for size over speed
+panic = "abort"          # Remove unwinding machinery

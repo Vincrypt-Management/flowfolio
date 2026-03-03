@@ -5,7 +5,8 @@
 //! encryption (AES-256-GCM + ChaCha20-Poly1305) for 512-bit equivalent security.
 //!
 //! In debug mode, plain .env files are used for convenience.
-//! In release mode, encrypted .env.encrypted files are decrypted at runtime.
+//! In release mode, the encrypted payload is embedded in the binary at compile time
+//! via include_str! — no separate .env.encrypted file is needed.
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -28,6 +29,9 @@ const AES_NONCE: &[u8; 12] = b"FlowFoNonce!";
 
 /// ChaCha20 nonce (12 bytes)
 const CHACHA_NONCE: &[u8; 12] = b"ChaCha20Nonc";
+
+/// Encrypted env payload embedded at compile time from ../.env.encrypted
+const EMBEDDED_ENCRYPTED_ENV: &str = include_str!("../../../.env.encrypted");
 
 /// Encrypt a string using dual-layer encryption (AES-256-GCM + ChaCha20-Poly1305)
 /// This provides 512-bit equivalent security
@@ -127,8 +131,8 @@ pub fn parse_env_content(content: &str) -> Result<HashMap<String, String>, Strin
     Ok(vars)
 }
 
-/// Load environment variables from encrypted file or fallback to plain .env
-pub fn load_encrypted_env(app_data_dir: Option<&std::path::Path>) -> Result<(), String> {
+/// Load environment variables from the embedded encrypted payload or plain .env (debug)
+pub fn load_encrypted_env(_app_data_dir: Option<&std::path::Path>) -> Result<(), String> {
     // In debug mode, use plain .env
     #[cfg(debug_assertions)]
     {
@@ -144,83 +148,28 @@ pub fn load_encrypted_env(app_data_dir: Option<&std::path::Path>) -> Result<(), 
         }
     }
     
-    // In release mode, try encrypted file first
+    // In release mode, decrypt the embedded payload
     #[cfg(not(debug_assertions))]
     {
-        // Try app data directory first
-        if let Some(data_dir) = app_data_dir {
-            let encrypted_path = data_dir.join(".env.encrypted");
-            if encrypted_path.exists() {
-                return load_from_encrypted_file(&encrypted_path);
-            }
-        }
-        
-        // Try executable directory and platform-specific resource paths
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                // Same directory as executable (all platforms)
-                let encrypted_path = exe_dir.join(".env.encrypted");
-                if encrypted_path.exists() {
-                    return load_from_encrypted_file(&encrypted_path);
-                }
-                
-                // macOS: AppName.app/Contents/Resources/
-                #[cfg(target_os = "macos")]
-                {
-                    if let Some(res_path) = exe_dir.parent()
-                        .map(|p| p.join("Resources").join(".env.encrypted"))
-                    {
-                        if res_path.exists() {
-                            return load_from_encrypted_file(&res_path);
-                        }
-                    }
-                }
-
-                // Windows: resources/ subfolder next to exe (Tauri 2 NSIS/MSI bundle)
-                #[cfg(target_os = "windows")]
-                {
-                    let win_res_path = exe_dir.join("resources").join(".env.encrypted");
-                    if win_res_path.exists() {
-                        return load_from_encrypted_file(&win_res_path);
-                    }
-                }
-
-                // Linux: ../lib/{identifier}/ or ../share/{identifier}/
-                #[cfg(target_os = "linux")]
-                {
-                    let identifier = "com.evintleovonzko.flowfolio";
-                    let linux_candidates = [
-                        exe_dir.parent().map(|p| p.join("lib").join(identifier).join(".env.encrypted")),
-                        exe_dir.parent().map(|p| p.join("share").join(identifier).join(".env.encrypted")),
-                        Some(exe_dir.join("resources").join(".env.encrypted")),
-                    ];
-                    for candidate in linux_candidates.iter().flatten() {
-                        if candidate.exists() {
-                            return load_from_encrypted_file(candidate);
-                        }
-                    }
-                }
-            }
-        }
-        
-        eprintln!("[WARN] [env] No encrypted env file found, some features may be unavailable");
+        load_embedded_env()?;
     }
     
     Ok(())
 }
 
-/// Load and decrypt environment variables from an encrypted file
-fn load_from_encrypted_file(path: &std::path::Path) -> Result<(), String> {
-    let encrypted_content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read encrypted env: {}", e))?;
+/// Decrypt the compile-time embedded encrypted env and set as environment variables
+pub fn load_embedded_env() -> Result<(), String> {
+    let encrypted_content = EMBEDDED_ENCRYPTED_ENV.trim();
+    let vars = decrypt_env_file(encrypted_content)?;
     
-    let vars = decrypt_env_file(&encrypted_content)?;
-    
-    for (key, value) in vars {
-        std::env::set_var(&key, &value);
+    for (key, value) in &vars {
+        std::env::set_var(key, value);
     }
     
-    eprintln!("[INFO] [env] Loaded encrypted environment from {:?} (512-bit dual-layer)", path);
+    eprintln!(
+        "[INFO] [env] Loaded {} embedded encrypted env vars (512-bit dual-layer)",
+        vars.len()
+    );
     Ok(())
 }
 

@@ -7,9 +7,11 @@ import {
   staticFile,
   useCurrentFrame,
   useVideoConfig,
+  Easing,
 } from 'remotion';
 import { colors, fonts } from '../styles';
 import { SceneTransition } from '../components/SceneTransition';
+import { PopWord } from '../components/PopWord';
 
 /**
  * Clean logo reveal — one element at a time.
@@ -27,9 +29,10 @@ export const LogoReveal: React.FC = () => {
     config: { damping: 20, stiffness: 80, mass: 0.8 },
   });
   const logoScale = interpolate(logoSpring, [0, 1], [0.8, 1]);
-  const logoOp = interpolate(frame, [0, 20], [0, 1], {
+  const logoOp = interpolate(frame, [0, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Glow bloom intensity ramps up with logo
@@ -41,17 +44,19 @@ export const LogoReveal: React.FC = () => {
   const wordStart = 25;
 
   // Tagline — last to appear
-  const tagOp = interpolate(frame, [60, 80], [0, 1], {
+  const tagOp = interpolate(frame, [120, 160], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const tagY = interpolate(frame, [60, 80], [6, 0], {
+  const tagY = interpolate(frame, [120, 160], [6, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (
-    <SceneTransition durationInFrames={125} fadeInDuration={12} fadeOutDuration={18}>
+    <SceneTransition durationInFrames={250} fadeInDuration={24} fadeOutDuration={36}>
     <AbsoluteFill
       style={{
         justifyContent: 'center',
@@ -97,10 +102,12 @@ export const LogoReveal: React.FC = () => {
             const charOp = interpolate(frame, [charStart, charStart + 8], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
             const charY = interpolate(frame, [charStart, charStart + 8], [10, 0], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
             const isPrimary = i >= 4; // "Folio" in primary color
 
@@ -128,19 +135,26 @@ export const LogoReveal: React.FC = () => {
         </div>
 
         {/* Tagline */}
-        <span
+        <div
           style={{
             fontSize: 18,
-            color: colors.textMuted,
-            fontFamily: fonts.sans,
             fontWeight: 500,
             letterSpacing: '-0.01em',
             opacity: tagOp,
             transform: `translateY(${tagY}px)`,
+            display: 'flex',
+            gap: 7,
+            fontFamily: fonts.sans,
           }}
         >
-          Quantitative investing, beautifully simple
-        </span>
+          <span style={{ color: colors.textMuted }}>Quantitative investing,</span>
+          <PopWord delay={136} effect="glow-pulse" color={colors.primary}>
+            beautifully
+          </PopWord>
+          <PopWord delay={144} effect="elastic" color={colors.primaryBright}>
+            simple
+          </PopWord>
+        </div>
 
         {/* Sub-tagline */}
         <span
@@ -150,9 +164,10 @@ export const LogoReveal: React.FC = () => {
             fontFamily: fonts.mono,
             fontWeight: 400,
             letterSpacing: '0.02em',
-            opacity: interpolate(frame, [70, 90], [0, 1], {
+            opacity: interpolate(frame, [140, 180], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             }),
           }}
         >

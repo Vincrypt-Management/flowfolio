@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { AnimatedNumber } from './AnimatedNumber';
 
@@ -25,13 +25,15 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  const opacity = interpolate(frame - delay, [0, 18], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 36], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const y = interpolate(frame - delay, [0, 18], [8, 0], {
+  const y = interpolate(frame - delay, [0, 36], [8, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (
@@ -65,7 +67,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         prefix={prefix}
         suffix={suffix}
         decimals={decimals}
-        delay={delay + 10}
+        delay={delay + 20}
         fontSize={28}
         color={color}
       />

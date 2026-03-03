@@ -3,9 +3,11 @@ import {
   AbsoluteFill,
   interpolate,
   useCurrentFrame,
+  Easing,
 } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { SceneTransition } from '../components/SceneTransition';
+import { PopWord } from '../components/PopWord';
 
 const platforms = [
   {
@@ -50,17 +52,19 @@ const platforms = [
 export const Platforms: React.FC = () => {
   const frame = useCurrentFrame();
 
-  const titleOp = interpolate(frame, [5, 25], [0, 1], {
+  const titleOp = interpolate(frame, [10, 50], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const titleY = interpolate(frame, [5, 25], [10, 0], {
+  const titleY = interpolate(frame, [10, 50], [10, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (
-    <SceneTransition durationInFrames={130}>
+    <SceneTransition durationInFrames={260}>
       <AbsoluteFill
         style={{
           justifyContent: 'center',
@@ -83,19 +87,26 @@ export const Platforms: React.FC = () => {
               color: colors.text,
               fontFamily: fonts.sans,
               letterSpacing: '-0.03em',
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'center',
             }}
           >
-            Available everywhere
+            <span>Available</span>
+            <PopWord delay={36} effect="scale-pop" color={colors.primary}>
+              everywhere
+            </PopWord>
           </div>
         </div>
 
         {/* Platform icons — simple row */}
-        <div style={{ display: 'flex', gap: 48, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 64, alignItems: 'center' }}>
           {platforms.map((p, i) => {
-            const start = 25 + i * 10;
+            const start = 60 + i * 36;
             const op = interpolate(frame, [start, start + 16], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
 
             return (
@@ -142,11 +153,12 @@ export const Platforms: React.FC = () => {
         <div
           style={{
             display: 'flex',
-            gap: 32,
-            marginTop: 44,
-            opacity: interpolate(frame, [55, 72], [0, 1], {
+            gap: 40,
+            marginTop: 56,
+            opacity: interpolate(frame, [150, 180], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             }),
           }}
         >
@@ -157,9 +169,10 @@ export const Platforms: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                opacity: interpolate(frame, [55 + i * 8, 68 + i * 8], [0, 1], {
+                opacity: interpolate(frame, [75 + i * 14, 90 + i * 14], [0, 1], {
                   extrapolateLeft: 'clamp',
                   extrapolateRight: 'clamp',
+                easing: Easing.out(Easing.cubic),
                 }),
               }}
             >

@@ -6,10 +6,10 @@ import {
   spring,
   staticFile,
   useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+  useVideoConfig, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { SceneTransition } from '../components/SceneTransition';
+import { PopWord } from '../components/PopWord';
 
 /**
  * Minimal closing CTA — logo, button, link.
@@ -24,23 +24,27 @@ export const Closing: React.FC = () => {
     fps,
     config: { damping: 20, stiffness: 80, mass: 0.8 },
   });
-  const logoOp = interpolate(frame, [0, 20], [0, 1], {
+  const logoOp = interpolate(frame, [0, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
-  const ctaOp = interpolate(frame, [30, 50], [0, 1], {
+  const ctaOp = interpolate(frame, [60, 100], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const ctaY = interpolate(frame, [30, 50], [10, 0], {
+  const ctaY = interpolate(frame, [60, 100], [10, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
-  const linkOp = interpolate(frame, [45, 62], [0, 1], {
+  const linkOp = interpolate(frame, [90, 124], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Pulsing CTA glow
@@ -48,11 +52,11 @@ export const Closing: React.FC = () => {
     Math.sin(frame / 15 * Math.PI * 2),
     [-1, 1],
     [0.15, 0.4],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
 
   return (
-    <SceneTransition durationInFrames={105} fadeInDuration={15} fadeOutDuration={20}>
+    <SceneTransition durationInFrames={210} fadeInDuration={30} fadeOutDuration={40}>
     <AbsoluteFill
       style={{
         justifyContent: 'center',
@@ -132,9 +136,15 @@ export const Closing: React.FC = () => {
               fontWeight: 600,
               color: colors.bg,
               fontFamily: fonts.sans,
+              display: 'flex',
+              gap: 6,
             }}
           >
-            Start Your Investing Story
+            <span>Start Your</span>
+            <PopWord delay={76} effect="elastic" color={colors.bg} style={{ textShadow: 'none' }}>
+              Investing
+            </PopWord>
+            <span>Story</span>
           </span>
         </div>
 

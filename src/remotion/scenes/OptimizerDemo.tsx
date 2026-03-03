@@ -4,8 +4,7 @@ import {
   interpolate,
   spring,
   useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+  useVideoConfig, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { GlassCard } from '../components/GlassCard';
@@ -48,17 +47,19 @@ export const OptimizerDemo: React.FC = () => {
   ];
 
   // Health score animation
-  const currentHealth = interpolate(frame, [30, 60], [0, data.currentScore], {
+  const currentHealth = interpolate(frame, [60, 120], [0, data.currentScore], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const projectedHealth = interpolate(frame, [50, 80], [0, data.projectedScore], {
+  const projectedHealth = interpolate(frame, [100, 160], [0, data.projectedScore], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (
-    <SceneTransition durationInFrames={220}>
+    <SceneTransition durationInFrames={440}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={1} />
@@ -69,10 +70,10 @@ export const OptimizerDemo: React.FC = () => {
               padding: '40px 44px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 18,
+              gap: 24,
             }}
           >
-            {/* Header */}
+            {/* Header — slide from right */}
             <div>
               <div
                 style={{
@@ -82,10 +83,12 @@ export const OptimizerDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [20, 53], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateX(${interpolate(frame, [20, 53], [20, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Optimizer
@@ -97,13 +100,15 @@ export const OptimizerDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [28, 67], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateX(${interpolate(frame, [28, 67], [15, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Portfolio Optimizer
+                Portfolio Rebalancer
               </div>
               <div
                 style={{
@@ -111,13 +116,15 @@ export const OptimizerDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [38, 68], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateX(${interpolate(frame, [38, 68], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                AI-powered suggestions to improve your portfolio health score
+                Factor-driven rebalancing with risk-adjusted replacement candidates
               </div>
             </div>
 
@@ -127,16 +134,17 @@ export const OptimizerDemo: React.FC = () => {
                 label="Current Health"
                 score={currentHealth}
                 frame={frame}
-                delay={20}
+                delay={56}
                 fps={fps}
                 scoreColor={currentHealth > 50 ? colors.amber : colors.rose}
               />
               {/* Arrow */}
               <div
                 style={{
-                  opacity: interpolate(frame, [55, 70], [0, 1], {
+                  opacity: interpolate(frame, [120, 150], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
                   display: 'flex',
                   flexDirection: 'column',
@@ -166,7 +174,7 @@ export const OptimizerDemo: React.FC = () => {
                 label="Projected Health"
                 score={projectedHealth}
                 frame={frame}
-                delay={35}
+                delay={90}
                 fps={fps}
                 scoreColor={colors.primary}
               />
@@ -175,11 +183,12 @@ export const OptimizerDemo: React.FC = () => {
               <div style={{ flex: 1 }} />
 
               {/* Holdings grades compact */}
-              <GlassCard delay={40} style={{ display: 'flex', gap: 12, padding: '16px 20px' }}>
+              <GlassCard delay={100} style={{ display: 'flex', gap: 12, padding: '16px 20px' }}>
                 {holdings.map((h, i) => {
-                  const ho = interpolate(frame - (50 + i * 8), [0, 12], [0, 1], {
+                  const ho = interpolate(frame - (120 + i * 20), [0, 33], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
                   return (
                     <div key={h.symbol} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: ho }}>
@@ -211,7 +220,7 @@ export const OptimizerDemo: React.FC = () => {
             {/* Bottom row: Drop + Replacements + Action plan */}
             <div style={{ display: 'flex', gap: 18, flex: 1 }}>
               {/* Underperformer to drop */}
-              <GlassCard delay={60} style={{ flex: 1, display: 'flex', flexDirection: 'column' }} glowColor="rgba(251, 113, 133, 0.1)">
+              <GlassCard delay={150} style={{ flex: 1, display: 'flex', flexDirection: 'column' }} glowColor="rgba(251, 113, 133, 0.1)">
                 <div style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.rose, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
                   Position to Drop
                 </div>
@@ -221,7 +230,7 @@ export const OptimizerDemo: React.FC = () => {
                     alignItems: 'center',
                     gap: 12,
                     marginBottom: 14,
-                    opacity: interpolate(frame, [75, 90], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
+                    opacity: interpolate(frame, [180, 210], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) }),
                   }}
                 >
                   <div style={{ fontSize: 22, fontFamily: fonts.mono, fontWeight: 800, color: colors.text }}>TSLA</div>
@@ -239,25 +248,25 @@ export const OptimizerDemo: React.FC = () => {
                     { k: 'Volatility', v: '52.1%' },
                     { k: 'Sharpe', v: '0.4' },
                   ].map((item, i) => (
-                    <div key={item.k} style={{ display: 'flex', justifyContent: 'space-between', opacity: interpolate(frame - (85 + i * 6), [0, 10], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) }}>
+                    <div key={item.k} style={{ display: 'flex', justifyContent: 'space-between', opacity: interpolate(frame - (200 + i * 16), [0, 36], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) }) }}>
                       <span style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.textDim }}>{item.k}</span>
                       <span style={{ fontSize: 11, fontFamily: fonts.mono, color: item.k === 'Return' || item.k === 'Volatility' ? colors.rose : colors.textMuted, fontWeight: 600 }}>{item.v}</span>
                     </div>
                   ))}
                 </div>
-                <div style={{ marginTop: 12, fontSize: 11, fontFamily: fonts.mono, color: colors.textDim, lineHeight: 1.5, opacity: interpolate(frame, [105, 118], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) }}>
+                <div style={{ marginTop: 12, fontSize: 11, fontFamily: fonts.mono, color: colors.textDim, lineHeight: 1.5, opacity: interpolate(frame, [240, 270], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) }) }}>
                   Excessive volatility with negative momentum and deteriorating technicals.
                 </div>
               </GlassCard>
 
               {/* Replacements */}
-              <GlassCard delay={75} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }} glowColor={colors.primaryDim20}>
+              <GlassCard delay={180} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }} glowColor={colors.primaryDim20}>
                 <div style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.primary, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
                   Recommended Replacements
                 </div>
                 {replacements.map((r, i) => {
-                  const rDelay = 90 + i * 18;
-                  const rOp = interpolate(frame - rDelay, [0, 14], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+                  const rDelay = 210 + i * 44;
+                  const rOp = interpolate(frame - rDelay, [0, 35], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
                   return (
                     <div
                       key={r.symbol}
@@ -291,29 +300,37 @@ export const OptimizerDemo: React.FC = () => {
               </GlassCard>
 
               {/* Action plan */}
-              <GlassCard delay={85} style={{ flex: 0.85, display: 'flex', flexDirection: 'column' }} glowColor={colors.accentDim20}>
+              <GlassCard delay={220} style={{ flex: 0.85, display: 'flex', flexDirection: 'column' }} glowColor={colors.accentDim20}>
                 <div style={{ fontSize: 11, fontFamily: fonts.mono, color: colors.accent, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
                   Action Plan
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {actionSteps.map((step, i) => {
-                    const sDelay = 100 + i * 16;
-                    const sOp = interpolate(frame - sDelay, [0, 14], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-                    const sX = interpolate(frame - sDelay, [0, 14], [12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+                    const sDelay = 250 + i * 40;
+                    const sOp = interpolate(frame - sDelay, [0, 35], [0, 1], {
+                    extrapolateLeft: 'clamp',
+                    extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
+                  });
+                  const sY = interpolate(frame - sDelay, [0, 35], [8, 0], {
+                    extrapolateLeft: 'clamp',
+                    extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
+                  });
 
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 4,
-                          padding: '12px 14px',
-                          borderRadius: radius.xl,
-                          background: `${step.color}08`,
-                          borderLeft: `3px solid ${step.color}`,
-                          opacity: sOp,
-                          transform: `translateX(${sX}px)`,
+                     return (
+                       <div
+                         key={i}
+                         style={{
+                           display: 'flex',
+                           flexDirection: 'column',
+                           gap: 4,
+                           padding: '12px 14px',
+                           borderRadius: radius.xl,
+                           background: `${step.color}08`,
+                           borderLeft: `3px solid ${step.color}`,
+                           opacity: sOp,
+                           transform: `translateY(${sY}px)`,
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -354,9 +371,10 @@ const HealthScoreCard: React.FC<{
     fps,
     config: { damping: 14, stiffness: 100, mass: 0.5 },
   });
-  const opacity = interpolate(frame - delay, [0, 15], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 37], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   const circumference = 2 * Math.PI * 38;

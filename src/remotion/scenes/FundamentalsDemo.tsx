@@ -2,8 +2,7 @@ import React from 'react';
 import {
   AbsoluteFill,
   interpolate,
-  useCurrentFrame,
-} from 'remotion';
+  useCurrentFrame, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { GlassCard } from '../components/GlassCard';
@@ -97,7 +96,7 @@ function getNumVal(row: FundRow, col: string): number {
   const radarScores = [rng.int(50, 95), rng.int(60, 98), rng.int(45, 90), rng.int(55, 92), rng.int(50, 88)];
 
   return (
-    <SceneTransition durationInFrames={200}>
+    <SceneTransition durationInFrames={400}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={3} />
@@ -108,10 +107,10 @@ function getNumVal(row: FundRow, col: string): number {
               padding: '44px 48px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 22,
+              gap: 28,
             }}
           >
-            {/* Header */}
+            {/* Header — scale zoom in */}
             <div>
               <div
                 style={{
@@ -121,10 +120,13 @@ function getNumVal(row: FundRow, col: string): number {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [12, 45], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `scale(${interpolate(frame, [12, 45], [0.9, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })})`,
+                  transformOrigin: 'left center',
                 }}
               >
                 Fundamentals
@@ -136,10 +138,13 @@ function getNumVal(row: FundRow, col: string): number {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [24, 63], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `scale(${interpolate(frame, [24, 63], [0.95, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })})`,
+                  transformOrigin: 'left center',
                 }}
               >
                 Fundamental Analysis
@@ -150,19 +155,20 @@ function getNumVal(row: FundRow, col: string): number {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [40, 72], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
                 }}
               >
-                P/E, ROE, margins, and health scores — color-coded for instant clarity
+                P/E, ROE, margins, and health scores — color-coded for rapid screening
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 22, flex: 1 }}>
+            <div style={{ display: 'flex', gap: 28, flex: 1 }}>
               {/* Main table */}
-              <GlassCard delay={15} style={{ flex: 2, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+              <GlassCard delay={30} style={{ flex: 2, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
                 {/* Table header */}
                 <div
                   style={{
@@ -195,14 +201,21 @@ function getNumVal(row: FundRow, col: string): number {
 
                 {/* Table rows */}
                 {fundamentals.map((row, i) => {
-                  const rowDelay = 30 + i * 14;
-                  const rowOpacity = interpolate(frame - rowDelay, [0, 14], [0, 1], {
+                  const rowDelay = 70 + i * 36;
+                  const rowOpacity = interpolate(frame - rowDelay, [0, 35], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
-                  const rowX = interpolate(frame - rowDelay, [0, 14], [15, 0], {
+                  const rowY = interpolate(frame - rowDelay, [0, 35], [10, 0], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
+                  });
+                  const rowScale = interpolate(frame - rowDelay, [0, 35], [0.97, 1], {
+                    extrapolateLeft: 'clamp',
+                    extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
 
                   return (
@@ -214,7 +227,8 @@ function getNumVal(row: FundRow, col: string): number {
                         padding: '12px 24px',
                         borderBottom: `1px solid rgba(255,255,255,0.03)`,
                         opacity: rowOpacity,
-                        transform: `translateX(${rowX}px)`,
+                        transform: `translateY(${rowY}px) scale(${rowScale})`,
+                        transformOrigin: 'left center',
                         alignItems: 'center',
                         background: i === 0 ? `linear-gradient(90deg, ${colors.primaryDim}, transparent)` : 'transparent',
                       }}
@@ -245,7 +259,7 @@ function getNumVal(row: FundRow, col: string): number {
               </GlassCard>
 
               {/* Featured ticker detail */}
-              <GlassCard delay={50} style={{ flex: 0.9, display: 'flex', flexDirection: 'column', alignItems: 'center' }} glowColor={colors.primaryDim20}>
+              <GlassCard delay={130} style={{ flex: 0.9, display: 'flex', flexDirection: 'column', alignItems: 'center' }} glowColor={colors.primaryDim20}>
                 {/* Score badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, alignSelf: 'stretch', marginBottom: 16 }}>
                   <div
@@ -295,7 +309,7 @@ function getNumVal(row: FundRow, col: string): number {
                     values={radarScores}
                     size={200}
                     frame={frame}
-                    delay={60}
+                    delay={160}
                   />
                 </div>
 
@@ -307,10 +321,11 @@ function getNumVal(row: FundRow, col: string): number {
                     { label: 'Piotroski F', value: '8/9', color: colors.primary },
                     { label: 'Current Ratio', value: '1.5', color: colors.amber },
                   ].map((m, i) => {
-                    const mDelay = 80 + i * 10;
-                    const mOp = interpolate(frame - mDelay, [0, 12], [0, 1], {
+                    const mDelay = 200 + i * 24;
+                    const mOp = interpolate(frame - mDelay, [0, 30], [0, 1], {
                       extrapolateLeft: 'clamp',
                       extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
                     });
                     return (
                       <div
@@ -353,10 +368,12 @@ const MiniRadar: React.FC<{
   const progress = interpolate(frame - delay, [0, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const opacity = interpolate(frame - delay, [0, 15], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 37], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   const cx = size / 2;

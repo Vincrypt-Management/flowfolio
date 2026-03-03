@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame, Easing } from 'remotion';
 import { colors } from '../styles';
 import type { BGVariation } from '../lib/contentPools';
 
@@ -46,10 +46,10 @@ export const Background: React.FC<BackgroundProps> = ({ variant = 'default', bgV
 
   // Subtle global pulse for organic feel
   const breathe = interpolate(
-    Math.sin(frame / 90 * Math.PI * 2),
+    Math.sin(frame / 180 * Math.PI * 2),
     [-1, 1],
     [0.85, 1],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
 
   return (

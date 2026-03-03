@@ -1,7 +1,42 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 import type { AnimationStyle } from '../lib/contentPools';
+import { PopWord } from './PopWord';
+
+/**
+ * Map of scene-specific "pop words" — key phrases that get a dopamine-hit animation.
+ * Matches are case-insensitive substring checks against the beat line.
+ */
+const POP_WORD_MAP: { match: string; words: string[]; effect: 'scale-pop' | 'glow-pulse' | 'color-surge' | 'lift-drop' | 'elastic' }[] = [
+  { match: 'bigger picture', words: ['bigger', 'picture'], effect: 'scale-pop' },
+  { match: 'matters', words: ['matters'], effect: 'glow-pulse' },
+  { match: 'philosophy', words: ['philosophy'], effect: 'color-surge' },
+  { match: 'thesis', words: ['thesis'], effect: 'lift-drop' },
+  { match: 'convictions', words: ['convictions,'], effect: 'elastic' },
+  { match: 'come alive', words: ['alive.'], effect: 'scale-pop' },
+  { match: 'seconds', words: ['seconds.'], effect: 'elastic' },
+  { match: 'at a glance', words: ['glance.'], effect: 'glow-pulse' },
+  { match: "don't guess", words: ['guess.'], effect: 'scale-pop' },
+  { match: 'prove it', words: ['Prove', 'it.'], effect: 'elastic' },
+  { match: 'laboratory', words: ['laboratory.'], effect: 'glow-pulse' },
+  { match: 'find out', words: ['Find', 'out.'], effect: 'scale-pop' },
+  { match: 'every number', words: ['every', 'number.'], effect: 'lift-drop' },
+  { match: 'quantify', words: ['Quantify'], effect: 'elastic' },
+  { match: "don't lie", words: ["don't", 'lie.'], effect: 'scale-pop' },
+  { match: 'clear picture', words: ['clear', 'picture.'], effect: 'glow-pulse' },
+  { match: 'sharpen', words: ['sharpen'], effect: 'lift-drop' },
+  { match: 'without overthinking', words: ['overthinking.'], effect: 'color-surge' },
+  { match: 'instantly', words: ['instantly.'], effect: 'elastic' },
+  { match: 'intelligence', words: ['intelligence.'], effect: 'glow-pulse' },
+  { match: 'every decision', words: ['every', 'decision.'], effect: 'scale-pop' },
+  { match: 'why,', words: ['why,'], effect: 'lift-drop' },
+  { match: 'every trade', words: ['every', 'trade.'], effect: 'glow-pulse' },
+  { match: 'ask anything', words: ['anything.'], effect: 'scale-pop' },
+  { match: 'on demand', words: ['demand.'], effect: 'elastic' },
+  { match: 'compound', words: ['compound.'], effect: 'glow-pulse' },
+  { match: 'knows your', words: ['knows'], effect: 'color-surge' },
+];
 
 interface StoryBeatProps {
   line: string;
@@ -29,24 +64,43 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
   const frame = useCurrentFrame();
   const duration = 70;
 
-  const fadeIn = interpolate(frame, [0, 18], [0, 1], {
+  const fadeIn = interpolate(frame, [0, 36], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
   const fadeOut = interpolate(frame, [duration - 18, duration], [1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
   const containerOpacity = Math.min(fadeIn, fadeOut);
 
   const subtitleOp = subtitle
-    ? interpolate(frame, [14, 30], [0, 1], {
+    ? interpolate(frame, [28, 60], [0, 1], {
         extrapolateLeft: 'clamp',
         extrapolateRight: 'clamp',
+      easing: Easing.out(Easing.cubic),
       })
     : 0;
 
   // ─── Animation Style Rendering ────────────────────────────────
+  // Find matching pop-word config for this line
+  const lineLower = line.toLowerCase();
+  const popConfig = POP_WORD_MAP.find((p) => lineLower.includes(p.match));
+
+  /** Wrap a word with PopWord if it matches, otherwise return plain span */
+  const renderWord = (word: string, baseDelay: number, _wordStyle?: React.CSSProperties) => {
+    if (popConfig && popConfig.words.some((pw) => word.toLowerCase() === pw.toLowerCase() || word === pw)) {
+      return (
+        <PopWord delay={baseDelay + 6} effect={popConfig.effect} color={accentColor}>
+          {word}
+        </PopWord>
+      );
+    }
+    return <>{word}</>;
+  };
+
   const renderText = () => {
     const words = line.split(' ');
 
@@ -69,14 +123,16 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
             }}
           >
             {words.map((word, i) => {
-              const wordStart = 4 + i * 4;
+              const wordStart = 15 + i * 8;
               const wordOp = interpolate(frame, [wordStart, wordStart + 8], [0, 1], {
                 extrapolateLeft: 'clamp',
                 extrapolateRight: 'clamp',
+              easing: Easing.out(Easing.cubic),
               });
               const wordY = interpolate(frame, [wordStart, wordStart + 8], [8, 0], {
                 extrapolateLeft: 'clamp',
                 extrapolateRight: 'clamp',
+              easing: Easing.out(Easing.cubic),
               });
               return (
                 <span
@@ -87,7 +143,7 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
                     display: 'inline-block',
                   }}
                 >
-                  {word}
+                  {renderWord(word, wordStart)}
                 </span>
               );
             })}
@@ -95,13 +151,15 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
         );
 
       case 'scale-in': {
-        const scale = interpolate(frame, [0, 20], [0.85, 1], {
+        const scale = interpolate(frame, [0, 40], [0.85, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         });
-        const scaleOp = interpolate(frame, [0, 14], [0, 1], {
+        const scaleOp = interpolate(frame, [0, 39], [0, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         });
         return (
           <div
@@ -115,9 +173,17 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
               lineHeight: 1.2,
               transform: `scale(${scale})`,
               opacity: scaleOp,
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '0 10px',
             }}
           >
-            {line}
+            {words.map((word, i) => (
+              <span key={i} style={{ display: 'inline-block' }}>
+                {renderWord(word, 10 + i * 8)}
+              </span>
+            ))}
           </div>
         );
       }
@@ -127,9 +193,10 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
           interpolate(frame, [4, 4 + line.length * 1.2], [0, line.length], {
             extrapolateLeft: 'clamp',
             extrapolateRight: 'clamp',
+          easing: Easing.out(Easing.cubic),
           })
         );
-        const cursorOp = frame % 16 < 10 ? 1 : 0;
+        const cursorOp = frame % 32 < 10 ? 1 : 0;
         return (
           <div
             style={{
@@ -150,9 +217,10 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
 
       case 'fade-rise':
       default: {
-        const y = interpolate(frame, [0, 18], [12, 0], {
+        const y = interpolate(frame, [0, 36], [12, 0], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         });
         return (
           <div
@@ -165,9 +233,17 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
               textAlign: 'center',
               lineHeight: 1.2,
               transform: `translateY(${y}px)`,
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '0 10px',
             }}
           >
-            {line}
+            {words.map((word, i) => (
+              <span key={i} style={{ display: 'inline-block' }}>
+                {renderWord(word, 12 + i * 8)}
+              </span>
+            ))}
           </div>
         );
       }
@@ -176,9 +252,10 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
 
   // ─── Accent Decoration Variants ───────────────────────────────
   const renderAccent = () => {
-    const progress = interpolate(frame, [6, 24], [0, 1], {
+    const progress = interpolate(frame, [12, 48], [0, 1], {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
     });
 
     switch (accentVariant) {
@@ -187,9 +264,10 @@ export const StoryBeat: React.FC<StoryBeatProps> = ({
         return (
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {Array.from({ length: dotCount }).map((_, i) => {
-              const dotOp = interpolate(frame, [6 + i * 4, 14 + i * 4], [0, 1], {
+              const dotOp = interpolate(frame, [6 + i * 8, 14 + i * 8], [0, 1], {
                 extrapolateLeft: 'clamp',
                 extrapolateRight: 'clamp',
+              easing: Easing.out(Easing.cubic),
               });
               return (
                 <div

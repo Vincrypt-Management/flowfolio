@@ -34,7 +34,7 @@ interface ShowcaseProps {
 
 /**
  * Full product showcase — story-driven sequence with narrative arc.
- * ~88s at 30fps = 2640 frames
+ * ~88s at 60fps = 5280 frames
  * Now seed-driven: every render with a different seed produces unique content.
  */
 export const FlowFolioShowcase: React.FC<ShowcaseProps> = ({ seed }) => {
@@ -82,94 +82,94 @@ export const FlowFolioShowcase: React.FC<ShowcaseProps> = ({ seed }) => {
         <AudioTrack generator={audioGen} volume={0.7} fadeInFrames={25} fadeOutFrames={30} />
 
         {/* ═══ ACT 1: THE PROBLEM ═══ */}
-        <Sequence from={0} durationInFrames={150}>
-          <HookScene durationInFrames={150} hookVariant={hookVariant} painPointsData={painPoints} />
+        <Sequence from={0} durationInFrames={420}>
+          <HookScene durationInFrames={420} hookVariant={hookVariant} painPointsData={painPoints} />
         </Sequence>
 
         {/* ═══ ACT 2: THE DISCOVERY ═══ */}
-        <Sequence from={140} durationInFrames={125}>
+        <Sequence from={400} durationInFrames={300}>
           <LogoReveal />
         </Sequence>
 
-        <Sequence from={255} durationInFrames={130}>
+        <Sequence from={680} durationInFrames={340}>
           <PrivacyMessage />
         </Sequence>
 
         {/* ═══ ACT 3: THE JOURNEY ═══ */}
 
-        <Sequence from={375} durationInFrames={70}>
+        <Sequence from={1000} durationInFrames={240}>
           <StoryBeat line={beatVibe.line} accentColor={beatVibe.accentColor}
             animStyle={beatStyles.styles[0]} accentVariant={beatStyles.accents[0]} />
         </Sequence>
 
-        <Sequence from={435} durationInFrames={230}>
+        <Sequence from={1220} durationInFrames={460}>
           <VibeStudioDemo />
         </Sequence>
 
-        <Sequence from={655} durationInFrames={70}>
+        <Sequence from={1660} durationInFrames={240}>
           <StoryBeat line={beatPortfolio.line} accentColor={beatPortfolio.accentColor}
             animStyle={beatStyles.styles[1]} accentVariant={beatStyles.accents[1]} />
         </Sequence>
 
-        <Sequence from={715} durationInFrames={230}>
+        <Sequence from={1880} durationInFrames={460}>
           <PortfolioDemo />
         </Sequence>
 
-        <Sequence from={935} durationInFrames={70}>
+        <Sequence from={2320} durationInFrames={240}>
           <StoryBeat line={beatBacktest.line} accentColor={beatBacktest.accentColor}
             animStyle={beatStyles.styles[2]} accentVariant={beatStyles.accents[2]} />
         </Sequence>
 
-        <Sequence from={995} durationInFrames={230}>
+        <Sequence from={2540} durationInFrames={460}>
           <BacktestDemo />
         </Sequence>
 
-        <Sequence from={1215} durationInFrames={70}>
+        <Sequence from={2980} durationInFrames={240}>
           <StoryBeat line={beatQuant.line} accentColor={beatQuant.accentColor}
             animStyle={beatStyles.styles[3]} accentVariant={beatStyles.accents[3]} />
         </Sequence>
 
-        <Sequence from={1275} durationInFrames={190}>
+        <Sequence from={3200} durationInFrames={380}>
           <QuantDemo />
         </Sequence>
 
-        <Sequence from={1455} durationInFrames={200}>
+        <Sequence from={3560} durationInFrames={400}>
           <FundamentalsDemo />
         </Sequence>
 
-        <Sequence from={1645} durationInFrames={70}>
+        <Sequence from={3940} durationInFrames={240}>
           <StoryBeat line={beatOptimizer.line} accentColor={beatOptimizer.accentColor}
             animStyle={beatStyles.styles[0]} accentVariant={beatStyles.accents[1]} />
         </Sequence>
 
-        <Sequence from={1705} durationInFrames={220}>
+        <Sequence from={4160} durationInFrames={440}>
           <OptimizerDemo />
         </Sequence>
 
-        <Sequence from={1915} durationInFrames={70}>
+        <Sequence from={4580} durationInFrames={240}>
           <StoryBeat line={beatJournal.line} accentColor={beatJournal.accentColor}
             animStyle={beatStyles.styles[1]} accentVariant={beatStyles.accents[2]} />
         </Sequence>
 
-        <Sequence from={1975} durationInFrames={200}>
+        <Sequence from={4800} durationInFrames={400}>
           <JournalDemo />
         </Sequence>
 
-        <Sequence from={2165} durationInFrames={70}>
+        <Sequence from={5180} durationInFrames={240}>
           <StoryBeat line={beatChat.line} accentColor={beatChat.accentColor}
             animStyle={beatStyles.styles[2]} accentVariant={beatStyles.accents[3]} />
         </Sequence>
 
-        <Sequence from={2225} durationInFrames={200}>
+        <Sequence from={5400} durationInFrames={400}>
           <AIChatDemo />
         </Sequence>
 
         {/* ═══ ACT 4: THE RESOLUTION ═══ */}
-        <Sequence from={2415} durationInFrames={130}>
+        <Sequence from={5780} durationInFrames={260}>
           <Platforms />
         </Sequence>
 
-        <Sequence from={2535} durationInFrames={105}>
+        <Sequence from={6020} durationInFrames={300}>
           <Closing />
         </Sequence>
       </AbsoluteFill>

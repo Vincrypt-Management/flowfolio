@@ -20,94 +20,11 @@ fn main() {
         }
     }
     
-    // In release mode, encrypted env is loaded by the app after data dir is known
+    // In release mode, decrypt the embedded env payload (baked into binary at compile time)
     #[cfg(not(debug_assertions))]
     {
-        let mut loaded = false;
-
-        // Try to load from executable directory first
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                // 1. Same directory as executable (all platforms)
-                let encrypted_path = exe_dir.join(".env.encrypted");
-                if !loaded && encrypted_path.exists() {
-                    if let Ok(content) = std::fs::read_to_string(&encrypted_path) {
-                        if let Ok(vars) = flowfolio_lib::core::decrypt_env_file(&content) {
-                            for (key, value) in vars {
-                                std::env::set_var(&key, &value);
-                            }
-                            eprintln!("[INFO] [main] Loaded encrypted environment from {:?}", encrypted_path);
-                            loaded = true;
-                        }
-                    }
-                }
-
-                // 2. macOS: AppName.app/Contents/Resources/
-                #[cfg(target_os = "macos")]
-                if !loaded {
-                    if let Some(res_path) = exe_dir.parent()
-                        .map(|p| p.join("Resources").join(".env.encrypted"))
-                    {
-                        if res_path.exists() {
-                            if let Ok(content) = std::fs::read_to_string(&res_path) {
-                                if let Ok(vars) = flowfolio_lib::core::decrypt_env_file(&content) {
-                                    for (key, value) in vars {
-                                        std::env::set_var(&key, &value);
-                                    }
-                                    eprintln!("[INFO] [main] Loaded encrypted environment from {:?}", res_path);
-                                    loaded = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Windows: resources/ subfolder next to exe (Tauri 2 NSIS/MSI bundle)
-                #[cfg(target_os = "windows")]
-                if !loaded {
-                    let win_res_path = exe_dir.join("resources").join(".env.encrypted");
-                    if win_res_path.exists() {
-                        if let Ok(content) = std::fs::read_to_string(&win_res_path) {
-                            if let Ok(vars) = flowfolio_lib::core::decrypt_env_file(&content) {
-                                for (key, value) in vars {
-                                    std::env::set_var(&key, &value);
-                                }
-                                eprintln!("[INFO] [main] Loaded encrypted environment from {:?}", win_res_path);
-                                loaded = true;
-                            }
-                        }
-                    }
-                }
-
-                // 4. Linux: ../lib/{identifier}/ or ../share/{identifier}/ relative to exe
-                #[cfg(target_os = "linux")]
-                if !loaded {
-                    let identifier = "com.evintleovonzko.flowfolio";
-                    let linux_candidates = [
-                        exe_dir.parent().map(|p| p.join("lib").join(identifier).join(".env.encrypted")),
-                        exe_dir.parent().map(|p| p.join("share").join(identifier).join(".env.encrypted")),
-                        Some(exe_dir.join("resources").join(".env.encrypted")),
-                    ];
-                    for candidate in linux_candidates.iter().flatten() {
-                        if candidate.exists() {
-                            if let Ok(content) = std::fs::read_to_string(candidate) {
-                                if let Ok(vars) = flowfolio_lib::core::decrypt_env_file(&content) {
-                                    for (key, value) in vars {
-                                        std::env::set_var(&key, &value);
-                                    }
-                                    eprintln!("[INFO] [main] Loaded encrypted environment from {:?}", candidate);
-                                    loaded = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if !loaded {
-            eprintln!("[WARN] [main] No .env.encrypted found — some features may be unavailable");
+        if let Err(e) = flowfolio_lib::core::encrypted_env::load_embedded_env() {
+            eprintln!("[ERROR] [main] Failed to load embedded encrypted env: {}", e);
         }
     }
     

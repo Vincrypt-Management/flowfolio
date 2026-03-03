@@ -1,7 +1,8 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { SceneTransition } from '../components/SceneTransition';
+import { PopWord } from '../components/PopWord';
 import type { HookVariant, PainPoint } from '../lib/contentPools';
 
 // ─── SVG Icons ──────────────────────────────────────────────────
@@ -128,7 +129,7 @@ interface HookSceneProps {
  * Compact mode: hook text only.
  */
 export const HookScene: React.FC<HookSceneProps> = ({
-  durationInFrames = 150,
+  durationInFrames = 300,
   compact = false,
   hookVariant,
   painPointsData,
@@ -139,38 +140,43 @@ export const HookScene: React.FC<HookSceneProps> = ({
   const painPoints = buildPainPointCards(painPointsData);
 
   // Main hook line
-  const hookOp = interpolate(frame, [8, 28], [0, 1], {
+  const hookOp = interpolate(frame, [16, 56], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const hookY = interpolate(frame, [8, 28], [16, 0], {
+  const hookY = interpolate(frame, [16, 56], [16, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Second line reveal
-  const line2Op = interpolate(frame, [30, 48], [0, 1], {
+  const line2Op = interpolate(frame, [60, 96], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const line2Y = interpolate(frame, [30, 48], [10, 0], {
+  const line2Y = interpolate(frame, [60, 96], [10, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Connecting flow line (grows downward as cards appear)
   const flowLineHeight = !compact
-    ? interpolate(frame, [56, 110], [0, 1], {
+    ? interpolate(frame, [112, 260], [0, 1], {
         extrapolateLeft: 'clamp',
         extrapolateRight: 'clamp',
+      easing: Easing.out(Easing.cubic),
       })
     : 0;
 
   return (
     <SceneTransition
       durationInFrames={durationInFrames}
-      fadeInDuration={12}
-      fadeOutDuration={18}
+      fadeInDuration={24}
+      fadeOutDuration={36}
     >
       <AbsoluteFill
         style={{
@@ -183,7 +189,7 @@ export const HookScene: React.FC<HookSceneProps> = ({
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: compact ? 12 : 16,
+            gap: compact ? 12 : 20,
             maxWidth: 1100,
             padding: '0 60px',
           }}
@@ -200,9 +206,15 @@ export const HookScene: React.FC<HookSceneProps> = ({
               lineHeight: 1.15,
               opacity: hookOp,
               transform: `translateY(${hookY}px)`,
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '0 14px',
             }}
           >
-            {line1Text}
+            {line1Text.split(' ').map((word, i) => (
+              <span key={i} style={{ display: 'inline-block' }}>{word}</span>
+            ))}
           </div>
 
           <div
@@ -216,9 +228,28 @@ export const HookScene: React.FC<HookSceneProps> = ({
               lineHeight: 1.15,
               opacity: line2Op,
               transform: `translateY(${line2Y}px)`,
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '0 14px',
             }}
           >
-            {line2Text}
+            {line2Text.split(' ').map((word, i) => {
+              const isPopWord = ["don't.", "don't", 'haven\'t.', 'back.', 'nowhere.', 'chaos.', 'noise.', 'manual.', 'slower.', 'infrastructure.', 'cells.', 'much.'].some(
+                (pw) => word.toLowerCase() === pw.toLowerCase()
+              );
+              return (
+                <span key={i} style={{ display: 'inline-block' }}>
+                  {isPopWord ? (
+                    <PopWord delay={76 + i * 8} effect="scale-pop" color={colors.rose}>
+                      {word}
+                    </PopWord>
+                  ) : (
+                    word
+                  )}
+                </span>
+              );
+            })}
           </div>
 
           {/* ─── Pain Point Cards with Flow Line ─── */}
@@ -228,7 +259,7 @@ export const HookScene: React.FC<HookSceneProps> = ({
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: 0,
-                marginTop: 40,
+                marginTop: 52,
                 position: 'relative',
               }}
             >
@@ -253,34 +284,38 @@ export const HookScene: React.FC<HookSceneProps> = ({
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 16,
+                  gap: 24,
                   position: 'relative',
                   zIndex: 1,
                 }}
               >
                 {painPoints.map((point, i) => {
-                  const start = 56 + i * 18;
+                  const start = 112 + i * 52;
                   const cardOp = interpolate(frame, [start, start + 18], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
                   const cardX = interpolate(frame, [start, start + 18], [-20, 0], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
                   const cardScale = interpolate(frame, [start, start + 14], [0.96, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
 
                   // Flow dot — pulsing glow
                   const dotOp = interpolate(frame, [start - 4, start + 6], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
                   const dotPulse = dotOp > 0
-                    ? interpolate(Math.sin((frame - start) / 10 * Math.PI * 2), [-1, 1], [0.6, 1],
-                        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+                    ? interpolate(Math.sin((frame - start) / 20 * Math.PI * 2), [-1, 1], [0.6, 1],
+                        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })
                     : 0;
 
                   return (

@@ -3,9 +3,11 @@ import {
   AbsoluteFill,
   interpolate,
   useCurrentFrame,
+  Easing,
 } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { SceneTransition } from '../components/SceneTransition';
+import { PopWord } from '../components/PopWord';
 
 // ─── SVG Icons ──────────────────────────────────────────────────
 
@@ -35,10 +37,17 @@ const IconNoTracking: React.FC<{ color: string }> = ({ color }) => (
   </svg>
 );
 
-const lines = [
-  { text: 'Your data.', color: colors.text },
-  { text: 'Your rules.', color: colors.text },
-  { text: 'Zero cloud.', color: colors.primary },
+const lines: { words: { text: string; pop?: boolean; effect?: 'scale-pop' | 'glow-pulse' | 'elastic' | 'lift-drop'; popColor?: string }[] }[] = [
+  { words: [
+    { text: 'Your' }, { text: 'data.', pop: true, effect: 'glow-pulse', popColor: colors.primary },
+  ] },
+  { words: [
+    { text: 'Your' }, { text: 'rules.', pop: true, effect: 'lift-drop', popColor: colors.primary },
+  ] },
+  { words: [
+    { text: 'Zero', pop: true, effect: 'scale-pop', popColor: colors.primary },
+    { text: 'cloud.', pop: true, effect: 'elastic', popColor: colors.primary },
+  ] },
 ];
 
 const features: { Icon: React.FC<{ color: string }>; iconColor: string; label: string; desc: string }[] = [
@@ -51,7 +60,7 @@ export const PrivacyMessage: React.FC = () => {
   const frame = useCurrentFrame();
 
   return (
-    <SceneTransition durationInFrames={130}>
+    <SceneTransition durationInFrames={260}>
       <AbsoluteFill
         style={{
           justifyContent: 'center',
@@ -64,35 +73,48 @@ export const PrivacyMessage: React.FC = () => {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 8,
+            gap: 14,
           }}
         >
           {lines.map((line, i) => {
-            const start = 10 + i * 18;
+            const start = 20 + i * 44;
             const op = interpolate(frame, [start, start + 18], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
             const y = interpolate(frame, [start, start + 18], [12, 0], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
+            const isLast = i === lines.length - 1;
 
             return (
               <div
-                key={line.text}
+                key={i}
                 style={{
                   fontSize: 52,
                   fontWeight: 700,
-                  color: line.color,
+                  color: isLast ? colors.primary : colors.text,
                   fontFamily: fonts.sans,
                   opacity: op,
                   transform: `translateY(${y}px)`,
                   letterSpacing: '-0.03em',
                   lineHeight: 1.2,
+                  display: 'flex',
+                  gap: 14,
                 }}
               >
-                {line.text}
+                {line.words.map((w, wi) =>
+                  w.pop ? (
+                    <PopWord key={wi} delay={start + 10 + wi * 8} effect={w.effect ?? 'scale-pop'} color={w.popColor ?? colors.primary}>
+                      {w.text}
+                    </PopWord>
+                  ) : (
+                    <span key={wi}>{w.text}</span>
+                  )
+                )}
               </div>
             );
           })}
@@ -103,18 +125,20 @@ export const PrivacyMessage: React.FC = () => {
           style={{
             display: 'flex',
             gap: 20,
-            marginTop: 48,
+            marginTop: 60,
           }}
         >
           {features.map((f, i) => {
-            const start = 65 + i * 14;
+            const start = 160 + i * 36;
             const op = interpolate(frame, [start, start + 16], [0, 1], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
             const y = interpolate(frame, [start, start + 16], [8, 0], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
+            easing: Easing.out(Easing.cubic),
             });
 
             return (

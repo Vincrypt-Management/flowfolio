@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors } from '../styles';
 
 interface AnimatedChartProps {
@@ -19,7 +19,7 @@ export const AnimatedChart: React.FC<AnimatedChartProps> = ({
   width = 600,
   height = 300,
   delay = 0,
-  duration = 60,
+  duration = 120,
   strokeColor = colors.primary,
   fillColor,
   strokeWidth = 2,
@@ -31,6 +31,7 @@ export const AnimatedChart: React.FC<AnimatedChartProps> = ({
   const progress = interpolate(frame - delay, [0, duration], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   const min = Math.min(...data);
@@ -56,9 +57,10 @@ export const AnimatedChart: React.FC<AnimatedChartProps> = ({
   const first = visiblePoints[0];
   const areaD = `${pathD} L ${last.x} ${height - padBot} L ${first.x} ${height - padBot} Z`;
 
-  const opacity = interpolate(frame - delay, [0, 18], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 36], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   const defaultFill = `url(#areaGrad-${strokeColor.replace('#', '')})`;

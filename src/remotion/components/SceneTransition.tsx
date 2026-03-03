@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame, Easing } from 'remotion';
 
 /**
  * Cinematic scene transition — opacity + scale + blur.
@@ -15,8 +15,8 @@ interface SceneTransitionProps {
 export const SceneTransition: React.FC<SceneTransitionProps> = ({
   children,
   durationInFrames,
-  fadeInDuration = 15,
-  fadeOutDuration = 15,
+  fadeInDuration = 30,
+  fadeOutDuration = 30,
 }) => {
   const frame = useCurrentFrame();
 
@@ -25,13 +25,14 @@ export const SceneTransition: React.FC<SceneTransitionProps> = ({
       ? interpolate(frame, [0, fadeInDuration], [0, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         })
       : 1;
   const fadeOut = interpolate(
     frame,
     [durationInFrames - fadeOutDuration, durationInFrames],
     [1, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
   const opacity = Math.min(fadeIn, fadeOut);
 
@@ -39,12 +40,13 @@ export const SceneTransition: React.FC<SceneTransitionProps> = ({
   const scaleIn = interpolate(frame, [0, fadeInDuration], [0.97, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
   const scaleOut = interpolate(
     frame,
     [durationInFrames - fadeOutDuration, durationInFrames],
     [1, 1.02],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
   const scale = frame < durationInFrames - fadeOutDuration ? scaleIn : scaleOut;
 
@@ -52,12 +54,13 @@ export const SceneTransition: React.FC<SceneTransitionProps> = ({
   const blurIn = interpolate(frame, [0, fadeInDuration], [4, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
   const blurOut = interpolate(
     frame,
     [durationInFrames - fadeOutDuration, durationInFrames],
     [0, 3],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
   const blur = frame < durationInFrames - fadeOutDuration ? blurIn : blurOut;
 

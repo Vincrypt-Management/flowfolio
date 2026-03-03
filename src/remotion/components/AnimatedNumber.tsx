@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 
 interface AnimatedNumberProps {
@@ -19,7 +19,7 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   suffix = '',
   decimals = 0,
   delay = 0,
-  duration = 45,
+  duration = 90,
   fontSize = 36,
   color = colors.text,
 }) => {
@@ -27,10 +27,12 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   const progress = interpolate(frame - delay, [0, duration], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const opacity = interpolate(frame - delay, [0, 12], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 33], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Cubic ease-out for satisfying counting

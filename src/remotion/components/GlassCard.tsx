@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame, Easing } from 'remotion';
 import { colors, radius } from '../styles';
 
 interface GlassCardProps {
@@ -24,26 +24,29 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   const frame = useCurrentFrame();
   const localFrame = frame - delay;
 
-  const opacity = interpolate(localFrame, [0, 20], [0, 1], {
+  const opacity = interpolate(localFrame, [0, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const translateY = interpolate(localFrame, [0, 20], [12, 0], {
+  const translateY = interpolate(localFrame, [0, 40], [12, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Shimmer sweep: diagonal highlight that crosses once after card appears
-  const shimmerX = interpolate(localFrame, [10, 50], [-100, 200], {
+  const shimmerX = interpolate(localFrame, [20, 100], [-100, 200], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const shimmerOp = localFrame > 10 && localFrame < 50 ? 1 : 0;
+  const shimmerOp = localFrame > 20 && localFrame < 100 ? 1 : 0;
 
   // Subtle border glow pulse
   const glowStr = glowColor
-    ? interpolate(Math.sin(frame / 40 * Math.PI * 2), [-1, 1], [0.3, 0.7],
-        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+    ? interpolate(Math.sin(frame / 80 * Math.PI * 2), [-1, 1], [0.3, 0.7],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })
     : 0;
 
   return (

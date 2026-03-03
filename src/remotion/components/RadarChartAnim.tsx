@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame , Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 
 interface RadarChartAnimProps {
@@ -24,10 +24,12 @@ export const RadarChartAnim: React.FC<RadarChartAnimProps> = ({
   const progress = interpolate(frame - delay, [0, duration], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const opacity = interpolate(frame - delay, [0, 18], [0, 1], {
+  const opacity = interpolate(frame - delay, [0, 32], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   const cx = size / 2;

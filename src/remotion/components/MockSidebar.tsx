@@ -1,5 +1,5 @@
 import React from 'react';
-import { Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
+import { Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 
 // ─── SVG Icons for Sidebar Nav ──────────────────────────────────
@@ -136,10 +136,11 @@ export const MockSidebar: React.FC<MockSidebarProps> = ({
       {/* Nav items */}
       {items.map((item, i) => {
         const isActive = i === activeIndex;
-        const itemDelay = delay + 5 + i * 3;
-        const itemOpacity = interpolate(frame - itemDelay, [0, 12], [0, 1], {
+        const itemDelay = delay + 10 + i * 12;
+        const itemOpacity = interpolate(frame - itemDelay, [0, 33], [0, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.cubic),
         });
 
         return (
@@ -181,7 +182,7 @@ export const MockSidebar: React.FC<MockSidebarProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transform: `scale(${interpolate(frame - itemDelay, [0, 15], [0.7, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })})`,
+              transform: `scale(${interpolate(frame - itemDelay, [0, 30], [0.7, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })})`,
             }}>
               <item.Icon color={isActive ? colors.primary : colors.textDim} />
             </div>

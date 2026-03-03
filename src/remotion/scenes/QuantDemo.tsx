@@ -4,8 +4,7 @@ import {
   interpolate,
   spring,
   useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+  useVideoConfig, Easing } from 'remotion';
 import { colors, fonts, radius } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { GlassCard } from '../components/GlassCard';
@@ -32,7 +31,7 @@ export const QuantDemo: React.FC = () => {
   }));
 
   return (
-    <SceneTransition durationInFrames={190}>
+    <SceneTransition durationInFrames={380}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={3} />
@@ -46,7 +45,7 @@ export const QuantDemo: React.FC = () => {
               gap: 24,
             }}
           >
-            {/* Header */}
+            {/* Header — wide stagger with downward slide */}
             <div>
               <div
                 style={{
@@ -56,10 +55,12 @@ export const QuantDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [10, 42], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [10, 42], [-10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Quant Analysis
@@ -71,13 +72,15 @@ export const QuantDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [32, 64], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [32, 64], [-12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Factor Analysis & Metrics
+                Multi-Factor Risk Engine
               </div>
               <div
                 style={{
@@ -85,20 +88,22 @@ export const QuantDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [56, 88], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [56, 88], [-8, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Deep risk metrics and multi-factor scoring for every holding
+                Sharpe, Sortino, max drawdown, and factor decomposition per holding
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 28, flex: 1 }}>
               {/* Radar chart */}
               <GlassCard
-                delay={12}
+                delay={24}
                 style={{
                   flex: 1,
                   display: 'flex',
@@ -126,7 +131,7 @@ export const QuantDemo: React.FC = () => {
                   labels={radarLabels}
                   values={radarValues}
                   size={370}
-                  delay={18}
+                  delay={36}
                   duration={55}
                 />
               </GlassCard>
@@ -142,15 +147,16 @@ export const QuantDemo: React.FC = () => {
                 }}
               >
                 {quantMetrics.map((m, i) => {
-                  const cardDelay = 25 + i * 10;
+                  const cardDelay = 50 + i * 20;
                   const cardScale = spring({
                     frame: Math.max(0, frame - cardDelay),
                     fps,
                     config: { damping: 14, stiffness: 120, mass: 0.4 },
                   });
-                  const cardOpacity = interpolate(frame - cardDelay, [0, 12], [0, 1], {
+                  const cardOpacity = interpolate(frame - cardDelay, [0, 30], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
 
                   return (

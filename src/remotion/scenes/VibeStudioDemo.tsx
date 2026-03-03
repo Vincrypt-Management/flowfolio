@@ -4,8 +4,7 @@ import {
   interpolate,
   spring,
   useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+  useVideoConfig, Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { GlassCard } from '../components/GlassCard';
@@ -47,7 +46,7 @@ export const VibeStudioDemo: React.FC = () => {
   })).sort((a, b) => b.score - a.score);
 
   return (
-    <SceneTransition durationInFrames={230}>
+    <SceneTransition durationInFrames={460}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={0} />
@@ -61,7 +60,7 @@ export const VibeStudioDemo: React.FC = () => {
               gap: 24,
             }}
           >
-            {/* Section label + title */}
+            {/* Section label + title — drop down from above */}
             <div>
               <div
                 style={{
@@ -71,10 +70,12 @@ export const VibeStudioDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [14, 53], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [14, 53], [-15, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Vibe Studio
@@ -86,13 +87,15 @@ export const VibeStudioDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [22, 61], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [22, 61], [-20, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Define Your Investment Vibe
+                Custom Factor Weighting
               </div>
               <div
                 style={{
@@ -100,19 +103,21 @@ export const VibeStudioDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [32, 64], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [32, 64], [-12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Set factor weights to create a personalized scoring model — no code required
+                Compose multi-factor scoring models with adjustable weight allocation
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 24, flex: 1 }}>
               {/* Factor sliders panel */}
-              <GlassCard delay={15} style={{ flex: 1, display: 'flex', flexDirection: 'column' }} glowColor={colors.accentDim20}>
+              <GlassCard delay={30} style={{ flex: 1, display: 'flex', flexDirection: 'column' }} glowColor={colors.accentDim20}>
                 <div
                   style={{
                     fontSize: 13,
@@ -128,17 +133,17 @@ export const VibeStudioDemo: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                   {factors.map((factor, i) => {
-                    const sliderDelay = 30 + i * 12;
+                    const sliderDelay = 70 + i * 32;
                     const sliderProgress = interpolate(
                       frame,
                       [sliderDelay, sliderDelay + 45],
                       [0, factor.value],
-                      { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+                      { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) }
                     );
 
                     const bounceFrame = frame - (sliderDelay + 45);
                     const bounce = bounceFrame > 0
-                      ? spring({ frame: bounceFrame, fps, config: { damping: 8, stiffness: 200, mass: 0.3 } })
+                      ? spring({ frame: bounceFrame, fps, config: { damping: 14, stiffness: 120, mass: 0.4 } })
                       : 0;
                     const finalProgress = Math.max(0, Math.min(
                       factor.value,
@@ -203,9 +208,10 @@ export const VibeStudioDemo: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    opacity: interpolate(frame, [120, 140], [0, 1], {
+                    opacity: interpolate(frame, [240, 280], [0, 1], {
                       extrapolateLeft: 'clamp',
                       extrapolateRight: 'clamp',
+                    easing: Easing.out(Easing.cubic),
                     }),
                   }}
                 >
@@ -217,7 +223,7 @@ export const VibeStudioDemo: React.FC = () => {
               </GlassCard>
 
               {/* Score rankings panel */}
-              <GlassCard delay={25} style={{ flex: 1.2, display: 'flex', flexDirection: 'column' }} glowColor={colors.primaryDim20}>
+              <GlassCard delay={70} style={{ flex: 1.2, display: 'flex', flexDirection: 'column' }} glowColor={colors.primaryDim20}>
                 <div
                   style={{
                     fontSize: 13,
@@ -260,14 +266,16 @@ export const VibeStudioDemo: React.FC = () => {
 
                 {/* Rows */}
                 {mockSymbols.map((s, i) => {
-                  const rowDelay = 70 + i * 15;
-                  const rowOpacity = interpolate(frame - rowDelay, [0, 14], [0, 1], {
-                    extrapolateLeft: 'clamp',
-                    extrapolateRight: 'clamp',
+                  const rowDelay = 170 + i * 36;
+                  const rowScale = spring({
+                    frame: Math.max(0, frame - rowDelay),
+                    fps,
+                    config: { damping: 16, stiffness: 140, mass: 0.35 },
                   });
-                  const rowX = interpolate(frame - rowDelay, [0, 14], [20, 0], {
+                  const rowOpacity = interpolate(frame - rowDelay, [0, 35], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   });
 
                   const scoreColor = s.score >= 85 ? colors.primary : s.score >= 75 ? colors.amber : colors.textMuted;
@@ -281,7 +289,8 @@ export const VibeStudioDemo: React.FC = () => {
                         padding: '11px 0',
                         borderBottom: `1px solid rgba(255,255,255,0.03)`,
                         opacity: rowOpacity,
-                        transform: `translateX(${rowX}px)`,
+                        transform: `scale(${rowScale})`,
+                        transformOrigin: 'left center',
                         alignItems: 'center',
                         background: i === 0 ? `linear-gradient(90deg, ${colors.primaryDim}, transparent)` : 'transparent',
                       }}

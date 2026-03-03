@@ -2,8 +2,7 @@ import React from 'react';
 import {
   AbsoluteFill,
   interpolate,
-  useCurrentFrame,
-} from 'remotion';
+  useCurrentFrame, Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 import { MockSidebar } from '../components/MockSidebar';
 import { AnimatedChart } from '../components/AnimatedChart';
@@ -29,7 +28,7 @@ export const BacktestDemo: React.FC = () => {
   }
 
   return (
-    <SceneTransition durationInFrames={230}>
+    <SceneTransition durationInFrames={460}>
       <AbsoluteFill>
         <div style={{ display: 'flex', height: '100%' }}>
           <MockSidebar activeIndex={2} />
@@ -40,10 +39,10 @@ export const BacktestDemo: React.FC = () => {
               padding: '44px 48px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 22,
+              gap: 28,
             }}
           >
-            {/* Header */}
+            {/* Header — rise up from below */}
             <div>
               <div
                 style={{
@@ -53,10 +52,12 @@ export const BacktestDemo: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.12em',
                   marginBottom: 8,
-                  opacity: interpolate(frame, [10, 25], [0, 1], {
+                  opacity: interpolate(frame, [16, 49], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [16, 49], [12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Backtest
@@ -68,10 +69,12 @@ export const BacktestDemo: React.FC = () => {
                   color: colors.text,
                   fontFamily: fonts.sans,
                   letterSpacing: '-0.02em',
-                  opacity: interpolate(frame, [15, 30], [0, 1], {
+                  opacity: interpolate(frame, [24, 56], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [24, 56], [18, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
                 Historical Simulation
@@ -82,26 +85,28 @@ export const BacktestDemo: React.FC = () => {
                   color: colors.textMuted,
                   fontFamily: fonts.sans,
                   marginTop: 4,
-                  opacity: interpolate(frame, [20, 35], [0, 1], {
+                  opacity: interpolate(frame, [36, 75], [0, 1], {
                     extrapolateLeft: 'clamp',
                     extrapolateRight: 'clamp',
+                  easing: Easing.out(Easing.cubic),
                   }),
+                  transform: `translateY(${interpolate(frame, [36, 75], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) })}px)`,
                 }}
               >
-                Test your strategy against 5 years of market data before risking real capital
+                Validate strategy alpha against historical benchmarks with walk-forward analysis
               </div>
             </div>
 
             {/* Metrics */}
             <div style={{ display: 'flex', gap: 14 }}>
-              <MetricCard label="CAGR" value={Math.round(data.cagr * 10) / 10} suffix="%" decimals={1} delay={15} color={colors.primary} />
-              <MetricCard label="Max Drawdown" value={Math.round(data.maxDrawdown * 10) / 10} suffix="%" decimals={1} delay={22} color={colors.rose} />
-              <MetricCard label="Win Rate" value={Math.round(data.winRate)} suffix="%" delay={29} color={colors.cyan} />
-              <MetricCard label="Alpha" value={8.6} suffix="%" decimals={1} delay={36} color={colors.accent} />
+              <MetricCard label="CAGR" value={Math.round(data.cagr * 10) / 10} suffix="%" decimals={1} delay={40} color={colors.primary} />
+              <MetricCard label="Max Drawdown" value={Math.round(data.maxDrawdown * 10) / 10} suffix="%" decimals={1} delay={60} color={colors.rose} />
+              <MetricCard label="Win Rate" value={Math.round(data.winRate)} suffix="%" delay={80} color={colors.cyan} />
+              <MetricCard label="Alpha" value={8.6} suffix="%" decimals={1} delay={100} color={colors.accent} />
             </div>
 
             {/* Chart */}
-            <GlassCard delay={18} style={{ flex: 1, display: 'flex', flexDirection: 'column' }} glowColor={colors.primaryDim20}>
+            <GlassCard delay={70} style={{ flex: 1, display: 'flex', flexDirection: 'column' }} glowColor={colors.primaryDim20}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
                 <div
                   style={{
@@ -134,7 +139,7 @@ export const BacktestDemo: React.FC = () => {
                     data={benchmarkData}
                     width={1060}
                     height={370}
-                    delay={25}
+                    delay={90}
                     duration={90}
                     strokeColor={colors.textDim}
                     fillColor="rgba(82, 82, 91, 0.06)"
@@ -148,7 +153,7 @@ export const BacktestDemo: React.FC = () => {
                     data={strategyData}
                     width={1060}
                     height={370}
-                    delay={25}
+                    delay={90}
                     duration={90}
                   />
                 </div>

@@ -4,8 +4,7 @@ import {
   interpolate,
   spring,
   useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+  useVideoConfig, Easing } from 'remotion';
 import { colors, fonts } from '../styles';
 
 /**
@@ -30,32 +29,36 @@ export const SectionTitle: React.FC<SectionTitleProps> = ({
   const { fps } = useVideoConfig();
 
   // Fade envelope
-  const fadeIn = interpolate(frame, [0, 15], [0, 1], {
+  const fadeIn = interpolate(frame, [0, 37], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
   const fadeOut = interpolate(
     frame,
     [durationInFrames - 15, durationInFrames],
     [1, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) },
   );
   const opacity = Math.min(fadeIn, fadeOut);
 
   // Accent line extends
-  const lineWidth = interpolate(frame, [5, 30], [0, 80], {
+  const lineWidth = interpolate(frame, [5, 40], [0, 80], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Category label
-  const catOp = interpolate(frame, [8, 22], [0, 1], {
+  const catOp = interpolate(frame, [8, 43], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
-  const catX = interpolate(frame, [8, 22], [-15, 0], {
+  const catX = interpolate(frame, [8, 43], [-15, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Title spring
@@ -64,15 +67,17 @@ export const SectionTitle: React.FC<SectionTitleProps> = ({
     fps,
     config: { damping: 16, stiffness: 100, mass: 0.6 },
   });
-  const titleOp = interpolate(frame, [12, 28], [0, 1], {
+  const titleOp = interpolate(frame, [12, 42], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   // Subtle number/dot decoration
-  const dotOp = interpolate(frame, [20, 35], [0, 0.4], {
+  const dotOp = interpolate(frame, [20, 57], [0, 0.4], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+  easing: Easing.out(Easing.cubic),
   });
 
   return (
