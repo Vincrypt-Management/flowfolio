@@ -6,7 +6,7 @@ import { resolve } from "path";
 export default defineConfig({
   plugins: [react()],
   root: ".",
-  base: "/", // Change to '/flowfolio/' if deploying to GitHub Pages subdirectory
+  base: "/flowfolio/",
   build: {
     outDir: "dist-landing",
     emptyOutDir: true,
