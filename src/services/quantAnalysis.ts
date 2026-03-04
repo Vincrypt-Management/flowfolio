@@ -126,7 +126,7 @@ export class Statistics {
       sum += (x[i] - xMean) * (y[i] - yMean);
     }
     
-    return sum / (n - 1);
+    return n > 1 ? sum / (n - 1) : 0;
   }
 }
 
@@ -427,7 +427,9 @@ export class TechnicalAnalysis {
     const lowestLow = Math.min(...recentLows);
     const currentClose = closes[closes.length - 1];
     
-    return ((highestHigh - currentClose) / (highestHigh - lowestLow)) * -100;
+    const range = highestHigh - lowestLow;
+    if (range === 0) return -50; // Neutral when price is flat
+    return ((highestHigh - currentClose) / range) * -100;
   }
 
   private static stochastic(highs: number[], lows: number[], closes: number[], kPeriod: number, dPeriod: number): { k: number; d: number } {
@@ -439,7 +441,8 @@ export class TechnicalAnalysis {
     const lowestLow = Math.min(...recentLows);
     const currentClose = closes[closes.length - 1];
     
-    const k = ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100;
+    const stochRange = highestHigh - lowestLow;
+    const k = stochRange > 0 ? ((currentClose - lowestLow) / stochRange) * 100 : 50;
     
     // Calculate %D (SMA of %K)
     const kValues: number[] = [];
@@ -447,7 +450,8 @@ export class TechnicalAnalysis {
       if (i >= kPeriod - 1) {
         const h = Math.max(...highs.slice(i - kPeriod + 1, i + 1));
         const l = Math.min(...lows.slice(i - kPeriod + 1, i + 1));
-        kValues.push(((closes[i] - l) / (h - l)) * 100);
+        const hl = h - l;
+        kValues.push(hl > 0 ? ((closes[i] - l) / hl) * 100 : 50);
       }
     }
     const d = kValues.length > 0 ? kValues.reduce((a, b) => a + b, 0) / kValues.length : k;
@@ -547,7 +551,7 @@ export class PortfolioOptimizer {
     // Conditional VaR (CVaR) at 95% confidence
     const allReturns = Object.values(returnsData).flat();
     const sortedReturns = allReturns.sort((a, b) => a - b);
-    const varIndex = Math.floor(sortedReturns.length * 0.05);
+    const varIndex = Math.max(1, Math.floor(sortedReturns.length * 0.05));
     const conditionalVaR = sortedReturns.slice(0, varIndex).reduce((a, b) => a + b, 0) / varIndex;
     
     // Beta (assuming market returns are average of all symbols)

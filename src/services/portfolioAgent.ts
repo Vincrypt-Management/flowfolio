@@ -1237,9 +1237,9 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     
     // Step 2: Apply allocation adjustments based on analysis (now includes fundamentals)
     const totalRiskScore = assetAnalysis.reduce((sum, a) => sum + a.riskScore, 0);
-    const avgRiskScore = totalRiskScore / assets.length;
+    const avgRiskScore = assets.length > 0 ? totalRiskScore / assets.length : 0;
     const totalStrengthScore = assetAnalysis.reduce((sum, a) => sum + a.strengthScore, 0);
-    const avgStrengthScore = totalStrengthScore / assets.length;
+    const avgStrengthScore = assets.length > 0 ? totalStrengthScore / assets.length : 0;
     
     assets = assets.map((asset, index) => {
       const analysis = assetAnalysis[index];
@@ -2324,7 +2324,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     const recent = closes.slice(0, 20);
     
     // Simple moving averages
-    const sma20 = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const sma20 = recent.length > 0 ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
     const sma50 = closes.length >= 50 
       ? closes.slice(0, 50).reduce((a, b) => a + b, 0) / 50 
       : sma20;
@@ -3022,12 +3022,12 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         riskAdjustments.push(`Reduced allocation to high-volatility assets (iteration ${iterations})`);
       }
       
-      // Strategy 2: Increase allocation to low-volatility assets
-      const lowVolAssets = assets.filter(a => a.quantMetrics && a.quantMetrics.volatility < 15);
-      if (lowVolAssets.length > 0) {
-        const redistributeTotal = assets.reduce((sum, a) => sum + a.allocation, 0);
-        const deficit = 100 - redistributeTotal;
-        if (deficit > 0) {
+      // Strategy 2: Increase allocation to low-volatility assets (or redistribute equally as fallback)
+      const redistributeTotal = assets.reduce((sum, a) => sum + a.allocation, 0);
+      const deficit = 100 - redistributeTotal;
+      if (deficit > 0) {
+        const lowVolAssets = assets.filter(a => a.quantMetrics && a.quantMetrics.volatility < 15);
+        if (lowVolAssets.length > 0) {
           const perLowVolAsset = deficit / lowVolAssets.length;
           assets = assets.map(asset => {
             if (asset.quantMetrics && asset.quantMetrics.volatility < 15) {
@@ -3036,6 +3036,10 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
             return asset;
           });
           riskAdjustments.push(`Increased allocation to low-volatility assets`);
+        } else if (assets.length > 0) {
+          const perAsset = deficit / assets.length;
+          assets = assets.map(asset => ({ ...asset, allocation: asset.allocation + perAsset }));
+          riskAdjustments.push(`Redistributed deficit equally across all assets`);
         }
       }
 
@@ -3099,7 +3103,9 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
     // Recalculate diversification score after adjustments
     const finalAllocations = assets.map(a => a.allocation / 100);
     const finalHerfindahl = finalAllocations.reduce((sum, a) => sum + a * a, 0);
-    diversificationScore = Math.round(((1 - finalHerfindahl) / (1 - (1/assets.length))) * 100);
+    diversificationScore = assets.length > 1
+      ? Math.round(((1 - finalHerfindahl) / (1 - (1/assets.length))) * 100)
+      : 0;
 
     // Enhanced backtest estimation
     const backtestResult = this.estimateBacktest(totalReturn, portfolioVolatility, assets);

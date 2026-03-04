@@ -141,9 +141,13 @@ class ApiClient {
       this.recordFailure(service);
       throw error;
     } finally {
-      // Cleanup after dedup window
+      // Cleanup after dedup window with timestamp check to avoid race conditions
+      const requestTimestamp = this.pendingRequests.get(key)?.timestamp;
       setTimeout(() => {
-        this.pendingRequests.delete(key);
+        const current = this.pendingRequests.get(key);
+        if (current && current.timestamp === requestTimestamp) {
+          this.pendingRequests.delete(key);
+        }
       }, API_CONFIG.DEDUP_WINDOW_MS);
     }
   }

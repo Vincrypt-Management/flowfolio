@@ -168,7 +168,7 @@ export function valueAtRisk(returns: number[], confidenceLevel = 0.95): number {
   if (returns.length === 0) return 0;
   
   const sorted = [...returns].sort((a, b) => a - b);
-  const index = Math.floor(sorted.length * (1 - confidenceLevel));
+  const index = Math.max(0, Math.ceil(sorted.length * (1 - confidenceLevel)) - 1);
   
   return -sorted[index] * SQRT_252; // Annualized
 }
@@ -180,7 +180,7 @@ export function conditionalVaR(returns: number[], confidenceLevel = 0.95): numbe
   if (returns.length === 0) return 0;
   
   const sorted = [...returns].sort((a, b) => a - b);
-  const cutoffIndex = Math.floor(sorted.length * (1 - confidenceLevel));
+  const cutoffIndex = Math.max(0, Math.ceil(sorted.length * (1 - confidenceLevel)) - 1);
   
   let sum = 0;
   for (let i = 0; i <= cutoffIndex; i++) {
@@ -465,7 +465,7 @@ function covariance(x: number[], y: number[], meanX: number, meanY: number): num
     sum += (x[i] - meanX) * (y[i] - meanY);
   }
   
-  return sum / (n - 1);
+  return n > 1 ? sum / (n - 1) : 0;
 }
 
 // ============================================================================

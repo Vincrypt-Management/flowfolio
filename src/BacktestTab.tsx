@@ -181,7 +181,7 @@ export function BacktestTab() {
   };
 
   const calculateGrowth = () => {
-    if (!result) return 0;
+    if (!result || result.metrics.total_invested === 0) return 0;
     return ((result.metrics.final_value - result.metrics.total_invested) / result.metrics.total_invested * 100);
   };
 
