@@ -28,7 +28,8 @@
     "remotion:render:intro-ig": "npx remotion render src/remotion/index.ts FlowFolioIntroIG out/flowfolio-intro-ig.mp4",
     "remotion:render:demo": "npx remotion render src/remotion/index.ts FlowFolioShowcase out/flowfolio-demo.mp4",
     "remotion:render:demo-ig": "npx remotion render src/remotion/index.ts FlowFolioShowcaseIG out/flowfolio-demo-ig.mp4",
-    "remotion:render": "npm run remotion:render:intro && npm run remotion:render:intro-ig && npm run remotion:render:demo && npm run remotion:render:demo-ig"
+    "remotion:render:app": "npx remotion render src/remotion/index.ts FlowFolioAppShowcase out/flowfolio-app-showcase.mp4",
+    "remotion:render": "npm run remotion:render:intro && npm run remotion:render:intro-ig && npm run remotion:render:demo && npm run remotion:render:demo-ig && npm run remotion:render:app"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.428",

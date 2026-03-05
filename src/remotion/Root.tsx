@@ -4,6 +4,7 @@ import { FlowFolioIntro } from './FlowFolioIntro';
 import { FlowFolioIntroIG } from './FlowFolioIntroIG';
 import { FlowFolioShowcase } from './FlowFolioShowcase';
 import { FlowFolioShowcaseIG } from './FlowFolioShowcaseIG';
+import { FlowFolioAppShowcase } from './FlowFolioAppShowcase';
 
 export const Root: React.FC = () => {
   const defaultSeed = Date.now();
@@ -45,6 +46,15 @@ export const Root: React.FC = () => {
         width={1080}
         height={1920}
         defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FlowFolioAppShowcase"
+        component={FlowFolioAppShowcase}
+        durationInFrames={3060}
+        fps={60}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
       />
     </>
   );
