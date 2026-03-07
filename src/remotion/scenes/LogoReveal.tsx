@@ -80,7 +80,7 @@ export const LogoReveal: React.FC = () => {
           }}
         >
           <Img
-            src={staticFile('icon-only.png')}
+            src={staticFile('logo.png')}
             style={{
               width: 120,
               height: 120,

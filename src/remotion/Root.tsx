@@ -5,6 +5,8 @@ import { FlowFolioIntroIG } from './FlowFolioIntroIG';
 import { FlowFolioShowcase } from './FlowFolioShowcase';
 import { FlowFolioShowcaseIG } from './FlowFolioShowcaseIG';
 import { FlowFolioAppShowcase } from './FlowFolioAppShowcase';
+import { FeedTipCard, FeedMetricsCard, FeedBacktestCard, FeedFeatureCard, FeedQuoteCard } from './FlowFolioFeedPosts';
+import { FeedCarousel } from './FlowFolioCarousel';
 
 export const Root: React.FC = () => {
   const defaultSeed = Date.now();
@@ -55,6 +57,60 @@ export const Root: React.FC = () => {
         width={1920}
         height={1080}
         defaultProps={{}}
+      />
+      <Composition
+        id="FeedTipCard"
+        component={FeedTipCard}
+        durationInFrames={90}
+        fps={60}
+        width={1080}
+        height={1080}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FeedMetricsCard"
+        component={FeedMetricsCard}
+        durationInFrames={90}
+        fps={60}
+        width={1080}
+        height={1080}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FeedBacktestCard"
+        component={FeedBacktestCard}
+        durationInFrames={90}
+        fps={60}
+        width={1080}
+        height={1080}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FeedFeatureCard"
+        component={FeedFeatureCard}
+        durationInFrames={90}
+        fps={60}
+        width={1080}
+        height={1080}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FeedQuoteCard"
+        component={FeedQuoteCard}
+        durationInFrames={90}
+        fps={60}
+        width={1080}
+        height={1080}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FeedCarousel"
+        component={FeedCarousel}
+        durationInFrames={90}
+        fps={60}
+        width={1080}
+        height={1080}
+        defaultProps={{ seed: defaultSeed, slide: 0 }}
       />
     </>
   );

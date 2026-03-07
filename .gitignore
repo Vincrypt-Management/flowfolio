@@ -47,3 +47,10 @@ SESSION*.md
 *.txt
 !LICENSE.txt
 .env.encrypted
+
+# Instagram automation session & rendered content
+.ig-session.json
+.ig-schedule.db
+.ig-schedule.db-shm
+.ig-schedule.db-wal
+out/scheduled/

@@ -12,7 +12,7 @@ import {
 } from 'remotion';
 import { colors, fonts, radius } from './styles';
 import { AudioTrack } from './audio/AudioTrack';
-import { buildIGDemoAudio } from './audio/SynthEngine';
+import { buildIGDemoAudio, buildTrendyIGAudio } from './audio/SynthEngine';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 import {
   hookVariants,
@@ -150,7 +150,7 @@ const IGDemoLogo: React.FC<{ tagline: string }> = ({ tagline }) => {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
         <div style={{ transform: `scale(${logoScale})`, opacity: logoOp }}>
           <Img
-            src={staticFile('icon-only.png')}
+            src={staticFile('logo.png')}
             style={{
               width: 140,
               height: 140,
@@ -304,7 +304,7 @@ const IGDemoCTA: React.FC = () => {
         }}
       >
         <Img
-          src={staticFile('icon-only.png')}
+          src={staticFile('logo.png')}
           style={{
             width: 112,
             height: 112,
@@ -521,7 +521,7 @@ export const FlowFolioShowcaseIG: React.FC<IGDemoProps> = ({ seed }) => {
 
   const audioSeed = rng.seed;
   const audioGen = useMemo(
-    () => (dur: number) => buildIGDemoAudio(dur, audioSeed),
+    () => (dur: number) => audioSeed % 2 === 0 ? buildTrendyIGAudio(dur, audioSeed) : buildIGDemoAudio(dur, audioSeed),
     [audioSeed]
   );
 

@@ -33,7 +33,8 @@ import {
   Menu,
   X,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Settings
 } from "lucide-react";
 import "./App.css";
 import "./styles/optimizer.css";
@@ -46,6 +47,9 @@ const JournalTab = lazy(() => import("./JournalTab").then(m => ({ default: m.Jou
 const YearlyReviewComponent = lazy(() => import("./components/YearlyReview").then(m => ({ default: m.YearlyReviewComponent })));
 const SavedPortfoliosTab = lazy(() => import("./components/SavedPortfoliosTab").then(m => ({ default: m.SavedPortfoliosTab })));
 const DataSourcesPage = lazy(() => import("./components/DataSourcesPage").then(m => ({ default: m.DataSourcesPage })));
+const SettingsPage = lazy(() => import("./components/SettingsPage").then(m => ({ default: m.SettingsPage })));
+
+import { UserProfileCard } from "./components/UserProfileCard";
 
 function TabLoading() {
   return (
@@ -548,9 +552,23 @@ function App() {
           {!isSidebarCollapsed && <span>Data Sources</span>}
         </button>
         )}
+        <button 
+          className={`nav-item ${activeTab === "settings" ? "active" : ""}`}
+          onClick={() => handleNavClick("settings")}
+          title={isSidebarCollapsed ? "Settings" : ""}
+          role="menuitem"
+          aria-current={activeTab === "settings" ? "page" : undefined}
+        >
+          <Settings className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Settings</span>}
+        </button>
       </nav>
 
       <div className="sidebar-footer">
+        <UserProfileCard
+          collapsed={isSidebarCollapsed}
+          onSettingsClick={() => handleNavClick("settings")}
+        />
         <button 
           className={`mode-toggle ${isSidebarCollapsed ? "collapsed" : ""}`}
           onClick={toggleMode}
@@ -1078,6 +1096,14 @@ function App() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="animate-fade-in">
+            <Suspense fallback={<TabLoading />}>
+              <SettingsPage />
+            </Suspense>
           </div>
         )}
       </main>

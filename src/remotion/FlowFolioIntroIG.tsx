@@ -12,7 +12,7 @@ import {
 } from 'remotion';
 import { colors, fonts, radius } from './styles';
 import { AudioTrack } from './audio/AudioTrack';
-import { buildIGReelAudio } from './audio/SynthEngine';
+import { buildIGReelAudio, buildTrendyIGAudio } from './audio/SynthEngine';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 import { hookVariants, pickIGFeatures, taglineVariants } from './lib/contentPools';
 
@@ -141,7 +141,7 @@ const IGLogo: React.FC<{ tagline: string }> = ({ tagline }) => {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 28 }}>
         <div style={{ transform: `scale(${logoScale})`, opacity: logoOp }}>
           <Img
-            src={staticFile('icon-only.png')}
+            src={staticFile('logo.png')}
             style={{
               width: 140,
               height: 140,
@@ -427,7 +427,7 @@ const IGCTA: React.FC = () => {
         }}
       >
         <Img
-          src={staticFile('icon-only.png')}
+          src={staticFile('logo.png')}
           style={{
             width: 112,
             height: 112,
@@ -565,8 +565,9 @@ export const FlowFolioIntroIG: React.FC<IGProps> = ({ seed }) => {
   }, [rng]);
 
   const audioSeed = rng.seed;
+  // Use trendy beat for even seeds, classic for odd (variety across renders)
   const audioGen = useMemo(
-    () => (dur: number) => buildIGReelAudio(dur, audioSeed),
+    () => (dur: number) => audioSeed % 2 === 0 ? buildTrendyIGAudio(dur, audioSeed) : buildIGReelAudio(dur, audioSeed),
     [audioSeed]
   );
 

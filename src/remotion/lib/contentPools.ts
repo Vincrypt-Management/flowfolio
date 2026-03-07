@@ -25,6 +25,19 @@ export const hookVariants: readonly HookVariant[] = [
   { line1: 'Data is everywhere.', line2: 'Insight is nowhere.' },
   { line1: 'You invest with conviction.', line2: 'You manage with chaos.' },
   { line1: 'Your ideas outpace', line2: 'your infrastructure.' },
+  { line1: 'You read the 10-K.', line2: 'Your app reads nothing.' },
+  { line1: 'You backtest in your head.', line2: "That doesn't scale." },
+  { line1: 'Your watchlist grows.', line2: 'Your clarity shrinks.' },
+  { line1: 'You want to go deeper.', line2: 'Your tools stay shallow.' },
+  { line1: 'You sized the position.', line2: 'In a Google Doc.' },
+  { line1: 'Your portfolio has a thesis.', line2: 'Your broker has tabs.' },
+  { line1: 'You know the risks.', line2: "You just can't see them." },
+  { line1: 'You trade with discipline.', line2: 'You plan with sticky notes.' },
+  { line1: 'You found alpha.', line2: 'Then lost it in a spreadsheet.' },
+  { line1: 'Your conviction is strong.', line2: 'Your toolchain is fragile.' },
+  { line1: 'You understand correlation.', line2: 'Your portfolio app does not.' },
+  { line1: 'You run the numbers.', line2: 'Manually. Every. Time.' },
+  { line1: 'You trust your process.', line2: "But you can't prove it." },
 ];
 
 // ─── Pain Points ────────────────────────────────────────────────
@@ -44,6 +57,13 @@ const painPointPool: readonly PainPoint[] = [
   { label: 'Fragmented tools', desc: 'Five apps to do one job', colorKey: 'accent' },
   { label: 'Subscription fatigue', desc: 'Paying monthly for features you barely use', colorKey: 'rose' },
   { label: 'Stale data', desc: 'Decisions based on yesterday\'s numbers', colorKey: 'amber' },
+  { label: 'Copy-paste portfolios', desc: 'Following influencers instead of your own thesis', colorKey: 'accent' },
+  { label: 'No decision journal', desc: 'Repeating mistakes because you forgot the last one', colorKey: 'rose' },
+  { label: 'Blind spot risk', desc: 'Concentrated in one sector without realizing it', colorKey: 'amber' },
+  { label: 'Analysis paralysis', desc: 'Too many tabs open, zero decisions made', colorKey: 'accent' },
+  { label: 'Correlation surprise', desc: 'Diversified on paper, correlated in practice', colorKey: 'rose' },
+  { label: 'Fee blindness', desc: 'No clear view of what costs are eating your returns', colorKey: 'amber' },
+  { label: 'Strategy drift', desc: 'Started with a plan, ended with a mess', colorKey: 'accent' },
 ];
 
 export function pickPainPoints(rng: VideoRNG, count = 3): PainPoint[] {
@@ -70,6 +90,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'Define your investing philosophy.', accentColor: colors.primary },
       { line: 'Turn your thesis into a strategy.', accentColor: colors.primary },
       { line: 'Your convictions, quantified.', accentColor: colors.primaryBright },
+      { line: 'Weight the factors you believe in.', accentColor: colors.primary },
+      { line: 'Build a strategy that sounds like you.', accentColor: colors.primaryBright },
+      { line: 'From intuition to algorithm.', accentColor: colors.primary },
+      { line: 'Your investing DNA, encoded.', accentColor: colors.primaryBright },
     ],
   },
   {
@@ -79,6 +103,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'From plan to portfolio in seconds.', accentColor: colors.accent },
       { line: 'See the bigger picture.', accentColor: colors.accentBright },
       { line: 'Your portfolio, at a glance.', accentColor: colors.accent },
+      { line: 'Every holding, every weight, one view.', accentColor: colors.accentBright },
+      { line: 'Clarity across every position.', accentColor: colors.accent },
+      { line: 'Real-time, real ownership.', accentColor: colors.accentBright },
+      { line: 'The command center for your capital.', accentColor: colors.accent },
     ],
   },
   {
@@ -88,6 +116,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'Test before you invest.', accentColor: colors.cyan },
       { line: 'History is your laboratory.', accentColor: colors.blue },
       { line: 'Would this have worked? Find out.', accentColor: colors.cyan },
+      { line: 'Stress-test against real markets.', accentColor: colors.blue },
+      { line: 'Simulate decades in seconds.', accentColor: colors.cyan },
+      { line: 'Confidence backed by data.', accentColor: colors.blue },
+      { line: 'Your strategy vs. the past.', accentColor: colors.cyan },
     ],
   },
   {
@@ -97,6 +129,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'Quantify your conviction.', accentColor: colors.blue },
       { line: 'Numbers don\'t lie.', accentColor: colors.blueLight },
       { line: 'Deep metrics, clear picture.', accentColor: colors.blue },
+      { line: 'Sharpe, Sortino, max drawdown — instant.', accentColor: colors.blueLight },
+      { line: 'Institutional-grade analytics.', accentColor: colors.blue },
+      { line: 'See what the spreadsheet hides.', accentColor: colors.blueLight },
+      { line: 'The numbers behind the narrative.', accentColor: colors.blue },
     ],
   },
   {
@@ -106,6 +142,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'Optimize without overthinking.', accentColor: colors.amber },
       { line: 'Smart rebalancing, instantly.', accentColor: colors.amber },
       { line: 'Fine-tune with intelligence.', accentColor: colors.amber },
+      { line: 'Better weights, less risk.', accentColor: colors.amber },
+      { line: 'Efficient frontier, one click.', accentColor: colors.amber },
+      { line: 'Maximize return per unit of risk.', accentColor: colors.amber },
+      { line: 'Allocation, perfected.', accentColor: colors.amber },
     ],
   },
   {
@@ -115,6 +155,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'Your investing diary.', accentColor: colors.rose },
       { line: 'Track why, not just what.', accentColor: colors.rose },
       { line: 'Learn from every trade.', accentColor: colors.rose },
+      { line: 'Hindsight becomes foresight.', accentColor: colors.rose },
+      { line: 'The habit that separates pros.', accentColor: colors.rose },
+      { line: 'Capture the reasoning, not just the result.', accentColor: colors.rose },
+      { line: 'Your future self will thank you.', accentColor: colors.rose },
     ],
   },
   {
@@ -124,6 +168,10 @@ export const storyBeatPools: readonly StoryBeatPool[] = [
       { line: 'Your portfolio analyst, on demand.', accentColor: colors.accent },
       { line: 'Conversations that compound.', accentColor: colors.primaryBright },
       { line: 'AI that knows your portfolio.', accentColor: colors.accent },
+      { line: 'Challenge your assumptions.', accentColor: colors.primaryBright },
+      { line: 'A second opinion, instantly.', accentColor: colors.accent },
+      { line: 'Think out loud with AI.', accentColor: colors.primaryBright },
+      { line: 'Context-aware portfolio intelligence.', accentColor: colors.accent },
     ],
   },
 ];
@@ -162,6 +210,16 @@ const stockPool: readonly StockSymbol[] = [
   { symbol: 'CRM', name: 'Salesforce' },
   { symbol: 'AMD', name: 'AMD' },
   { symbol: 'INTC', name: 'Intel' },
+  { symbol: 'UNH', name: 'UnitedHealth' },
+  { symbol: 'LLY', name: 'Eli Lilly' },
+  { symbol: 'AVGO', name: 'Broadcom' },
+  { symbol: 'KO', name: 'Coca-Cola' },
+  { symbol: 'PEP', name: 'PepsiCo' },
+  { symbol: 'ABBV', name: 'AbbVie' },
+  { symbol: 'MRK', name: 'Merck' },
+  { symbol: 'XOM', name: 'Exxon Mobil' },
+  { symbol: 'BA', name: 'Boeing' },
+  { symbol: 'CAT', name: 'Caterpillar' },
 ];
 
 export function pickStocks(rng: VideoRNG, count = 5): StockSymbol[] {
@@ -197,6 +255,16 @@ export const taglineVariants: readonly string[] = [
   'Factor investing without the friction',
   'Offline-first. Insight-always.',
   'From thesis to portfolio in minutes',
+  'Invest with clarity',
+  'Your edge, engineered',
+  'Zero cloud. Full control.',
+  'Strategy meets structure',
+  'Built for the self-directed',
+  'Think. Test. Invest.',
+  'Desktop-grade conviction',
+  'Precision investing, locally',
+  'Analysis without compromise',
+  'Own your process',
 ];
 
 // ─── Animation Style Variants ───────────────────────────────────
@@ -224,6 +292,10 @@ const igFeaturePool: readonly IGFeatureVariant[] = [
   { beat: 'Know every number', label: 'Quant Analysis', colorKey: 'primary' },
   { beat: 'Track your journey', label: 'Journal', colorKey: 'cyan' },
   { beat: 'See the big picture', label: 'Portfolio View', colorKey: 'amber' },
+  { beat: 'Optimize allocations', label: 'Portfolio Optimizer', colorKey: 'primary' },
+  { beat: 'Score any stock', label: 'Factor Scoring', colorKey: 'cyan' },
+  { beat: 'Stay private', label: 'Offline-First', colorKey: 'amber' },
+  { beat: 'Spot concentration risk', label: 'Risk Analysis', colorKey: 'primary' },
 ];
 
 export function pickIGFeatures(rng: VideoRNG, count = 3): IGFeatureVariant[] {

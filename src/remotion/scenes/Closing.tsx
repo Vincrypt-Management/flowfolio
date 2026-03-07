@@ -75,7 +75,7 @@ export const Closing: React.FC = () => {
         }}
       >
         <Img
-          src={staticFile('icon-only.png')}
+          src={staticFile('logo.png')}
           style={{
             width: 96,
             height: 96,

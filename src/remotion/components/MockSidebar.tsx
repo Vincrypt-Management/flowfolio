@@ -113,7 +113,7 @@ export const MockSidebar: React.FC<MockSidebarProps> = ({
         }}
       >
         <Img
-          src={staticFile('icon-only.png')}
+          src={staticFile('logo.png')}
           style={{
             width: 24,
             height: 24,

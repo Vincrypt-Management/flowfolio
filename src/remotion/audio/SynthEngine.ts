@@ -694,3 +694,95 @@ export async function buildShowcaseAudio(durationSec: number, seed: number = 42)
 
   return ctx.startRendering();
 }
+
+// ─── Trendy IG Beat Builder ─────────────────────────────────────
+
+/**
+ * TRENDY IG REEL — Modern, rhythmic, catchy.
+ * Lo-fi trap-inspired with rolling hi-hats, 808 sub bass, and melodic leads.
+ * Designed to match current IG Reels audio trends.
+ */
+export async function buildTrendyIGAudio(durationSec: number, seed: number = 42): Promise<AudioBuffer> {
+  const ctx = new OfflineAudioContext(2, SAMPLE_RATE * durationSec, SAMPLE_RATE);
+  const bus = createMixBus(ctx, { master: 0.85, pad: 0.9, chime: 1.0, fx: 1.0 });
+
+  const chordKeys: ChordKey[] = ['Am', 'Dm', 'Em', 'Cm', 'Fm'];
+  const selectedKey = audioSelect(chordKeys, seed, 0);
+  const chords = chordProgressions[selectedKey];
+
+  const bpm = audioSelect([130, 135, 140, 145] as const, seed, 1);
+  const beatDur = 60 / bpm;
+
+  // ─── 808 Sub Bass Pattern ───
+  const bassNotes = [chords[0][0], chords[0][0], chords[1][0], chords[2][0]];
+  const bassADSR: ADSR = { attack: 0.005, decay: 0.15, sustain: 0.4, release: 0.3 };
+  for (let t = 0; t < durationSec - 0.5; t += beatDur * 4) {
+    const noteIdx = Math.floor(t / (beatDur * 4)) % bassNotes.length;
+    addTone(ctx, bus.fx, { frequency: 50, type: 'sine', startTime: t, duration: beatDur * 2, volume: 0.18, adsr: bassADSR });
+    addTone(ctx, bus.fx, { frequency: bassNotes[noteIdx] * 0.5, type: 'sine', startTime: t, duration: beatDur * 3.5, volume: 0.12, adsr: { attack: 0.01, decay: 0.3, sustain: 0.3, release: 0.5 } });
+    addTone(ctx, bus.fx, { frequency: 55, type: 'sine', startTime: t + beatDur * 2, duration: beatDur, volume: 0.10, adsr: bassADSR });
+  }
+
+  // ─── Rolling Hi-Hats (trap-style) ───
+  const hihatADSR: ADSR = { attack: 0.001, decay: 0.03, sustain: 0.0, release: 0.05 };
+  const openHatADSR: ADSR = { attack: 0.001, decay: 0.08, sustain: 0.1, release: 0.12 };
+  for (let t = 0.1; t < durationSec - 0.2; t += beatDur / 2) {
+    const isHalfBeat = Math.round(t / (beatDur / 2)) % 2 === 1;
+    const isRollSection = Math.floor(t / (beatDur * 8)) % 3 === 2;
+
+    if (isRollSection) {
+      for (let r = 0; r < 3; r++) {
+        const rollT = t + (beatDur / 6) * r;
+        if (rollT < durationSec - 0.1) {
+          addTone(ctx, bus.fx, { frequency: 8000 + (seed % 2000), type: 'square', startTime: rollT, duration: 0.03, volume: 0.035 + r * 0.005, adsr: hihatADSR });
+        }
+      }
+    } else {
+      const vel = isHalfBeat ? 0.03 : 0.045;
+      addTone(ctx, bus.fx, { frequency: 9000, type: 'square', startTime: t, duration: 0.04, volume: vel, adsr: hihatADSR });
+    }
+
+    if (Math.round(t / beatDur) % 4 === 2) {
+      addTone(ctx, bus.fx, { frequency: 6000, type: 'square', startTime: t, duration: 0.15, volume: 0.04, adsr: openHatADSR });
+    }
+  }
+
+  // ─── Snare / Clap on 2 and 4 ───
+  const snareADSR: ADSR = { attack: 0.002, decay: 0.06, sustain: 0.02, release: 0.12 };
+  for (let t = beatDur; t < durationSec - 0.3; t += beatDur * 2) {
+    addTone(ctx, bus.fx, { frequency: 200, type: 'triangle', startTime: t, duration: 0.15, volume: 0.10, adsr: snareADSR });
+    addTone(ctx, bus.fx, { frequency: 4000, type: 'square', startTime: t, duration: 0.05, volume: 0.06, adsr: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.04 } });
+  }
+
+  // ─── Melodic Lead (lo-fi piano-like) ───
+  const melodyNotes = [...chords[0].map(f => f * 2), ...chords[1].map(f => f * 2)];
+  const melodyADSR: ADSR = { attack: 0.005, decay: 0.2, sustain: 0.15, release: 0.5 };
+  for (let bar = 0; bar < durationSec / (beatDur * 4); bar++) {
+    const barStart = bar * beatDur * 4;
+    const noteCount = audioSelect([2, 3, 2, 3] as const, seed, bar);
+    for (let n = 0; n < noteCount; n++) {
+      const noteTime = barStart + n * beatDur * (4 / noteCount) + beatDur * 0.5;
+      if (noteTime < durationSec - 0.5) {
+        const freq = audioSelect(melodyNotes, seed, bar * 4 + n);
+        addTone(ctx, bus.chime, { frequency: freq, type: 'sine', startTime: noteTime, duration: beatDur * 1.5, volume: 0.06, adsr: melodyADSR });
+        addTone(ctx, bus.chime, { frequency: freq * 2, type: 'sine', startTime: noteTime + 0.01, duration: beatDur, volume: 0.015, adsr: melodyADSR });
+      }
+    }
+  }
+
+  // ─── Atmospheric pad ───
+  addPad(ctx, bus.pad, { frequencies: chords[0], startTime: 0, duration: durationSec * 0.5, volume: 0.04 });
+  addPad(ctx, bus.pad, { frequencies: chords[1], startTime: durationSec * 0.3, duration: durationSec * 0.7, volume: 0.045 });
+
+  // ─── Transition FX ───
+  addSweep(ctx, bus.fx, 0, 2.0, 0.03);
+  const dropPoints = [beatDur * 8, durationSec * 0.5, durationSec * 0.75];
+  for (const dp of dropPoints) {
+    if (dp < durationSec - 1) {
+      addImpact(ctx, bus.fx, dp, 0.12);
+      addShimmer(ctx, bus.chime, dp + 0.1, 0.025);
+    }
+  }
+
+  return ctx.startRendering();
+}
