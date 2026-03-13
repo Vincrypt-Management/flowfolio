@@ -42,7 +42,7 @@ chrono = { version = "0.4.42", features = ["serde"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls", "gzip", "brotli"] }
 governor = "0.10.4"
 nonzero_ext = "0.3.0"
-uuid = { version = "1.19.0", features = ["v4"] }
+uuid = { version = "1.19.0", features = ["v4", "serde"] }
 dotenvy = "0.15"
 
 # Industrial-Grade Performance Optimizations

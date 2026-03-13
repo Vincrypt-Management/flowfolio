@@ -12,6 +12,7 @@ export interface PostOptions {
   mediaPath: string;       // video (.mp4), image (.png/.jpg), or directory (carousel)
   caption: string;
   coverTimestamp?: number;
+  addTrendingAudio?: boolean;  // attempt to add trending IG audio to reels
   /** @deprecated Use mediaPath instead */
   videoPath?: string;
 }
@@ -22,6 +23,127 @@ function isImagePost(filePath: string): boolean {
 
 function isCarouselPost(filePath: string): boolean {
   return fs.existsSync(filePath) && fs.statSync(filePath).isDirectory();
+}
+
+/**
+ * Attempt to add a trending audio track to the reel during creation.
+ * Instagram's web UI shows a music icon on the reel editor screen.
+ * If the UI changes or the button isn't found, this silently skips.
+ */
+async function tryAddTrendingAudio(page: Page): Promise<void> {
+  try {
+    // Look for the music/audio button on the reel editor
+    const musicSelectors = [
+      'svg[aria-label="Open music picker"]',
+      'svg[aria-label="Select music"]',
+      '[aria-label="Music"]',
+      'svg[aria-label="Audio"]',
+      'button:has(svg[aria-label*="music" i])',
+      'div[role="button"]:has(svg[aria-label*="music" i])',
+      // IG sometimes uses a music note icon without a specific aria-label
+      'button:has(svg path[d*="M19"])',
+    ];
+
+    let musicClicked = false;
+    for (const sel of musicSelectors) {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        musicClicked = true;
+        console.log('Opening music picker...');
+        break;
+      }
+    }
+
+    if (!musicClicked) {
+      console.log('Music picker not found -- skipping trending audio (post will use original audio)');
+      return;
+    }
+
+    await delay(3000);
+
+    // Navigate to trending/for-you tab if available
+    const trendingSelectors = [
+      'div[role="tab"]:has-text("Trending")',
+      'div[role="tab"]:has-text("For You")',
+      'button:has-text("Trending")',
+      'button:has-text("For You")',
+      'span:text-is("Trending")',
+      'span:text-is("For You")',
+    ];
+
+    for (const sel of trendingSelectors) {
+      const tab = page.locator(sel).first();
+      if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await tab.click({ force: true });
+        console.log('Switched to trending audio tab');
+        await delay(2000);
+        break;
+      }
+    }
+
+    // Select the first available trending track
+    // IG shows tracks as rows with play buttons -- click the first one
+    const trackSelectors = [
+      'div[role="listbox"] div[role="option"]:first-child',
+      'div[role="button"]:has(div[style*="background-image"])',
+      // Track rows typically have album art + title
+      'div[class*="track"], div[class*="audio"]',
+    ];
+
+    let trackSelected = false;
+    for (const sel of trackSelectors) {
+      const track = page.locator(sel).first();
+      if (await track.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await track.click({ force: true });
+        trackSelected = true;
+        console.log('Selected trending audio track');
+        await delay(2000);
+        break;
+      }
+    }
+
+    if (!trackSelected) {
+      // Fallback: try clicking any visible music row in the picker
+      const anyTrack = page.locator('div[role="dialog"] div[role="button"]').nth(1);
+      if (await anyTrack.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await anyTrack.click({ force: true });
+        console.log('Selected audio track (fallback)');
+        await delay(2000);
+      } else {
+        console.log('No audio tracks found -- skipping');
+        // Close the music picker
+        const closeBtn = page.locator('svg[aria-label="Close"], button[aria-label="Close"]').first();
+        if (await closeBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await closeBtn.click({ force: true });
+        } else {
+          await page.keyboard.press('Escape');
+        }
+        await delay(1000);
+        return;
+      }
+    }
+
+    // Confirm/done -- look for a "Done" button in the music picker
+    const doneSelectors = [
+      'button:has-text("Done")',
+      'div[role="button"]:has-text("Done")',
+      'button:has-text("Save")',
+    ];
+
+    for (const sel of doneSelectors) {
+      const doneBtn = page.locator(sel).first();
+      if (await doneBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await doneBtn.click({ force: true });
+        console.log('Audio added to reel');
+        await delay(2000);
+        break;
+      }
+    }
+  } catch (err) {
+    console.log('Could not add trending audio:', (err as Error).message);
+    // Non-fatal -- continue posting without music
+  }
 }
 
 export async function uploadReel(page: Page, opts: PostOptions): Promise<boolean> {
@@ -50,88 +172,234 @@ export async function uploadReel(page: Page, opts: PostOptions): Promise<boolean
     : `${(stats.size / 1024 / 1024).toFixed(1)} MB`;
   console.log(`Uploading ${isImage ? 'image' : 'video'}: ${mediaPath} (${sizeLabel})`);
 
+  // Debug screenshot helper
+  const debugDir = path.join(path.dirname(mediaPath), 'debug-reel');
+  if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+  const screenshot = async (name: string) => {
+    await page.screenshot({ path: path.join(debugDir, `${name}.png`) });
+    console.log(`  [debug] screenshot: ${name}`);
+  };
+
   try {
     // Navigate to Instagram home
-    await page.goto(IG_BASE, { waitUntil: 'networkidle' });
-    await delay(2000);
+    await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await delay(3000);
+    await screenshot('01-home');
 
     // Click the "Create" / "New post" button (+ icon)
-    const createBtn = page.locator(
-      'svg[aria-label="New post"], a[href="/create/style/"], [aria-label="New post"]'
-    ).first();
-
-    if (await createBtn.isVisible({ timeout: 5000 })) {
-      await createBtn.click();
-    } else {
-      // Mobile: try bottom nav create button
-      const mobileCreate = page.locator('[data-testid="new-post-button"], svg[aria-label="New Post"]').first();
-      await mobileCreate.click();
+    const createSelectors = [
+      'svg[aria-label="New post"]',
+      '[aria-label="New post"]',
+      'a[href="/create/style/"]',
+      'svg[aria-label="New Post"]',
+    ];
+    let clicked = false;
+    for (const sel of createSelectors) {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        clicked = true;
+        console.log(`  Clicked create button: ${sel}`);
+        break;
+      }
     }
-    await delay(2000);
+    if (!clicked) {
+      await page.click('[href="/create/style/"]', { force: true }).catch(() => {});
+    }
+    await delay(3000);
+    await screenshot('02-create-dialog');
 
     // Handle file input - Instagram uses a hidden file input
     const fileInput = page.locator('input[type="file"]').first();
     await fileInput.setInputFiles(mediaPath);
-    await delay(3000);
+    await delay(4000);
 
     // Wait for processing
-    console.log(`⏳ Waiting for ${isImage ? 'image' : 'video'} to process...`);
+    console.log(`Waiting for ${isImage ? 'image' : 'video'} to process...`);
     await delay(5000);
 
-    // Click through the creation flow
-    // Step 1: Crop/Trim → Next
-    const nextBtn = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")').first();
-    if (await nextBtn.isVisible({ timeout: 5000 })) {
-      await nextBtn.click();
+    // Dismiss any informational popups (e.g. "Video posts are now shared as reels")
+    const okBtn = page.locator('button:has-text("OK")').first();
+    if (await okBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await okBtn.click({ force: true });
+      console.log('  Dismissed informational popup');
       await delay(2000);
     }
+
+    await screenshot('03-after-upload');
+
+    // Add trending audio for video reels
+    if (!isImage && opts.addTrendingAudio !== false) {
+      await tryAddTrendingAudio(page);
+    }
+
+    await screenshot('04-pre-next');
+
+    // Click through the creation flow
+    // Step 1: Crop/Trim -> Next
+    const nextBtn = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")').first();
+    if (await nextBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
+      await nextBtn.click({ force: true });
+      console.log('  Clicked Next (step 1: crop/trim)');
+      await delay(3000);
+    }
+    await screenshot('05-after-next-1');
 
     // Step 2: Filters → Next
-    if (await nextBtn.isVisible({ timeout: 3000 })) {
-      await nextBtn.click();
-      await delay(2000);
+    if (await nextBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await nextBtn.click({ force: true });
+      console.log('  Clicked Next (step 2: filters)');
+      await delay(3000);
+    }
+    await screenshot('06-after-next-2');
+
+    // Step 3: Caption — try multiple selectors for IG's evolving UI
+    const captionSelectors = [
+      'div[aria-label="Write a caption..."]',
+      'textarea[aria-label="Write a caption..."]',
+      '[data-testid="creation-caption-text"]',
+      'div[role="textbox"][contenteditable="true"]',
+    ];
+    for (const sel of captionSelectors) {
+      const input = page.locator(sel).first();
+      if (await input.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await input.click({ force: true });
+        await delay(500);
+        const chunks = opts.caption.match(/.{1,200}/gs) || [opts.caption];
+        for (const chunk of chunks) {
+          await page.keyboard.type(chunk, { delay: 15 });
+          await delay(300);
+        }
+        console.log(`  Caption filled using: ${sel}`);
+        await delay(1000);
+        break;
+      }
     }
 
-    // Step 3: Caption
-    const captionInput = page.locator(
-      'textarea[aria-label="Write a caption..."], div[aria-label="Write a caption..."], [data-testid="creation-caption-text"]'
-    ).first();
+    await screenshot('07-caption-done');
 
-    if (await captionInput.isVisible({ timeout: 5000 })) {
-      await captionInput.click();
-      await delay(500);
-      await page.keyboard.type(opts.caption, { delay: 20 });
+    // Dismiss any hashtag/mention suggestion popups by clicking the caption counter area
+    // (safe neutral zone that won't trigger navigation)
+    const listbox = page.locator('div[role="listbox"]').first();
+    if (await listbox.isVisible({ timeout: 1500 }).catch(() => false)) {
+      console.log('  Dismissing suggestion popup...');
+      // Click on the character counter (e.g. "758/2,200") — a safe neutral area
+      const counter = page.locator('span:has-text("/2,200")').first();
+      if (await counter.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await counter.click({ force: true });
+      }
       await delay(1000);
     }
 
-    // Click Share
-    const shareBtn = page.locator('button:has-text("Share"), div[role="button"]:has-text("Share")').first();
-    await shareBtn.click();
+    // Handle "Discard post?" if it somehow appeared
+    const discardDialog = page.locator('text="Discard post?"').first();
+    if (await discardDialog.isVisible({ timeout: 1000 }).catch(() => false)) {
+      console.log('  Discard dialog detected — clicking Cancel...');
+      const cancelBtn = page.locator('button:has-text("Cancel")').first();
+      if (await cancelBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await cancelBtn.click({ force: true });
+        await delay(2000);
+      }
+    }
+
+    await screenshot('07b-pre-share');
+
+    // Click Share — IG uses a text element in the dialog header, not a <button>
+    // Use getByText for precise matching, or evaluate JS to find and click it
+    let shareClicked = false;
+
+    // Strategy 1: Use Playwright's getByText with exact match
+    const shareByText = page.getByText('Share', { exact: true });
+    const shareCount = await shareByText.count();
+    console.log(`  Found ${shareCount} "Share" text element(s)`);
+    if (shareCount > 0) {
+      // Click the last one (usually the header Share link, not other occurrences)
+      for (let i = 0; i < shareCount; i++) {
+        const el = shareByText.nth(i);
+        const box = await el.boundingBox().catch(() => null);
+        if (box) {
+          console.log(`  Share element ${i}: x=${box.x.toFixed(0)}, y=${box.y.toFixed(0)}, w=${box.width.toFixed(0)}, h=${box.height.toFixed(0)}`);
+          // The header Share link should be near the top of the page (y < 150) and on the right side (x > 900)
+          if (box.y < 150 && box.x > 900) {
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+            shareClicked = true;
+            console.log(`  Share clicked at (${(box.x + box.width / 2).toFixed(0)}, ${(box.y + box.height / 2).toFixed(0)})`);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!shareClicked) {
+      // Strategy 2: Use JavaScript to find the Share element in the dialog header
+      console.log('  Trying JS click on Share...');
+      shareClicked = await page.evaluate(() => {
+        const elements = document.querySelectorAll('div[role="dialog"] *');
+        for (const el of elements) {
+          if (el.textContent?.trim() === 'Share' && el.children.length === 0) {
+            (el as HTMLElement).click();
+            return true;
+          }
+        }
+        return false;
+      }).catch(() => false);
+      if (shareClicked) console.log('  Share clicked via JS evaluate');
+    }
+
+    if (!shareClicked) {
+      // Strategy 3: Click by known coordinates from screenshots
+      console.log('  Clicking Share by coordinates...');
+      await page.mouse.click(1103, 109);
+      shareClicked = true;
+      console.log('  Share clicked via coordinates');
+    }
+
     console.log('📤 Posting...');
+    await screenshot('08-after-share-click');
 
     // Wait for upload to complete
-    await delay(10000);
+    await delay(15000);
+    await screenshot('09-uploading');
 
     // Check for success
-    const successIndicator = page.locator('text="Your reel has been shared"', );
-    const postShared = page.locator('text="Post shared"');
-    const reelShared = page.locator('text="Reel shared"');
+    const successTexts = [
+      'Your reel has been shared',
+      'Your reel has been shared.',
+      'Post shared',
+      'Reel shared',
+      'Your post has been shared',
+    ];
 
     const success = await Promise.race([
-      successIndicator.waitFor({ timeout: 30000 }).then(() => true),
-      postShared.waitFor({ timeout: 30000 }).then(() => true),
-      reelShared.waitFor({ timeout: 30000 }).then(() => true),
-      delay(30000).then(() => false),
+      ...successTexts.map(text =>
+        page.locator(`text="${text}"`).waitFor({ timeout: 45000 }).then(() => {
+          console.log(`  Success detected: "${text}"`);
+          return true;
+        }).catch(() => false)
+      ),
+      delay(50000).then(() => false),
     ]);
+
+    await screenshot('10-final');
 
     if (success) {
       console.log(`✅ ${isImage ? 'Image' : 'Video'} posted successfully!`);
       return true;
     }
 
+    // Check if we're back on the feed (another success indicator)
+    const currentUrl = page.url();
+    console.log(`  Final URL: ${currentUrl}`);
+    if (currentUrl === 'https://www.instagram.com/' || !currentUrl.includes('/create')) {
+      console.log('✅ Redirected to feed — post likely succeeded');
+      return true;
+    }
+
     console.log('⚠️  Upload may have succeeded - check Instagram manually');
+    console.log(`  Debug screenshots saved to: ${debugDir}`);
     return true; // Optimistic return
   } catch (err) {
+    await screenshot('error').catch(() => {});
     console.error('❌ Upload error:', (err as Error).message);
     return false;
   }
@@ -139,118 +407,194 @@ export async function uploadReel(page: Page, opts: PostOptions): Promise<boolean
 
 export function generateCaption(videoType: string): string {
   const captions: Record<string, string> = {
-    'intro': `🚀 Meet FlowFolio — Your AI-Powered Investment Companion
+    'intro': `FlowFolio -- investment planning that actually respects your privacy.
 
-✨ Vibe-based investing meets quantitative analysis
-📊 Backtest strategies with real historical data
-🔒 100% offline & privacy-first
-🤖 AI portfolio insights
+Vibe-based strategies with quantitative factor analysis.
+Backtest against 20 years of real market data.
+Runs entirely on your machine. No cloud. No tracking.
 
-No cloud. No tracking. Just smart investing.
+The investing tool I wish existed, so I built it.
 
-#FlowFolio #InvestSmart #QuantTrading #AIInvesting #PortfolioManagement #VibeInvesting #FinTech #Trading #StockMarket #Investment #PrivacyFirst #OfflineFirst #BackTesting #TechStartup #IndieApp`,
+#FlowFolio #InvestSmart #QuantTrading #PortfolioManagement #FactorInvesting #FinTech #StockMarket #PrivacyFirst #OfflineFirst #BackTesting`,
 
-    'demo': `📊 FlowFolio Deep Dive — Full Feature Showcase
+    'demo': `Full walkthrough of FlowFolio's feature set.
 
-Watch how FlowFolio transforms your investment workflow:
-🎯 Create vibe strategies with factor weighting
-📈 Run backtests against S&P 500
-💼 Optimize portfolios with Sharpe ratio
-📝 Track your investment journal
+Factor-weighted strategy creation in Vibe Studio.
+Backtesting against S&P 500 with full risk metrics.
+Portfolio optimization with Sharpe maximization.
+Investment journal for tracking your thesis evolution.
 
-All running locally on your machine. Zero cloud dependencies.
+Everything computed locally. Zero cloud dependencies.
 
-#FlowFolio #TradingApp #InvestmentTool #QuantAnalysis #BackTesting #PortfolioOptimization #AITrading #DesktopApp #TauriApp #RustLang #React #FinancialTech`,
+#FlowFolio #InvestmentTool #QuantAnalysis #BackTesting #PortfolioOptimization #DesktopApp #TauriApp #RustLang #React #FinancialTech`,
 
-    'app-showcase': `💼 FlowFolio App Showcase — Every Screen, Every Feature
+    'app-showcase': `Every screen in FlowFolio, end to end.
 
-From dashboard to detailed analysis:
-📊 Real-time portfolio tracking
-🎨 Vibe Studio for strategy creation
-📈 Comprehensive backtest results
-🔬 Quantitative metrics deep dive
-📓 Investment journal
+Portfolio tracking with real-time multi-source data.
+Vibe Studio for building factor-weighted strategies.
+Backtest results with CAGR, Sharpe, and drawdown analysis.
+30+ quantitative metrics per stock.
+Investment journal with full trade logging.
 
-Built with Tauri 2 + React 19 + Rust 🦀
+Built on Tauri 2, React 19, and Rust.
 
-#FlowFolio #AppShowcase #DesktopApp #InvestmentApp #TauriApp #Rust #React #UI #AppDesign #FinTech #Trading`,
+#FlowFolio #DesktopApp #InvestmentApp #TauriApp #Rust #React #AppDesign #FinTech #QuantFinance`,
   };
 
   return captions[videoType] || captions['intro'];
 }
 
 async function uploadCarouselPost(page: Page, slides: string[], caption: string): Promise<boolean> {
+  const debugDir = path.join(path.dirname(slides[0]), '..', 'debug');
+  if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+  const screenshot = async (name: string) => {
+    await page.screenshot({ path: path.join(debugDir, `${name}.png`) });
+    console.log(`  [debug] screenshot: ${name}`);
+  };
+
   try {
-    await page.goto(IG_BASE, { waitUntil: 'networkidle' });
-    await delay(2000);
+    await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await delay(3000);
+    await screenshot('01-home');
 
     // Click Create / New post button
-    const createBtn = page.locator(
-      'svg[aria-label="New post"], a[href="/create/style/"], [aria-label="New post"]'
-    ).first();
-
-    if (await createBtn.isVisible({ timeout: 5000 })) {
-      await createBtn.click();
-    } else {
-      const mobileCreate = page.locator('[data-testid="new-post-button"], svg[aria-label="New Post"]').first();
-      await mobileCreate.click();
+    const createSelectors = [
+      'svg[aria-label="New post"]',
+      '[aria-label="New post"]',
+      'svg[aria-label="New Post"]',
+      'a[href="/create/style/"]',
+    ];
+    let clicked = false;
+    for (const sel of createSelectors) {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        clicked = true;
+        console.log(`  Clicked create button: ${sel}`);
+        break;
+      }
     }
-    await delay(2000);
-
-    // Upload all slides at once — Instagram file input accepts multiple files
-    const fileInput = page.locator('input[type="file"]').first();
-    await fileInput.setInputFiles(slides);
+    if (!clicked) {
+      console.log('  Create button not found, trying fallback...');
+      await page.click('[href="/create/style/"]', { force: true }).catch(() => {});
+    }
     await delay(3000);
+    await screenshot('02-create-dialog');
 
-    console.log(`Processing ${slides.length} carousel slides...`);
+    // Check if creation dialog opened
+    const dialog = page.locator('div[role="dialog"]').first();
+    const dialogVisible = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+    console.log(`  Creation dialog visible: ${dialogVisible}`);
+
+    // Upload all slides at once
+    const fileInput = page.locator('input[type="file"]').first();
+    const inputCount = await page.locator('input[type="file"]').count();
+    console.log(`  File inputs found: ${inputCount}`);
+
+    // Check if input has multiple attribute, if not, set it
+    await fileInput.evaluate((el: HTMLInputElement) => {
+      el.setAttribute('multiple', 'true');
+      el.setAttribute('accept', 'image/jpeg,image/png,image/heic,image/heif');
+    });
+
+    await fileInput.setInputFiles(slides);
+    console.log(`  Uploaded ${slides.length} files`);
     await delay(5000);
+    await screenshot('03-after-upload');
 
-    // Click through creation flow: Crop → Next
+    // Wait for images to process
+    console.log(`  Processing ${slides.length} carousel slides...`);
+    await delay(3000);
+    await screenshot('04-processing');
+
+    // Step 1: Crop -> Next
     const nextBtn = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")').first();
-    if (await nextBtn.isVisible({ timeout: 5000 })) {
-      await nextBtn.click();
-      await delay(2000);
+    const nextVisible1 = await nextBtn.isVisible({ timeout: 8000 }).catch(() => false);
+    console.log(`  Next button visible (crop step): ${nextVisible1}`);
+    if (nextVisible1) {
+      await nextBtn.click({ force: true });
+      await delay(3000);
+      await screenshot('05-after-next-1');
     }
 
-    // Filters → Next
-    if (await nextBtn.isVisible({ timeout: 3000 })) {
-      await nextBtn.click();
-      await delay(2000);
+    // Step 2: Filters -> Next
+    const nextVisible2 = await nextBtn.isVisible({ timeout: 5000 }).catch(() => false);
+    console.log(`  Next button visible (filter step): ${nextVisible2}`);
+    if (nextVisible2) {
+      await nextBtn.click({ force: true });
+      await delay(3000);
+      await screenshot('06-after-next-2');
     }
 
-    // Caption
-    const captionInput = page.locator(
-      'textarea[aria-label="Write a caption..."], div[aria-label="Write a caption..."], [data-testid="creation-caption-text"]'
-    ).first();
-
-    if (await captionInput.isVisible({ timeout: 5000 })) {
-      await captionInput.click();
-      await delay(500);
-      await page.keyboard.type(caption, { delay: 20 });
-      await delay(1000);
+    // Step 3: Caption
+    const captionSelectors = [
+      'div[aria-label="Write a caption..."]',
+      'textarea[aria-label="Write a caption..."]',
+      '[data-testid="creation-caption-text"]',
+      'div[role="textbox"][contenteditable="true"]',
+    ];
+    let captionFilled = false;
+    for (const sel of captionSelectors) {
+      const input = page.locator(sel).first();
+      if (await input.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await input.click({ force: true });
+        await delay(500);
+        const chunks = caption.match(/.{1,200}/gs) || [caption];
+        for (const chunk of chunks) {
+          await page.keyboard.type(chunk, { delay: 15 });
+          await delay(300);
+        }
+        captionFilled = true;
+        console.log(`  Caption filled using: ${sel}`);
+        await delay(1000);
+        break;
+      }
     }
+    if (!captionFilled) console.log('  WARNING: Could not find caption input');
+    await screenshot('07-caption');
 
-    // Share
+    // Step 4: Share
     const shareBtn = page.locator('button:has-text("Share"), div[role="button"]:has-text("Share")').first();
-    await shareBtn.click();
-    console.log('Posting carousel...');
+    const shareVisible = await shareBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    console.log(`  Share button visible: ${shareVisible}`);
+    if (shareVisible) {
+      await shareBtn.click({ force: true });
+      console.log('  Share clicked, posting carousel...');
+    } else {
+      console.log('  WARNING: Share button not found');
+      await screenshot('07b-no-share');
+      return false;
+    }
 
     await delay(15000);
+    await screenshot('08-after-share');
 
-    const postShared = page.locator('text="Post shared"');
+    // Check for success indicators
+    const successSelectors = [
+      'text="Post shared"',
+      'text="Your post has been shared"',
+      'text="Reel shared"',
+    ];
     const success = await Promise.race([
-      postShared.waitFor({ timeout: 30000 }).then(() => true),
-      delay(30000).then(() => false),
+      ...successSelectors.map(sel =>
+        page.locator(sel).waitFor({ timeout: 45000 }).then(() => true).catch(() => false)
+      ),
+      delay(50000).then(() => false),
     ]);
+
+    await screenshot('09-final');
 
     if (success) {
       console.log(`Carousel posted successfully (${slides.length} slides)`);
       return true;
     }
 
-    console.log('Upload may have succeeded - check Instagram manually');
+    // Check current URL for clues
+    console.log('  Final URL:', page.url());
+    console.log('Upload may have succeeded - check debug screenshots in:', debugDir);
     return true;
   } catch (err) {
+    await screenshot('error').catch(() => {});
     console.error('Carousel upload error:', (err as Error).message);
     return false;
   }

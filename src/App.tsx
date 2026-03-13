@@ -3,6 +3,8 @@ import { invoke } from "./services/tauri";
 import VibeStudio from "./components/VibeStudio";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useToast } from "./components/Toast";
+import { useAuth } from "./contexts/AuthContext";
+import { AuthPage } from "./components/AuthPage";
 import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
@@ -86,6 +88,7 @@ interface Universe {
 
 function App() {
   const { addToast } = useToast();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const { isAdvanced, toggleMode } = useUserMode();
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
@@ -590,6 +593,18 @@ function App() {
       </div>
     </aside>
   );
+
+  if (authLoading) {
+    return (
+      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-app)' }}>
+        <div className="tab-loading-spinner" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthPage />;
+  }
 
   return (
     <div className="app-container">

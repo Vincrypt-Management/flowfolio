@@ -233,12 +233,12 @@ async function cmdRun() {
         console.log(`📤 Posting ${post.id}...`);
         updatePostStatus(db, post.id, 'posting');
 
-        const fullCaption = post.caption + '\n\n' + post.hashtags;
         const isStill = COMPOSITIONS[post.composition]?.type === 'still';
         console.log(`  ${isStill ? '🖼️  Feed post' : '🎬 Reel'}`);
         const success = await uploadReel(page, {
           mediaPath: videoPath!,
-          caption: fullCaption,
+          caption: post.caption,
+          addTrendingAudio: true,
         });
 
         if (success) {

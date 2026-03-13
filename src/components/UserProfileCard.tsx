@@ -1,5 +1,5 @@
-import { useUserProfile } from '../contexts/UserProfileContext';
-import { User, Settings } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { User, Settings, LogOut } from 'lucide-react';
 import './UserProfileCard.css';
 
 interface UserProfileCardProps {
@@ -8,43 +8,58 @@ interface UserProfileCardProps {
 }
 
 export function UserProfileCard({ collapsed, onSettingsClick }: UserProfileCardProps) {
-  const { profile } = useUserProfile();
+  const { user, subscription, logout } = useAuth();
 
-  const initials = profile.displayName
+  const displayName = user?.name || user?.username || 'User';
+  const initials = displayName
     .split(' ')
     .map(n => n[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
 
+  const tierLabel = subscription?.tier === 'free' ? 'Free' :
+    subscription?.tier === 'starter' ? 'Starter' :
+    subscription?.tier === 'pro' ? 'Pro' :
+    subscription?.tier === 'enterprise' ? 'Enterprise' : 'Free';
+
+  const isPro = subscription?.tier && subscription.tier !== 'free';
+
   return (
-    <button
-      className={`user-profile-card ${collapsed ? 'collapsed' : ''}`}
-      onClick={onSettingsClick}
-      title={collapsed ? `${profile.displayName} — Settings` : ''}
-      aria-label="Open account settings"
-    >
-      <div className="user-avatar">
-        {profile.avatarUrl ? (
-          <img src={profile.avatarUrl} alt={profile.displayName} className="user-avatar-img" />
-        ) : (
-          <span className="user-avatar-initials">{initials || <User size={16} />}</span>
-        )}
-        {profile.accountType === 'professional' && (
-          <span className="pro-badge" title="Professional Account">PRO</span>
-        )}
-      </div>
-      {!collapsed && (
-        <>
+    <div className={`user-profile-card ${collapsed ? 'collapsed' : ''}`}>
+      <button
+        className="user-profile-btn"
+        onClick={onSettingsClick}
+        title={collapsed ? `${displayName} — Settings` : ''}
+        aria-label="Open account settings"
+      >
+        <div className="user-avatar">
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt={displayName} className="user-avatar-img" />
+          ) : (
+            <span className="user-avatar-initials">{initials || <User size={16} />}</span>
+          )}
+          {isPro && (
+            <span className="pro-badge" title={`${tierLabel} Account`}>PRO</span>
+          )}
+        </div>
+        {!collapsed && (
           <div className="user-info">
-            <span className="user-name">{profile.displayName}</span>
-            <span className="user-account-type">
-              {profile.accountType === 'professional' ? 'Professional' : 'Personal'} Account
-            </span>
+            <span className="user-name">{displayName}</span>
+            <span className="user-account-type">{tierLabel} Account</span>
           </div>
-          <Settings size={14} className="user-settings-icon" />
-        </>
+        )}
+      </button>
+      {!collapsed && (
+        <div className="user-actions">
+          <button className="user-action-btn" onClick={onSettingsClick} title="Settings" aria-label="Settings">
+            <Settings size={14} />
+          </button>
+          <button className="user-action-btn user-logout-btn" onClick={logout} title="Sign out" aria-label="Sign out">
+            <LogOut size={14} />
+          </button>
+        </div>
       )}
-    </button>
+    </div>
   );
 }
