@@ -134,7 +134,7 @@ impl AppConfig {
     }
 }
 
-/// Global application configuration
+// Global application configuration
 lazy_static::lazy_static! {
     pub static ref CONFIG: AppConfig = AppConfig::from_env();
 }

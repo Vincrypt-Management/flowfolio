@@ -11,14 +11,12 @@ import { GeneratedPortfolio } from "./services/portfolioAgent";
 import { DEFAULT_SYMBOLS } from "./shared/constants";
 import { saveFile } from "./shared/utils/fileSystem";
 import { useUserMode } from "./contexts/UserModeContext";
-import { 
-  LayoutDashboard, 
-  Sparkles, 
-  FileText, 
-  Database, 
-  Activity, 
+import {
+  LayoutDashboard,
+  Sparkles,
+  FileText,
+  Database,
   PieChart,
-  Calendar,
   ArrowRight,
   ChevronLeft,
   ChevronRight,
@@ -36,7 +34,14 @@ import {
   X,
   ToggleLeft,
   ToggleRight,
-  Settings
+  Settings,
+  Eye,
+  Bell,
+  Shield,
+  GitCompare,
+  Clock,
+  CreditCard,
+  Newspaper
 } from "lucide-react";
 import "./App.css";
 import "./styles/optimizer.css";
@@ -50,7 +55,15 @@ const YearlyReviewComponent = lazy(() => import("./components/YearlyReview").the
 const SavedPortfoliosTab = lazy(() => import("./components/SavedPortfoliosTab").then(m => ({ default: m.SavedPortfoliosTab })));
 const DataSourcesPage = lazy(() => import("./components/DataSourcesPage").then(m => ({ default: m.DataSourcesPage })));
 const SettingsPage = lazy(() => import("./components/SettingsPage").then(m => ({ default: m.SettingsPage })));
+const WatchlistTab = lazy(() => import("./components/WatchlistTab").then(m => ({ default: m.WatchlistTab })));
+const CreditsDashboard = lazy(() => import("./components/CreditsDashboard").then(m => ({ default: m.CreditsDashboard })));
+const AlertsPanel = lazy(() => import("./components/AlertsPanel").then(m => ({ default: m.AlertsPanel })));
+const RiskDashboard = lazy(() => import("./components/RiskDashboard").then(m => ({ default: m.RiskDashboard })));
+const ComparisonMode = lazy(() => import("./components/ComparisonMode").then(m => ({ default: m.ComparisonMode })));
+const RebalanceScheduler = lazy(() => import("./components/RebalanceScheduler").then(m => ({ default: m.RebalanceScheduler })));
+const NewsFeed = lazy(() => import("./components/NewsFeed").then(m => ({ default: m.NewsFeed })));
 
+import Dashboard from "./components/Dashboard";
 import { UserProfileCard } from "./components/UserProfileCard";
 
 function TabLoading() {
@@ -511,7 +524,7 @@ function App() {
           <FlaskConical className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Backtest</span>}
         </button>
-        <button 
+        <button
           className={`nav-item ${activeTab === "journal" ? "active" : ""}`}
           onClick={() => handleNavClick("journal")}
           title={isSidebarCollapsed ? "Journal" : ""}
@@ -521,7 +534,83 @@ function App() {
           <BookOpen className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Journal</span>}
         </button>
-        <button 
+        <button
+          className={`nav-item ${activeTab === "watchlist" ? "active" : ""}`}
+          onClick={() => handleNavClick("watchlist")}
+          title={isSidebarCollapsed ? "Watchlist" : ""}
+          role="menuitem"
+          aria-current={activeTab === "watchlist" ? "page" : undefined}
+        >
+          <Eye className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Watchlist</span>}
+        </button>
+        <button
+          className={`nav-item ${activeTab === "alerts" ? "active" : ""}`}
+          onClick={() => handleNavClick("alerts")}
+          title={isSidebarCollapsed ? "Alerts" : ""}
+          role="menuitem"
+          aria-current={activeTab === "alerts" ? "page" : undefined}
+        >
+          <Bell className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Alerts</span>}
+        </button>
+        {isAdvanced && (
+        <button
+          className={`nav-item ${activeTab === "comparison" ? "active" : ""}`}
+          onClick={() => handleNavClick("comparison")}
+          title={isSidebarCollapsed ? "Compare" : ""}
+          role="menuitem"
+          aria-current={activeTab === "comparison" ? "page" : undefined}
+        >
+          <GitCompare className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Compare</span>}
+        </button>
+        )}
+        {isAdvanced && (
+        <button
+          className={`nav-item ${activeTab === "risk" ? "active" : ""}`}
+          onClick={() => handleNavClick("risk")}
+          title={isSidebarCollapsed ? "Risk" : ""}
+          role="menuitem"
+          aria-current={activeTab === "risk" ? "page" : undefined}
+        >
+          <Shield className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Risk</span>}
+        </button>
+        )}
+        {isAdvanced && (
+        <button
+          className={`nav-item ${activeTab === "scheduler" ? "active" : ""}`}
+          onClick={() => handleNavClick("scheduler")}
+          title={isSidebarCollapsed ? "Scheduler" : ""}
+          role="menuitem"
+          aria-current={activeTab === "scheduler" ? "page" : undefined}
+        >
+          <Clock className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Scheduler</span>}
+        </button>
+        )}
+        <button
+          className={`nav-item ${activeTab === "news" ? "active" : ""}`}
+          onClick={() => handleNavClick("news")}
+          title={isSidebarCollapsed ? "News" : ""}
+          role="menuitem"
+          aria-current={activeTab === "news" ? "page" : undefined}
+        >
+          <Newspaper className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>News</span>}
+        </button>
+        <button
+          className={`nav-item ${activeTab === "credits" ? "active" : ""}`}
+          onClick={() => handleNavClick("credits")}
+          title={isSidebarCollapsed ? "Credits" : ""}
+          role="menuitem"
+          aria-current={activeTab === "credits" ? "page" : undefined}
+        >
+          <CreditCard className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Credits</span>}
+        </button>
+        <button
           className={`nav-item ${activeTab === "yearly-review" ? "active" : ""}`}
           onClick={() => handleNavClick("yearly-review")}
           title={isSidebarCollapsed ? "Yearly Review" : ""}
@@ -532,7 +621,7 @@ function App() {
           {!isSidebarCollapsed && <span>Yearly Review</span>}
         </button>
         {isAdvanced && (
-        <button 
+        <button
           className={`nav-item ${activeTab === "universe" ? "active" : ""}`}
           onClick={() => handleNavClick("universe")}
           title={isSidebarCollapsed ? "Universe" : ""}
@@ -544,7 +633,7 @@ function App() {
         </button>
         )}
         {isAdvanced && (
-        <button 
+        <button
           className={`nav-item ${activeTab === "data" ? "active" : ""}`}
           onClick={() => handleNavClick("data")}
           title={isSidebarCollapsed ? "Data Sources" : ""}
@@ -555,7 +644,7 @@ function App() {
           {!isSidebarCollapsed && <span>Data Sources</span>}
         </button>
         )}
-        <button 
+        <button
           className={`nav-item ${activeTab === "settings" ? "active" : ""}`}
           onClick={() => handleNavClick("settings")}
           title={isSidebarCollapsed ? "Settings" : ""}
@@ -630,116 +719,13 @@ function App() {
       <main id="main-content" className="main-content" role="main">
         {activeTab === "dashboard" && (
           <div className="animate-fade-in">
-            <header className="page-header">
-              <div className="page-header-row">
-                <div>
-                  <h1 className="page-title">Dashboard</h1>
-                  <p className="page-subtitle">Overview of your investment strategy</p>
-                </div>
-                <div className="page-header-actions">
-                  {isAdvanced && (
-                    <>
-                      <button className="btn-secondary" onClick={savePlan} disabled={!plan}>
-                        <Save size={16} /> Save Plan
-                      </button>
-                      <button className="btn-secondary" onClick={exportData}>
-                        <Download size={16} /> Export
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </header>
-
-            <div className="dashboard-grid">
-              <div className="card">
-                <h3><PieChart size={20} /> Current Plan</h3>
-                {plan ? (
-                  <div className="plan-summary">
-                    <div className="stat-row">
-                      <span className="stat-label">Name</span>
-                      <span className="stat-value">{plan.name}</span>
-                    </div>
-                    <div className="stat-row">
-                      <span className="stat-label">Regions</span>
-                      <span className="stat-value">{plan.universe.regions.join(", ")}</span>
-                    </div>
-                    <div className="stat-row">
-                      <span className="stat-label">Sectors</span>
-                      <span className="stat-value">{plan.universe.sectors.length > 0 ? plan.universe.sectors.join(", ") : "All"}</span>
-                    </div>
-                    <div className="stat-row">
-                      <span className="stat-label">Rebalance</span>
-                      <span className="stat-value">{plan.cadence.frequency === 'quarterly' ? "Quarterly" : "Manual"}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-muted">No plan loaded</p>
-                )}
-              </div>
-
-              {isAdvanced && (
-              <div className="card">
-                <h3><Activity size={20} /> Ranking Factors</h3>
-                {plan && (
-                  <div className="plan-summary">
-                    {plan.ranking.factors.map((factor, i) => (
-                      <div key={i} className="stat-row">
-                        <span className="stat-label">{factor.name}</span>
-                        <span className="stat-value">{(factor.weight * 100).toFixed(0)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              )}
-
-              <div className="card">
-                <h3><Calendar size={20} /> Next Actions</h3>
-                <div className="plan-summary">
-                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab("portfolio"); } }}>
-                    <span className="stat-label">Monthly Buy List</span>
-                    <span className="stat-value action-link">Generate →</span>
-                  </div>
-                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("portfolio")} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab("portfolio"); } }}>
-                    <span className="stat-label">Quarterly Rebalance</span>
-                    <span className="stat-value action-link">Check →</span>
-                  </div>
-                  <div className="stat-row clickable" role="button" tabIndex={0} onClick={() => setActiveTab("yearly-review")} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab("yearly-review"); } }}>
-                    <span className="stat-label">Yearly Review</span>
-                    <span className="stat-value action-link">Start →</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Market Overview */}
-            <div className="card mt-lg">
-              <div className="card-header">
-                <h3><TrendingUp size={20} /> Market Overview</h3>
-                <button 
-                  className="btn-small" 
-                  onClick={loadMarketOverview} 
-                  disabled={isLoadingMarket}
-                >
-                  {isLoadingMarket ? "Loading..." : "Refresh"}
-                </button>
-              </div>
-              <div className="market-overview">
-                {Object.entries(marketPrices).length > 0 ? (
-                  Object.entries(marketPrices).map(([symbol, price]) => (
-                    <div key={symbol} className="market-card">
-                      <div className="market-card-symbol">{symbol}</div>
-                      <div className="market-card-price">${price.toFixed(2)}</div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-muted text-center w-full">
-                    {isLoadingMarket ? "Loading prices..." : "No market data loaded"}
-                  </p>
-                )}
-              </div>
-            </div>
+            <Dashboard
+              plan={plan}
+              onNavigate={handleNavClick}
+              marketPrices={marketPrices}
+              onRefreshMarket={loadMarketOverview}
+              isLoadingMarket={isLoadingMarket}
+            />
           </div>
         )}
 
@@ -1111,6 +1097,92 @@ function App() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "watchlist" && (
+          <div className="animate-fade-in">
+            <Suspense fallback={<TabLoading />}>
+              <WatchlistTab onNavigate={handleNavClick} />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === "alerts" && (
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Price Alerts</h1>
+              <p className="page-subtitle">Monitor price thresholds and get notified</p>
+            </header>
+            <Suspense fallback={<TabLoading />}>
+              <AlertsPanel
+                onAlertTriggered={(alert) => {
+                  addToast(`Alert triggered: ${alert.symbol} ${alert.condition} ${alert.threshold}`, "warning");
+                }}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === "comparison" && (
+          <div className="animate-fade-in">
+            <Suspense fallback={<TabLoading />}>
+              <ComparisonMode />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === "risk" && (
+          <div className="animate-fade-in">
+            <Suspense fallback={<TabLoading />}>
+              <RiskDashboard
+                holdings={[]}
+                portfolioValue={0}
+                marketPrices={marketPrices}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === "scheduler" && (
+          <div className="animate-fade-in">
+            <Suspense fallback={<TabLoading />}>
+              <RebalanceScheduler
+                onRunRebalance={(planName) => {
+                  addToast(`Running rebalance for "${planName}"...`, "info");
+                  handleNavClick("portfolio");
+                }}
+                onNavigate={handleNavClick}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === "news" && (
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">News & Sentiment</h1>
+              <p className="page-subtitle">Market news and sentiment analysis</p>
+            </header>
+            <Suspense fallback={<TabLoading />}>
+              <NewsFeed
+                onLogToJournal={(title, _content) => {
+                  addToast(`Logged "${title}" to journal`, "success");
+                }}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === "credits" && (
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Credits & Subscription</h1>
+              <p className="page-subtitle">Manage your credits and account tier</p>
+            </header>
+            <Suspense fallback={<TabLoading />}>
+              <CreditsDashboard onNavigate={handleNavClick} />
+            </Suspense>
           </div>
         )}
 

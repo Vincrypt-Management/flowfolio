@@ -335,7 +335,7 @@ impl HealthMonitor {
     }
 }
 
-/// Global health monitor instance
+// Global health monitor instance
 lazy_static::lazy_static! {
     pub static ref HEALTH_MONITOR: HealthMonitor = HealthMonitor::new(env!("CARGO_PKG_VERSION"));
 }

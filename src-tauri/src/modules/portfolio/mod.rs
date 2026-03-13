@@ -382,20 +382,33 @@ mod tests {
     #[test]
     fn test_portfolio_drift_calculation() {
         let mut portfolio = Portfolio::new("Test".to_string());
-        portfolio.total_value = 10000.0;
 
-        let holding = Holding::new(
+        // Add two holdings so percentages are non-trivial
+        let aapl = Holding::new(
             "AAPL".to_string(),
-            10.0,
-            150.0,
-            180.0,
-            20.0, // Target 20%
+            10.0,  // 10 shares
+            150.0, // cost basis
+            180.0, // current price -> market_value = 1800
+            60.0,  // target 60%
+        );
+        let msft = Holding::new(
+            "MSFT".to_string(),
+            10.0,  // 10 shares
+            100.0, // cost basis
+            120.0, // current price -> market_value = 1200
+            40.0,  // target 40%
         );
 
-        portfolio.add_holding(holding);
-        
-        // Current is 18% (1800/10000), target is 20%, drift is -2%
-        assert!((portfolio.holdings[0].current_pct - 18.0).abs() < 0.1);
-        assert!((portfolio.holdings[0].drift_pct + 2.0).abs() < 0.1);
+        portfolio.add_holding(aapl);
+        portfolio.add_holding(msft);
+
+        // total_value = 1800 + 1200 = 3000
+        // AAPL current_pct = 1800/3000 * 100 = 60.0, target 60 -> drift 0
+        // MSFT current_pct = 1200/3000 * 100 = 40.0, target 40 -> drift 0
+        assert!((portfolio.total_value - 3000.0).abs() < 0.1);
+        assert!((portfolio.holdings[0].current_pct - 60.0).abs() < 0.1);
+        assert!(portfolio.holdings[0].drift_pct.abs() < 0.1);
+        assert!((portfolio.holdings[1].current_pct - 40.0).abs() < 0.1);
+        assert!(portfolio.holdings[1].drift_pct.abs() < 0.1);
     }
 }

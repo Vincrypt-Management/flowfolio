@@ -21,6 +21,7 @@ pub struct EnhancedMarketDataService {
     db_cache: Option<Arc<DatabaseCacheService>>,
     // Industrial-grade components
     circuit_breaker: Arc<CircuitBreakerManager>,
+    #[allow(dead_code)]
     retry_executor: Arc<RetryExecutor>,
     // In-memory cache for quick access
     price_cache: Arc<RwLock<HashMap<String, (f64, std::time::Instant)>>>,
@@ -428,6 +429,7 @@ impl EnhancedMarketDataService {
     // ================== FULL MARKET DATA ==================
 
     /// Get complete market data (quote + historical + metrics)
+    #[allow(dead_code)]
     pub async fn get_full_market_data(&self, symbol: &str) -> Result<FullMarketData, String> {
         let symbol = symbol.to_uppercase();
         
@@ -511,6 +513,7 @@ impl EnhancedMarketDataService {
 
 // ================== RESPONSE TYPES ==================
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FullMarketData {
     pub symbol: String,

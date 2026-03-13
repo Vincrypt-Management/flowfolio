@@ -22,7 +22,7 @@ impl DataSyncService {
         let symbol = match repo.get_symbol_by_ticker(ticker).await? {
             Some(s) => s,
             None => {
-                let id = repo.create_symbol(ticker, None, None).await?;
+                let _id = repo.create_symbol(ticker, None, None).await?;
                 repo.get_symbol_by_ticker(ticker).await?.expect("Symbol should exist")
             }
         };
@@ -65,7 +65,7 @@ impl DataSyncService {
         let symbol = match repo.get_symbol_by_ticker(ticker).await? {
             Some(s) => s,
             None => {
-                let id = repo.create_symbol(ticker, None, None).await?;
+                let _id = repo.create_symbol(ticker, None, None).await?;
                 repo.get_symbol_by_ticker(ticker).await?.expect("Symbol should exist")
             }
         };

@@ -29,6 +29,7 @@ pub struct OpenRouterRequest {
 }
 
 /// OpenRouter response
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenRouterResponse {
     pub id: String,
@@ -43,6 +44,7 @@ pub struct OpenRouterChoice {
     pub finish_reason: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct OpenRouterUsage {
     pub prompt_tokens: u32,

@@ -314,7 +314,7 @@ impl PortfolioOptimizer {
 
     fn identify_drops(
         holdings: &[EvaluatedHolding],
-        thresholds: &OptimizationThresholds,
+        _thresholds: &OptimizationThresholds,
     ) -> Vec<DropRecommendation> {
         holdings
             .iter()
@@ -590,7 +590,7 @@ impl PortfolioOptimizer {
         let total_to_sell: f64 = drops.iter().map(|d| d.current_value).sum();
         
         for drop in drops {
-            let price = holding_metrics
+            let _price = holding_metrics
                 .get(&drop.symbol)
                 .map(|_| drop.current_value) // Simplified - would need actual price
                 .unwrap_or(drop.current_value);
@@ -706,6 +706,13 @@ mod tests {
             beta: None,
             alpha: None,
             var_95: None,
+            omega_ratio: None,
+            tail_ratio: None,
+            skewness: None,
+            kurtosis: None,
+            ulcer_index: None,
+            gain_to_loss_ratio: None,
+            win_rate: None,
             daily_returns: None,
         }
     }

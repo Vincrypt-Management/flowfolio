@@ -97,9 +97,9 @@ impl FinancialMetrics {
             .map(|(c, w)| c * w)
             .sum();
         
-        Some(weighted_sum / total_weight * 100.0)
+        Some(weighted_sum / total_weight)
     }
-    
+
     /// Calculate value factor score (0-100)
     /// Based on: P/E, P/B, P/S ratios (lower is better)
     pub fn value_score(&self) -> Option<f64> {
@@ -140,7 +140,7 @@ impl FinancialMetrics {
             .map(|(c, w)| c * w)
             .sum();
         
-        Some(weighted_sum / total_weight * 100.0)
+        Some(weighted_sum / total_weight)
     }
     
     /// Calculate growth factor score (0-100)
@@ -177,7 +177,7 @@ impl FinancialMetrics {
             .map(|(c, w)| c * w)
             .sum();
         
-        Some(weighted_sum / total_weight * 100.0)
+        Some(weighted_sum / total_weight)
     }
     
     /// Calculate dividend factor score (0-100)
@@ -212,7 +212,7 @@ impl FinancialMetrics {
             .map(|(c, w)| c * w)
             .sum();
         
-        Some(weighted_sum / total_weight * 100.0)
+        Some(weighted_sum / total_weight)
     }
     
     // Normalization helpers (0-100 scale)
@@ -310,7 +310,7 @@ impl MomentumMetrics {
             .map(|(c, w)| c * w)
             .sum();
         
-        Some(weighted_sum / total_weight * 100.0)
+        Some(weighted_sum / total_weight)
     }
     
     fn normalize_return(&self, ret: f64) -> f64 {

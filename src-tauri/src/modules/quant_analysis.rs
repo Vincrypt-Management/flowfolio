@@ -528,7 +528,7 @@ impl QuantAnalyzer {
         sortino: f64,
         rsi: f64,
         volatility: f64,
-        mean_return: f64,
+        _mean_return: f64,
         returns: &[f64],
         max_drawdown: f64,
     ) -> (String, f64) {
@@ -707,8 +707,8 @@ impl QuantAnalyzer {
     pub fn generate_dashboard_data(
         assets_data: Vec<(String, Vec<HistoricalPrice>)>,
     ) -> DashboardData {
-        let n = assets_data.len();
-        
+        let _n = assets_data.len();
+
         // Calculate metrics for all assets in parallel
         let asset_metrics: Vec<(QuantMetrics, Vec<f64>)> = assets_data
             .par_iter()

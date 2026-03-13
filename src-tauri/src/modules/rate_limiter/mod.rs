@@ -1,5 +1,6 @@
 use governor::{Quota, RateLimiter as GovernorLimiter, DefaultDirectRateLimiter};
 use anyhow::Result;
+use std::num::NonZeroU32;
 use std::time::Duration;
 
 /// Rate limiter for API providers with configurable quotas
@@ -10,10 +11,12 @@ pub struct RateLimiter {
 impl RateLimiter {
     /// Create a new rate limiter with daily quota (e.g., 25 requests per day for Alpha Vantage free tier)
     pub fn new_daily(requests_per_day: u32) -> Self {
-        // Create quota: 1 request per (24 hours / requests_per_day)
+        // Create quota: 1 request per (24 hours / requests_per_day), with burst up to requests_per_day
         let seconds_per_request = (24 * 60 * 60) / requests_per_day;
+        let burst = NonZeroU32::new(requests_per_day).unwrap_or(NonZeroU32::new(1).unwrap());
         let quota = Quota::with_period(Duration::from_secs(seconds_per_request as u64))
-            .expect("Invalid quota period");
+            .expect("Invalid quota period")
+            .allow_burst(burst);
         let limiter = GovernorLimiter::direct(quota);
         Self { limiter }
     }

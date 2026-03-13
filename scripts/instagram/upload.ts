@@ -209,8 +209,30 @@ export async function uploadReel(page: Page, opts: PostOptions): Promise<boolean
     await delay(3000);
     await screenshot('02-create-dialog');
 
+    // Check if file input is available or if we need to navigate
+    let fileInput = page.locator('input[type="file"]').first();
+    let inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+
+    if (!inputAvailable) {
+      // Try navigating directly to create page
+      console.log('  File input not found, navigating to create page...');
+      await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await delay(3000);
+      fileInput = page.locator('input[type="file"]').first();
+      inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+    }
+
+    if (!inputAvailable) {
+      // Retry: click Create icon again
+      const createIcon = page.locator('svg[aria-label="New post"]').first();
+      if (await createIcon.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await createIcon.click({ force: true });
+        await delay(3000);
+      }
+      fileInput = page.locator('input[type="file"]').first();
+    }
+
     // Handle file input - Instagram uses a hidden file input
-    const fileInput = page.locator('input[type="file"]').first();
     await fileInput.setInputFiles(mediaPath);
     await delay(4000);
 
@@ -481,10 +503,36 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
     await delay(3000);
     await screenshot('02-create-dialog');
 
-    // Check if creation dialog opened
-    const dialog = page.locator('div[role="dialog"]').first();
-    const dialogVisible = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+    // Check if creation dialog opened or if we got a dropdown menu
+    let dialog = page.locator('div[role="dialog"]').first();
+    let dialogVisible = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+
+    if (!dialogVisible) {
+      // IG may show a sidebar sub-menu instead of a dialog — try clicking Create again
+      // or navigate directly to the creation page
+      console.log('  Dialog not found, trying direct navigation to create page...');
+      await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await delay(3000);
+      await screenshot('02b-create-select');
+
+      dialog = page.locator('div[role="dialog"]').first();
+      dialogVisible = await dialog.isVisible({ timeout: 5000 }).catch(() => false);
+    }
+
+    if (!dialogVisible) {
+      // Fallback: click Create from sidebar again and look for the + icon
+      console.log('  Still no dialog, trying Create click on the + icon...');
+      const createIcon = page.locator('svg[aria-label="New post"]').first();
+      if (await createIcon.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await createIcon.click({ force: true });
+        await delay(3000);
+      }
+      dialog = page.locator('div[role="dialog"]').first();
+      dialogVisible = await dialog.isVisible({ timeout: 5000 }).catch(() => false);
+    }
+
     console.log(`  Creation dialog visible: ${dialogVisible}`);
+    await screenshot('02c-dialog-state');
 
     // Upload all slides at once
     const fileInput = page.locator('input[type="file"]').first();
@@ -532,11 +580,15 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
       'textarea[aria-label="Write a caption..."]',
       '[data-testid="creation-caption-text"]',
       'div[role="textbox"][contenteditable="true"]',
+      'p[contenteditable="true"]',
+      '[contenteditable="true"]',
+      'textarea[placeholder*="caption" i]',
+      'textarea[placeholder*="Write" i]',
     ];
     let captionFilled = false;
     for (const sel of captionSelectors) {
       const input = page.locator(sel).first();
-      if (await input.isVisible({ timeout: 3000 }).catch(() => false)) {
+      if (await input.isVisible({ timeout: 2000 }).catch(() => false)) {
         await input.click({ force: true });
         await delay(500);
         const chunks = caption.match(/.{1,200}/gs) || [caption];
@@ -550,6 +602,45 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
         break;
       }
     }
+
+    // Fallback: click in the caption area by coordinates and type
+    if (!captionFilled) {
+      console.log('  Trying coordinate click fallback for caption...');
+      // The caption area is between the avatar (~32px from left) and the thumbnail (~right side)
+      // On the "New post" page, it's at roughly y=88, x=center of the input area
+      // Click at multiple potential positions
+      const captionPositions = [
+        { x: 400, y: 88 },   // Center of caption area on New post page
+        { x: 300, y: 88 },   // Slightly left
+        { x: 500, y: 88 },   // Slightly right
+        { x: 400, y: 100 },  // Slightly lower
+      ];
+      for (const pos of captionPositions) {
+        await page.mouse.click(pos.x, pos.y);
+        await delay(500);
+        // Check if a contenteditable or textarea is now focused
+        const focused = await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el) return false;
+          return el.getAttribute('contenteditable') === 'true' ||
+                 el.tagName === 'TEXTAREA' ||
+                 el.getAttribute('role') === 'textbox';
+        }).catch(() => false);
+        if (focused) {
+          console.log(`  Caption area focused at (${pos.x}, ${pos.y})`);
+          const chunks = caption.match(/.{1,200}/gs) || [caption];
+          for (const chunk of chunks) {
+            await page.keyboard.type(chunk, { delay: 10 });
+            await delay(200);
+          }
+          captionFilled = true;
+          console.log('  Caption typed via coordinate click');
+          await delay(1000);
+          break;
+        }
+      }
+    }
+
     if (!captionFilled) console.log('  WARNING: Could not find caption input');
     await screenshot('07-caption');
 

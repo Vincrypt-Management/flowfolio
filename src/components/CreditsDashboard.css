@@ -1,0 +1,422 @@
+.credits-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  max-width: 720px;
+  margin: 0 auto;
+  font-family: var(--font-sans);
+}
+
+/* ── Credit Balance Card ──────────────────────── */
+
+.credits-balance-card {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.credits-ring-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+}
+
+.credits-ring-svg {
+  width: 120px;
+  height: 120px;
+  transform: rotate(-90deg);
+}
+
+.credits-ring-bg {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 8;
+}
+
+.credits-ring-fg {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.credits-ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.credits-ring-value {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.credits-ring-text {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.credits-balance-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.credits-balance-title {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.credits-balance-amount {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.1;
+}
+
+.credits-balance-amount span {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.credits-monthly-note {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* ── Tier Info Card ───────────────────────────── */
+
+.credits-tier-card {
+  padding: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.credits-tier-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.credits-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.credits-tier-badge.tier-free {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.credits-tier-badge.tier-starter {
+  background: rgba(0, 229, 153, 0.12);
+  color: var(--primary);
+  border: 1px solid rgba(0, 229, 153, 0.25);
+}
+
+.credits-tier-badge.tier-pro {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(0, 229, 153, 0.1));
+  color: var(--accent);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.credits-tier-badge.tier-enterprise {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.08));
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.credits-tier-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* ── Usage Meters ─────────────────────────────── */
+
+.credits-meters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.credits-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.credits-meter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.credits-meter-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.credits-meter-value {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-main);
+}
+
+.credits-meter-bar {
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.credits-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  background: var(--primary);
+}
+
+.credits-meter-fill.meter-warning {
+  background: var(--warning);
+}
+
+.credits-meter-fill.meter-danger {
+  background: var(--error);
+}
+
+/* ── Transaction History ──────────────────────── */
+
+.credits-transactions-card {
+  padding: 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.credits-transactions-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.75rem;
+}
+
+.credits-transactions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.credits-transactions-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.credits-transactions-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.credits-transactions-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.credits-tx-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.credits-tx-row:last-child {
+  border-bottom: none;
+}
+
+.credits-tx-type {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.credits-tx-type.type-bonus {
+  background: rgba(0, 229, 153, 0.12);
+  color: var(--success);
+}
+
+.credits-tx-type.type-usage {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.credits-tx-type.type-refund {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--accent);
+}
+
+.credits-tx-desc {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.credits-tx-amount {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.credits-tx-amount.amount-positive {
+  color: var(--success);
+}
+
+.credits-tx-amount.amount-negative {
+  color: var(--error);
+}
+
+.credits-tx-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.credits-tx-balance {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+.credits-tx-time {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+
+.credits-tx-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* ── Upgrade CTA ──────────────────────────────── */
+
+.credits-upgrade-card {
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(0, 229, 153, 0.06), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(0, 229, 153, 0.2);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.credits-upgrade-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.4rem;
+}
+
+.credits-upgrade-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.credits-upgrade-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #000;
+  font-weight: 700;
+  font-size: 0.8rem;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.credits-upgrade-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* ── Loading ──────────────────────────────────── */
+
+.credits-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  gap: 0.5rem;
+}
+
+.credits-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: credits-spin 0.8s linear infinite;
+}
+
+@keyframes credits-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Error ────────────────────────────────────── */
+
+.credits-error {
+  padding: 1.25rem;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  font-size: 0.8rem;
+  text-align: center;
+}

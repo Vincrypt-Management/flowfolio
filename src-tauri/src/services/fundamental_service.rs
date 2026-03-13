@@ -88,6 +88,7 @@ impl FundamentalDataService {
     }
 
     /// Check if Alpha Vantage is configured
+    #[allow(dead_code)]
     pub fn has_alpha_vantage(&self) -> bool {
         self.alpha_vantage_key.is_some()
     }

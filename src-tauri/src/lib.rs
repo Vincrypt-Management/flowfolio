@@ -26,7 +26,7 @@ use modules::{
     },
     backtest::{BacktestEngine, BacktestConfig, BacktestResult},
     journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
-    quant_analysis::{QuantMetrics, QuantAnalyzer, DashboardData, HistoricalPrice},
+    quant_analysis::{QuantMetrics, QuantAnalyzer, DashboardData},
     progress::{ProgressEvent, generate_operation_id, ProgressDetail},
 };
 use modules::portfolio::optimizer::OptimizationThresholds;
@@ -201,6 +201,7 @@ async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
     eprintln!("[INFO] [service] Enhanced market service initialized with database caching");
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct TemplateInfo {
     name: String,
@@ -1448,7 +1449,7 @@ async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Valu
         });
         
         // Calculate factor scores based on real fundamentals when available
-        let (value_score, quality_score, growth_score, fundamentals_json) = 
+        let (_value_score, _quality_score, _growth_score, fundamentals_json) =
             if let Ok(ref fund) = fundamentals_result {
                 // Calculate Value Score (based on P/E, P/B, P/S, EV/EBITDA)
                 let mut v_score: f64 = 50.0;
@@ -2016,22 +2017,20 @@ fn assess_dividend_safety(fund: &FundamentalMetrics) -> Option<String> {
 async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     let _days = days.unwrap_or(365);
-    
-    // Try to get from provider
-    match service.get_quant_metrics(&symbol).await {
-        Ok(metrics) => {
-            // Return what data we have (simplified for now)
-            Ok(vec![serde_json::json!({
-                "symbol": symbol,
-                "metrics": {
-                    "rsi": metrics.rsi,
-                    "sharpe_ratio": metrics.sharpe_ratio,
-                    "annualized_return": metrics.annualized_return,
-                    "volatility": metrics.volatility,
-                    "max_drawdown": metrics.max_drawdown,
-                    "signal": metrics.signal,
-                }
-            })])
+
+    match service.get_historical_prices(&symbol).await {
+        Ok(prices) => {
+            let result: Vec<serde_json::Value> = prices.into_iter()
+                .map(|p| serde_json::json!({
+                    "date": p.date,
+                    "close": p.close,
+                    "open": p.open,
+                    "high": p.high,
+                    "low": p.low,
+                    "volume": p.volume,
+                }))
+                .collect();
+            Ok(result)
         }
         Err(e) => Err(format!("Failed to get historical data: {}", e))
     }

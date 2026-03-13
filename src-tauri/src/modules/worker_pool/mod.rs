@@ -118,12 +118,12 @@ mod tests {
     async fn test_worker_pool_concurrency() {
         let pool = WorkerPool::new(3);
         
-        let tasks = vec![
-            async { Ok::<_, String>(1) },
-            async { Ok::<_, String>(2) },
-            async { Ok::<_, String>(3) },
-            async { Ok::<_, String>(4) },
-            async { Ok::<_, String>(5) },
+        let tasks: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Result<i32, String>> + Send>>> = vec![
+            Box::pin(async { Ok::<_, String>(1) }),
+            Box::pin(async { Ok::<_, String>(2) }),
+            Box::pin(async { Ok::<_, String>(3) }),
+            Box::pin(async { Ok::<_, String>(4) }),
+            Box::pin(async { Ok::<_, String>(5) }),
         ];
 
         let results = pool.execute_batch(tasks).await;

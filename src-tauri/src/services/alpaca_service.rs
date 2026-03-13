@@ -170,6 +170,7 @@ impl AlpacaService {
     }
 
     /// Get position for a specific symbol
+    #[allow(dead_code)]
     pub async fn get_position(&self, symbol: &str) -> Result<AlpacaPosition, String> {
         let api_key = self.api_key.as_ref()
             .ok_or_else(|| "Alpaca API key not configured".to_string())?;
