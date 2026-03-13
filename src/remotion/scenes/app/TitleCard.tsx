@@ -9,7 +9,7 @@ import {
   staticFile,
   Img,
 } from 'remotion';
-import { colors, fonts, gradients } from '../../styles';
+import { colors, fonts } from '../../styles';
 
 /**
  * Opening title card — "FlowFolio in Action"
