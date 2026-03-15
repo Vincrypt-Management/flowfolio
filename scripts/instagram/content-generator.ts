@@ -9,6 +9,7 @@ import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { generatePost } from './render/generate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -679,6 +680,15 @@ export function ensureOutputDir() {
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
+}
+
+/**
+ * Async Playwright-based renderer for feed-feature, feed-metrics, and carousel.
+ * Called by scheduler.ts with await. Falls back to sync renderContent for other types.
+ */
+export async function renderContentPlaywright(postId: string): Promise<string> {
+  const { videoPath } = await generatePost(postId);
+  return videoPath;
 }
 
 export function renderContent(compositionKey: string, seed: number): string {

@@ -34,7 +34,7 @@ import {
   updatePostStatus, getStats, clearPending, ScheduledPost,
 } from './schedule-db';
 import {
-  generateSeed, generateContentPlan, renderContent, ContentMix, COMPOSITIONS,
+  generateSeed, generateContentPlan, renderContent, renderContentPlaywright, ContentMix, COMPOSITIONS,
 } from './content-generator';
 import {
   PROFILES, DEFAULT_PROFILE, generateScheduleDates, formatSchedule,
@@ -124,7 +124,7 @@ async function cmdPlan(flags: Record<string, string>) {
   db.close();
 }
 
-async function cmdRender(flags: Record<string, string>) {
+async function cmdRender(flags: Record<string, string>): Promise<void> {
   const limit = parseInt(flags.next || '3', 10);
   const db = getDb();
   const upcoming = getUpcomingPosts(db, limit);
@@ -143,7 +143,7 @@ async function cmdRender(flags: Record<string, string>) {
     updatePostStatus(db, post.id, 'rendering');
 
     try {
-      const videoPath = renderContent(post.composition, post.seed);
+      const videoPath = await renderContentPlaywright(post.id);
       updatePostStatus(db, post.id, 'rendered', { video_path: videoPath });
       console.log(`  ✅ Rendered: ${path.basename(videoPath)}`);
     } catch (err) {
@@ -202,7 +202,7 @@ async function cmdRun() {
           console.log(`🎬 Rendering ${post.composition} (seed: ${post.seed})...`);
           updatePostStatus(db, post.id, 'rendering');
           try {
-            videoPath = renderContent(post.composition, post.seed);
+            videoPath = await renderContentPlaywright(post.id);
             updatePostStatus(db, post.id, 'rendered', { video_path: videoPath });
           } catch (err) {
             updatePostStatus(db, post.id, 'failed', { error: (err as Error).message });
