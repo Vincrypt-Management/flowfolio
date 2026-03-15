@@ -702,6 +702,14 @@ function App() {
     return <AuthPage />;
   }
 
+  const handleHoldingsChange = useCallback((
+    h: Array<{ symbol: string; shares: number; currentPrice: number; value: number; weight: number }>,
+    v: number
+  ) => {
+    setPortfolioHoldings(h);
+    setPortfolioValue(v);
+  }, []);
+
   return (
     <div className="app-container">
       <a href="#main-content" className="skip-nav">Skip to main content</a>
@@ -926,10 +934,7 @@ function App() {
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <PortfolioTab
-                onHoldingsChange={(h, v) => {
-                  setPortfolioHoldings(h);
-                  setPortfolioValue(v);
-                }}
+                onHoldingsChange={handleHoldingsChange}
               />
             </Suspense>
           </div>

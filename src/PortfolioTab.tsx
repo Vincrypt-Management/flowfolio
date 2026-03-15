@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "./services/tauri";
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
@@ -107,13 +107,27 @@ export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
-  
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  const notifyHoldingsChange = useCallback((holdings: Holding[], totalValue: number) => {
+    if (!onHoldingsChange) return;
+    onHoldingsChange(
+      holdings.map((h) => ({
+        symbol: h.symbol,
+        shares: h.shares,
+        currentPrice: h.current_price,
+        value: h.market_value,
+        weight: h.current_pct / 100,
+      })),
+      totalValue
+    );
+  }, [onHoldingsChange]);
 
   async function addHolding() {
     if (!newSymbol || !newShares) {
@@ -161,16 +175,7 @@ export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
         last_updated: new Date().toISOString(),
       });
 
-      if (onHoldingsChange) {
-        const riskHoldings = holdingsWithPct.map((h: Holding) => ({
-          symbol: h.symbol,
-          shares: h.shares,
-          currentPrice: h.current_price,
-          value: h.market_value,
-          weight: h.current_pct / 100,
-        }));
-        onHoldingsChange(riskHoldings, totalValue);
-      }
+      notifyHoldingsChange(holdingsWithPct, totalValue);
 
       // Clear form
       setNewSymbol("");
@@ -220,16 +225,7 @@ export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
         last_updated: new Date().toISOString(),
       });
 
-      if (onHoldingsChange) {
-        const riskHoldings = holdingsWithPct.map((h: Holding) => ({
-          symbol: h.symbol,
-          shares: h.shares,
-          currentPrice: h.current_price,
-          value: h.market_value,
-          weight: h.current_pct / 100,
-        }));
-        onHoldingsChange(riskHoldings, totalValue);
-      }
+      notifyHoldingsChange(holdingsWithPct, totalValue);
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error updating prices: " + (error instanceof Error ? error.message : String(error)), "error");
@@ -258,16 +254,7 @@ export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
       last_updated: new Date().toISOString(),
     });
 
-    if (onHoldingsChange) {
-      const riskHoldings = holdingsWithPct.map((h: Holding) => ({
-        symbol: h.symbol,
-        shares: h.shares,
-        currentPrice: h.current_price,
-        value: h.market_value,
-        weight: h.current_pct / 100,
-      }));
-      onHoldingsChange(riskHoldings, totalValue);
-    }
+    notifyHoldingsChange(holdingsWithPct, totalValue);
   }
 
   function updateCash() {
@@ -288,16 +275,7 @@ export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
       last_updated: new Date().toISOString(),
     });
 
-    if (onHoldingsChange) {
-      const riskHoldings = holdingsWithPct.map((h: Holding) => ({
-        symbol: h.symbol,
-        shares: h.shares,
-        currentPrice: h.current_price,
-        value: h.market_value,
-        weight: h.current_pct / 100,
-      }));
-      onHoldingsChange(riskHoldings, totalValue);
-    }
+    notifyHoldingsChange(holdingsWithPct, totalValue);
 
     setCashAmount("");
   }
