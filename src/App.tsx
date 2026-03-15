@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { invoke } from "./services/tauri";
+import { invokeWithResilience } from './services/apiClient';
 import VibeStudio from "./components/VibeStudio";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useToast } from "./components/Toast";
@@ -1183,8 +1184,19 @@ function App() {
             </header>
             <Suspense fallback={<TabLoading />}>
               <NewsFeed
-                onLogToJournal={(title, _content) => {
-                  addToast(`Logged "${title}" to journal`, "success");
+                onLogToJournal={async (title, content) => {
+                  try {
+                    await invokeWithResilience('create_journal_entry', {
+                      event_type: 'observation',
+                      title,
+                      content,
+                      plan_version: null,
+                      tags: ['news'],
+                    });
+                    addToast(`Logged "${title}" to journal`, 'success');
+                  } catch {
+                    addToast('Failed to log to journal', 'error');
+                  }
                 }}
               />
             </Suspense>
