@@ -1,5 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
-import { User, Settings, LogOut } from 'lucide-react';
+import { User, Settings } from 'lucide-react';
 import './UserProfileCard.css';
 
 interface UserProfileCardProps {
@@ -8,22 +8,15 @@ interface UserProfileCardProps {
 }
 
 export function UserProfileCard({ collapsed, onSettingsClick }: UserProfileCardProps) {
-  const { user, subscription, logout } = useAuth();
+  const { user } = useAuth();
 
-  const displayName = user?.name || user?.username || 'User';
+  const displayName = user?.name || 'Investor';
   const initials = displayName
     .split(' ')
     .map(n => n[0])
     .join('')
     .toUpperCase()
-    .slice(0, 2);
-
-  const tierLabel = subscription?.tier === 'free' ? 'Free' :
-    subscription?.tier === 'starter' ? 'Starter' :
-    subscription?.tier === 'pro' ? 'Pro' :
-    subscription?.tier === 'enterprise' ? 'Enterprise' : 'Free';
-
-  const isPro = subscription?.tier && subscription.tier !== 'free';
+    .slice(0, 2) || 'I';
 
   return (
     <div className={`user-profile-card ${collapsed ? 'collapsed' : ''}`}>
@@ -39,14 +32,10 @@ export function UserProfileCard({ collapsed, onSettingsClick }: UserProfileCardP
           ) : (
             <span className="user-avatar-initials">{initials || <User size={16} />}</span>
           )}
-          {isPro && (
-            <span className="pro-badge" title={`${tierLabel} Account`}>PRO</span>
-          )}
         </div>
         {!collapsed && (
           <div className="user-info">
             <span className="user-name">{displayName}</span>
-            <span className="user-account-type">{tierLabel} Account</span>
           </div>
         )}
       </button>
@@ -54,9 +43,6 @@ export function UserProfileCard({ collapsed, onSettingsClick }: UserProfileCardP
         <div className="user-actions">
           <button className="user-action-btn" onClick={onSettingsClick} title="Settings" aria-label="Settings">
             <Settings size={14} />
-          </button>
-          <button className="user-action-btn user-logout-btn" onClick={logout} title="Sign out" aria-label="Sign out">
-            <LogOut size={14} />
           </button>
         </div>
       )}
