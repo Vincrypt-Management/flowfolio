@@ -4,8 +4,6 @@ import { invokeWithResilience } from './services/apiClient';
 import VibeStudio from "./components/VibeStudio";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useToast } from "./components/Toast";
-import { useAuth } from "./contexts/AuthContext";
-import { AuthPage } from "./components/AuthPage";
 import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
@@ -42,7 +40,6 @@ import {
   Shield,
   GitCompare,
   Clock,
-  CreditCard,
   Newspaper
 } from "lucide-react";
 import "./App.css";
@@ -58,7 +55,6 @@ const SavedPortfoliosTab = lazy(() => import("./components/SavedPortfoliosTab").
 const DataSourcesPage = lazy(() => import("./components/DataSourcesPage").then(m => ({ default: m.DataSourcesPage })));
 const SettingsPage = lazy(() => import("./components/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const WatchlistTab = lazy(() => import("./components/WatchlistTab").then(m => ({ default: m.WatchlistTab })));
-const CreditsDashboard = lazy(() => import("./components/CreditsDashboard").then(m => ({ default: m.CreditsDashboard })));
 const AlertsPanel = lazy(() => import("./components/AlertsPanel").then(m => ({ default: m.AlertsPanel })));
 const RiskDashboard = lazy(() => import("./components/RiskDashboard").then(m => ({ default: m.RiskDashboard })));
 const ComparisonMode = lazy(() => import("./components/ComparisonMode").then(m => ({ default: m.ComparisonMode })));
@@ -108,8 +104,7 @@ interface Universe {
 
 function App() {
   const { addToast } = useToast();
-  const { isAuthenticated, loading: authLoading } = useAuth();
-  const { isAdvanced, toggleMode } = useUserMode();
+const { isAdvanced, toggleMode } = useUserMode();
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
@@ -584,16 +579,6 @@ function App() {
           {!isSidebarCollapsed && <span>News</span>}
         </button>
         <button
-          className={`nav-item ${activeTab === "credits" ? "active" : ""}`}
-          onClick={() => handleNavClick("credits")}
-          title={isSidebarCollapsed ? "Credits" : ""}
-          role="menuitem"
-          aria-current={activeTab === "credits" ? "page" : undefined}
-        >
-          <CreditCard className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Credits</span>}
-        </button>
-        <button
           className={`nav-item ${activeTab === "yearly-review" ? "active" : ""}`}
           onClick={() => handleNavClick("yearly-review")}
           title={isSidebarCollapsed ? "Yearly Review" : ""}
@@ -666,17 +651,6 @@ function App() {
     </aside>
   );
 
-  if (authLoading) {
-    return (
-      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-app)' }}>
-        <div className="tab-loading-spinner" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <AuthPage />;
-  }
 
   const handleHoldingsChange = useCallback((
     h: Array<{ symbol: string; shares: number; currentPrice: number; value: number; weight: number }>,
@@ -1243,17 +1217,6 @@ function App() {
           </div>
         )}
 
-        {activeTab === "credits" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Credits & Subscription</h1>
-              <p className="page-subtitle">Manage your credits and account tier</p>
-            </header>
-            <Suspense fallback={<TabLoading />}>
-              <CreditsDashboard onNavigate={handleNavClick} />
-            </Suspense>
-          </div>
-        )}
 
         {activeTab === "settings" && (
           <div className="animate-fade-in">
