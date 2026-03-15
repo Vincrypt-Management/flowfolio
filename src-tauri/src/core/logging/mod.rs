@@ -124,3 +124,47 @@ macro_rules! log_error {
         );
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_level_as_str() {
+        assert_eq!(LogLevel::Trace.as_str(), "TRACE");
+        assert_eq!(LogLevel::Debug.as_str(), "DEBUG");
+        assert_eq!(LogLevel::Info.as_str(), "INFO");
+        assert_eq!(LogLevel::Warn.as_str(), "WARN");
+        assert_eq!(LogLevel::Error.as_str(), "ERROR");
+    }
+
+    #[test]
+    fn test_init_logging_does_not_panic() {
+        init_logging();
+        init_logging(); // Second call is a no-op, should not panic
+    }
+
+    #[test]
+    fn test_log_all_levels() {
+        log(LogLevel::Trace, "test_module", "trace message");
+        log(LogLevel::Debug, "test_module", "debug message");
+        log(LogLevel::Info, "test_module", "info message");
+        log(LogLevel::Warn, "test_module", "warn message");
+        log(LogLevel::Error, "test_module", "error message");
+    }
+
+    #[test]
+    fn test_log_with_context_empty() {
+        log_with_context(LogLevel::Info, "test_module", "message with no context", &[]);
+    }
+
+    #[test]
+    fn test_log_with_context_non_empty() {
+        log_with_context(
+            LogLevel::Warn,
+            "test_module",
+            "message with context",
+            &[("key1", "value1"), ("key2", "value2")],
+        );
+    }
+}

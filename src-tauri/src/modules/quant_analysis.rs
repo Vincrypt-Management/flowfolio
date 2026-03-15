@@ -1524,4 +1524,173 @@ mod tests {
         assert!(result.contains_key("portfolio_sharpe"));
         assert!((result["num_holdings"] - 2.0).abs() < f64::EPSILON);
     }
+
+    // ===== generate_dashboard_data tests =====
+
+    #[test]
+    fn test_generate_dashboard_data_single_asset() {
+        let prices = generate_test_prices(100, 100.0, 0.001);
+        let assets_data = vec![("AAPL".to_string(), prices)];
+        let dashboard = QuantAnalyzer::generate_dashboard_data(assets_data);
+        assert_eq!(dashboard.assets.len(), 1);
+        assert_eq!(dashboard.assets[0].symbol, "AAPL");
+        assert!(!dashboard.correlation_matrix.is_empty());
+    }
+
+    #[test]
+    fn test_generate_dashboard_data_two_assets() {
+        let prices_a = generate_test_prices(100, 150.0, 0.001);
+        let prices_b = generate_test_prices(100, 300.0, 0.002);
+        let assets_data = vec![
+            ("AAPL".to_string(), prices_a),
+            ("MSFT".to_string(), prices_b),
+        ];
+        let dashboard = QuantAnalyzer::generate_dashboard_data(assets_data);
+        assert_eq!(dashboard.assets.len(), 2);
+        assert_eq!(dashboard.correlation_matrix.len(), 2);
+        assert_eq!(dashboard.correlation_symbols.len(), 2);
+        assert!(!dashboard.risk_return_scatter.is_empty());
+        assert!(!dashboard.drawdown_series.is_empty());
+    }
+
+    #[test]
+    fn test_generate_dashboard_data_portfolio_metrics() {
+        let prices_a = generate_test_prices(100, 100.0, 0.001);
+        let prices_b = generate_test_prices(100, 200.0, -0.001);
+        let assets_data = vec![
+            ("AAPL".to_string(), prices_a),
+            ("MSFT".to_string(), prices_b),
+        ];
+        let dashboard = QuantAnalyzer::generate_dashboard_data(assets_data);
+        // portfolio_metrics should be populated
+        assert!(dashboard.portfolio_metrics.volatility >= 0.0);
+        assert!(dashboard.diversification_score >= 0.0);
+        assert!(dashboard.diversification_score <= 100.0);
+    }
+
+    #[test]
+    fn test_generate_dashboard_data_returns_distribution() {
+        let prices = generate_test_prices(100, 100.0, 0.001);
+        let assets_data = vec![("TEST".to_string(), prices)];
+        let dashboard = QuantAnalyzer::generate_dashboard_data(assets_data);
+        // returns_distribution may be populated
+        assert!(dashboard.returns_distribution.len() <= 15);
+    }
+
+    // ===== compute_portfolio_dashboard_metrics tests =====
+
+    #[test]
+    fn test_compute_portfolio_dashboard_metrics_non_empty() {
+        // generate_dashboard_data with 2 assets exercises compute_portfolio_dashboard_metrics
+        let prices_a = generate_test_prices(60, 100.0, 0.002);
+        let prices_b = generate_test_prices(60, 200.0, 0.001);
+        let assets_data = vec![
+            ("A".to_string(), prices_a),
+            ("B".to_string(), prices_b),
+        ];
+        let dashboard = QuantAnalyzer::generate_dashboard_data(assets_data);
+        let pm = &dashboard.portfolio_metrics;
+        assert!(pm.volatility >= 0.0);
+        assert!(pm.max_drawdown >= 0.0);
+        assert!(pm.beta > 0.0); // should be weighted average of betas
+    }
+
+    #[test]
+    fn test_generate_dashboard_data_empty() {
+        // Covers lines 773 (empty drawdown_series) and 922-931 (empty portfolio metrics)
+        let dashboard = QuantAnalyzer::generate_dashboard_data(vec![]);
+        assert!(dashboard.assets.is_empty());
+        assert!(dashboard.drawdown_series.is_empty());
+        // portfolio_metrics should have zero values
+        assert_eq!(dashboard.portfolio_metrics.volatility, 0.0);
+        assert_eq!(dashboard.portfolio_metrics.beta, 1.0);
+    }
+
+    #[test]
+    fn test_metrics_few_prices_no_daily_returns() {
+        // Covers line 231: returns.len() < 10 → daily_returns = None
+        let prices = vec![
+            HistoricalPrice { date: "2024-01-01".to_string(), close: 100.0 },
+            HistoricalPrice { date: "2024-01-02".to_string(), close: 101.0 },
+            HistoricalPrice { date: "2024-01-03".to_string(), close: 102.0 },
+            HistoricalPrice { date: "2024-01-04".to_string(), close: 103.0 },
+            HistoricalPrice { date: "2024-01-05".to_string(), close: 104.0 },
+        ];
+        let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
+        // With 5 prices we get 4 returns which is < 10 → daily_returns should be None
+        assert!(metrics.daily_returns.is_none());
+    }
+
+    #[test]
+    fn test_advanced_metrics_constant_returns_zero_std_dev() {
+        // Covers lines 309 and 316: skewness/kurtosis = 0.0 when std_dev <= 1e-10
+        let returns = vec![0.0f64; 20]; // all zero returns → std_dev = 0
+        let closes = vec![100.0f64; 21]; // flat prices
+        let (_omega, _tail, skew, kurt, _ulcer, _gtl, _wr) =
+            QuantAnalyzer::calculate_advanced_metrics(&returns, &closes);
+        assert_eq!(skew, 0.0); // line 309
+        assert_eq!(kurt, 0.0); // line 316
+    }
+
+    #[test]
+    fn test_annualized_return_nonzero_returns_zero_num_prices() {
+        // Covers line 455: years <= 0.0 returns 0.0 (non-empty returns but 0 num_prices)
+        let result = QuantAnalyzer::calculate_annualized_return_fast(&[0.01, 0.02], 0);
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_returns_distribution_constant_returns() {
+        // Covers line 871: max == min → return vec![]
+        let returns = vec![0.01f64; 20]; // all same → max==min
+        let bins = QuantAnalyzer::compute_returns_distribution(&returns);
+        assert!(bins.is_empty());
+    }
+
+    #[test]
+    fn test_portfolio_metrics_zero_weight() {
+        // Covers line 654: total_weight <= 0.0 → return empty metrics
+        let holdings = vec![
+            ("AAPL".to_string(), 0.0, generate_test_prices(50, 100.0, 0.001)),
+        ];
+        let result = QuantAnalyzer::calculate_portfolio_metrics(&holdings);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_calculate_metrics_flat_prices_zero_sharpe() {
+        // Covers line 190: sharpe_ratio = 0.0 when std_dev <= 1e-10 (all prices identical)
+        let prices: Vec<HistoricalPrice> = (0..15).map(|i| HistoricalPrice {
+            date: format!("2024-01-{:02}", i + 1),
+            close: 100.0, // All same → returns = 0 → std_dev = 0
+        }).collect();
+        let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
+        assert!((metrics.sharpe_ratio - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_calculate_metrics_few_prices_no_daily_returns() {
+        // Covers line 231: daily_returns = None when returns.len() < 10 (3-10 prices)
+        let prices: Vec<HistoricalPrice> = (0..5).map(|i| HistoricalPrice {
+            date: format!("2024-01-{:02}", i + 1),
+            close: 100.0 + i as f64,
+        }).collect();
+        let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
+        // 4 returns < 10 → daily_returns = None
+        assert!(metrics.daily_returns.is_none());
+    }
+
+    #[test]
+    fn test_returns_distribution_tiny_spread_zero_std_dev() {
+        // Covers line 891: normal_curve = 0.0 when std_dev <= 1e-10
+        // max - min = 1e-10 (passes the < 1e-10 check), but std_dev is tiny
+        let mut returns: Vec<f64> = vec![0.01; 19];
+        returns.push(0.01 + 1e-10); // One slightly different value
+        let bins = QuantAnalyzer::compute_returns_distribution(&returns);
+        // All bins should have normal_curve = 0.0 since std_dev ≈ 2e-11 < 1e-10
+        for bin in &bins {
+            assert!((bin.normal_curve - 0.0).abs() < f64::EPSILON,
+                "Expected normal_curve = 0.0, got {}", bin.normal_curve);
+        }
+    }
 }

@@ -1093,4 +1093,254 @@ mod tests {
         assert!((plan.total_to_sell - 1000.0).abs() < f64::EPSILON);
         assert!((plan.estimated_improvement_pct - 15.0).abs() < f64::EPSILON);
     }
+
+    // ===== RSI overbought branch =====
+
+    #[test]
+    fn test_evaluate_holding_rsi_overbought() {
+        // Covers lines 268-269: RSI > 75 adds issue and reduces score
+        let mut metrics = create_test_metrics(1.5, 15.0, 20.0, 10.0, "BUY");
+        metrics.rsi = 80.0; // overbought
+        let mut holding_metrics = HashMap::new();
+        holding_metrics.insert("RSI_HIGH".to_string(), metrics);
+
+        let evaluated = PortfolioOptimizer::evaluate_holding(
+            "RSI_HIGH", 10.0, 100.0, 150.0,
+            holding_metrics.get("RSI_HIGH"),
+            &OptimizationThresholds::default(),
+        );
+        // Should have the overbought issue
+        assert!(evaluated.issues.iter().any(|i| i.contains("Overbought")));
+    }
+
+    #[test]
+    fn test_identify_drops_d_grade_urgency_medium() {
+        // Covers lines 328-329: urgency = "MEDIUM" for D grade
+        let holdings = vec![
+            EvaluatedHolding {
+                symbol: "D_GRADE".to_string(),
+                shares: 10.0,
+                current_price: 50.0,
+                market_value: 500.0,
+                cost_basis: 100.0,
+                total_return_pct: -50.0,
+                metrics: HoldingMetrics {
+                    sharpe_ratio: -0.2,
+                    annualized_return: 5.0, // positive to cover line 340
+                    volatility: 50.0,
+                    max_drawdown: 40.0,
+                    rsi: 35.0,
+                    signal: "SELL".to_string(),
+                    confidence: 70.0,
+                },
+                performance_grade: "D".to_string(),
+                issues: vec!["Issue1".to_string(), "Issue2".to_string()], // 2+ issues needed
+            },
+        ];
+        let drops = PortfolioOptimizer::identify_drops(&holdings, &OptimizationThresholds::default());
+        assert_eq!(drops.len(), 1);
+        assert_eq!(drops[0].urgency, "MEDIUM");
+        // With positive annualized_return, estimated_loss = 0.0 (covers line 340)
+        assert!((drops[0].estimated_loss_if_held - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_identify_drops_positive_return_gain_tax_note() {
+        // Covers lines 350-351: tax note when total_return_pct > 0 (gain)
+        let holdings = vec![
+            EvaluatedHolding {
+                symbol: "GAIN_DROP".to_string(),
+                shares: 10.0,
+                current_price: 60.0,
+                market_value: 600.0,
+                cost_basis: 50.0,
+                total_return_pct: 20.0, // positive gain → covers lines 350-351
+                metrics: HoldingMetrics {
+                    sharpe_ratio: -0.3,
+                    annualized_return: -5.0,
+                    volatility: 55.0,
+                    max_drawdown: 45.0,
+                    rsi: 30.0,
+                    signal: "SELL".to_string(),
+                    confidence: 70.0,
+                },
+                performance_grade: "D".to_string(),
+                issues: vec!["Issue1".to_string(), "Issue2".to_string()],
+            },
+        ];
+        let drops = PortfolioOptimizer::identify_drops(&holdings, &OptimizationThresholds::default());
+        assert_eq!(drops.len(), 1);
+        assert!(drops[0].tax_impact_note.contains("gain") || drops[0].tax_impact_note.contains("20.0%"));
+    }
+
+    #[test]
+    fn test_projected_health_zero_total_value() {
+        // Covers line 553: total_value <= 0.0 → return 0.0
+        let holdings = vec![
+            EvaluatedHolding {
+                symbol: "Z".to_string(), shares: 0.0, current_price: 0.0,
+                market_value: 0.0, cost_basis: 0.0, total_return_pct: 0.0,
+                metrics: HoldingMetrics { sharpe_ratio: 0.0, annualized_return: 0.0, volatility: 0.0, max_drawdown: 0.0, rsi: 50.0, signal: "HOLD".to_string(), confidence: 0.0 },
+                performance_grade: "C".to_string(), issues: vec![],
+            },
+        ];
+        let drops = vec![DropRecommendation {
+            symbol: "Z".to_string(), current_value: 0.0, grade: "C".to_string(),
+            primary_reason: "zero".to_string(), all_reasons: vec![], urgency: "LOW".to_string(),
+            estimated_loss_if_held: 0.0, tax_impact_note: "none".to_string(),
+        }];
+        let result = PortfolioOptimizer::calculate_projected_health(&holdings, &drops, &[]);
+        assert_eq!(result, 0.0); // line 553
+    }
+
+    // ===== generate_optimization_report tests =====
+
+    #[test]
+    fn test_generate_optimization_report_empty() {
+        let report = PortfolioOptimizer::generate_optimization_report(
+            "Test Portfolio",
+            vec![],
+            &HashMap::new(),
+            &HashMap::new(),
+            OptimizationThresholds::default(),
+        );
+        assert_eq!(report.portfolio_name, "Test Portfolio");
+        assert!(report.evaluated_holdings.is_empty());
+        assert!(report.drop_recommendations.is_empty());
+    }
+
+    #[test]
+    fn test_generate_optimization_report_good_holding() {
+        let mut holding_metrics = HashMap::new();
+        holding_metrics.insert(
+            "AAPL".to_string(),
+            create_test_metrics(2.0, 20.0, 15.0, 8.0, "BUY"),
+        );
+
+        let holdings = vec![("AAPL".to_string(), 10.0, 100.0, 150.0)];
+
+        let report = PortfolioOptimizer::generate_optimization_report(
+            "Growth Portfolio",
+            holdings,
+            &holding_metrics,
+            &HashMap::new(),
+            OptimizationThresholds::default(),
+        );
+
+        assert_eq!(report.evaluated_holdings.len(), 1);
+        assert_eq!(report.evaluated_holdings[0].symbol, "AAPL");
+        assert!(report.current_health_score > 0.0);
+    }
+
+    #[test]
+    fn test_generate_optimization_report_poor_holding_with_candidates() {
+        let mut holding_metrics = HashMap::new();
+        // Poor holding: low sharpe, high vol, bad signal
+        holding_metrics.insert(
+            "BAD".to_string(),
+            create_test_metrics(-0.5, -10.0, 60.0, 50.0, "SELL"),
+        );
+
+        let mut candidate_metrics = HashMap::new();
+        // Good candidate
+        candidate_metrics.insert(
+            "GOOD".to_string(),
+            create_test_metrics(2.0, 20.0, 15.0, 8.0, "STRONG BUY"),
+        );
+
+        let holdings = vec![("BAD".to_string(), 10.0, 150.0, 100.0)]; // at a loss
+
+        let report = PortfolioOptimizer::generate_optimization_report(
+            "Test Portfolio",
+            holdings,
+            &holding_metrics,
+            &candidate_metrics,
+            OptimizationThresholds::default(),
+        );
+
+        assert_eq!(report.evaluated_holdings.len(), 1);
+        // The bad holding should generate issues and potentially drop recommendations
+        assert!(!report.evaluated_holdings[0].issues.is_empty());
+        // Projected health should still be valid
+        assert!(report.projected_health_score >= 0.0);
+    }
+
+    #[test]
+    fn test_generate_optimization_report_no_metrics() {
+        // Holdings with no metrics data
+        let holdings = vec![
+            ("AAPL".to_string(), 10.0, 100.0, 150.0),
+            ("MSFT".to_string(), 5.0, 200.0, 250.0),
+        ];
+
+        let report = PortfolioOptimizer::generate_optimization_report(
+            "No Metrics Portfolio",
+            holdings,
+            &HashMap::new(),
+            &HashMap::new(),
+            OptimizationThresholds::default(),
+        );
+
+        assert_eq!(report.evaluated_holdings.len(), 2);
+        for holding in &report.evaluated_holdings {
+            assert_eq!(holding.performance_grade, "N/A");
+        }
+    }
+
+    #[test]
+    fn test_identify_drops_low_urgency_c_grade() {
+        // Covers line 329: _ => "LOW" for grade != "F" and != "D" but 2+ issues
+        let holdings = vec![
+            EvaluatedHolding {
+                symbol: "C_GRADE".to_string(),
+                shares: 10.0,
+                current_price: 80.0,
+                market_value: 800.0,
+                cost_basis: 100.0,
+                total_return_pct: -20.0,
+                metrics: HoldingMetrics {
+                    sharpe_ratio: 0.2,
+                    annualized_return: 3.0,
+                    volatility: 35.0,
+                    max_drawdown: 25.0,
+                    rsi: 40.0,
+                    signal: "HOLD".to_string(),
+                    confidence: 50.0,
+                },
+                performance_grade: "C".to_string(),
+                issues: vec!["Issue1".to_string(), "Issue2".to_string()],
+            },
+        ];
+
+        let drops = PortfolioOptimizer::identify_drops(&holdings, &OptimizationThresholds::default());
+        assert_eq!(drops.len(), 1);
+        assert_eq!(drops[0].urgency, "LOW");
+    }
+
+    #[test]
+    fn test_find_replacements_four_candidates() {
+        // Covers line 413: allocation_pct = 15.0 for i >= 3
+        let thresholds = OptimizationThresholds::default();
+        let current_holdings: Vec<EvaluatedHolding> = vec![];
+        // 4 candidates → num_recommendations = ceil(4000/1000).max(3).min(10) = 4
+        let total_to_reallocate = 4000.0_f64;
+
+        let mut candidates = HashMap::new();
+        for sym in ["CAND1", "CAND2", "CAND3", "CAND4"] {
+            let mut m = create_test_metrics(1.0, 10.0, 20.0, 15.0, "BUY");
+            m.symbol = sym.to_string();
+            candidates.insert(sym.to_string(), m);
+        }
+
+        let replacements = PortfolioOptimizer::find_replacements(
+            &candidates,
+            &current_holdings,
+            total_to_reallocate,
+            &thresholds,
+        );
+
+        assert_eq!(replacements.len(), 4);
+        // The 4th replacement (index 3) should have allocation_pct = 15.0
+        assert!((replacements[3].suggested_allocation_pct - 15.0).abs() < f64::EPSILON);
+    }
 }

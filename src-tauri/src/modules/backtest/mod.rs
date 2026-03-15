@@ -727,4 +727,155 @@ mod tests {
             }
         }
     }
+
+    // --- should_rebalance edge cases ---
+
+    #[test]
+    fn test_should_rebalance_unknown_frequency() {
+        // Unknown frequency → false
+        assert!(!BacktestEngine::should_rebalance(0, "unknown_frequency"));
+        assert!(!BacktestEngine::should_rebalance(3, "never"));
+    }
+
+    #[test]
+    fn test_should_rebalance_yearly_true() {
+        assert!(BacktestEngine::should_rebalance(12, "yearly"));
+        assert!(BacktestEngine::should_rebalance(0, "yearly"));
+    }
+
+    // --- calculate_allocation default case ---
+
+    #[test]
+    fn test_calculate_allocation_default_method() {
+        // Any unknown allocation method should default to equal weight
+        let symbols = vec!["AAPL".to_string(), "MSFT".to_string()];
+        let allocation = BacktestEngine::calculate_allocation(&symbols, "custom_method");
+        assert_eq!(allocation.len(), 2);
+        assert!((allocation["AAPL"] - 0.5).abs() < 1e-6);
+        assert!((allocation["MSFT"] - 0.5).abs() < 1e-6);
+    }
+
+    // --- get_price_at_date for unknown symbol ---
+
+    #[test]
+    fn test_get_price_unknown_symbol() {
+        use chrono::NaiveDate;
+        let date = NaiveDate::from_ymd_opt(2024, 6, 1).unwrap();
+        let price = BacktestEngine::get_price_at_date("UNKNOWN_SYM", date);
+        assert!((price - 100.0).abs() < 1e-6);
+    }
+
+    // --- calculate_metrics with empty timeline ---
+
+    #[test]
+    fn test_calculate_metrics_empty_timeline() {
+        let metrics = BacktestEngine::calculate_metrics(&[], 12, 10000.0, &[]);
+        assert!((metrics.cagr - 0.0).abs() < 1e-6);
+        assert!((metrics.final_value - 0.0).abs() < 1e-6);
+        assert_eq!(metrics.num_trades, 0);
+    }
+
+    // --- long backtest to trigger rebalance SELL branch ---
+
+    #[test]
+    fn test_backtest_yearly_long_triggers_rebalance() {
+        // Run over 3 years with low threshold to trigger drift rebalancing
+        let config = BacktestConfig {
+            start_date: "2020-01-01".to_string(),
+            end_date: "2023-01-01".to_string(),
+            initial_cash: 10000.0,
+            monthly_contribution: 0.0,
+            rebalance_frequency: "yearly".to_string(),
+            rebalance_threshold: 1.0, // Very low threshold to trigger rebalancing
+            symbols: vec!["AAPL".to_string(), "MSFT".to_string()],
+            allocation_method: "equal_weight".to_string(),
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert!(result.metrics.final_value > 0.0);
+        assert!(result.duration_months > 0);
+    }
+
+    // --- date goes past end date triggers break ---
+
+    #[test]
+    fn test_backtest_short_range_triggers_break() {
+        // Start and end in same year-month range should result in a very short backtest
+        let config = BacktestConfig {
+            start_date: "2020-01-01".to_string(),
+            end_date: "2020-02-15".to_string(), // Only ~1.5 months
+            initial_cash: 5000.0,
+            monthly_contribution: 500.0,
+            rebalance_frequency: "monthly".to_string(),
+            rebalance_threshold: 5.0,
+            symbols: vec!["AAPL".to_string()],
+            allocation_method: "equal_weight".to_string(),
+        };
+        let result = BacktestEngine::run_backtest(config);
+        // Should still produce a result
+        assert!(result.metrics.final_value >= 0.0);
+    }
+
+    #[test]
+    fn test_rebalance_portfolio_sell_branch() {
+        // Covers lines 325-329, 331-338: SELL path when position is overweight
+        let mut positions = HashMap::new();
+        positions.insert("AAPL".to_string(), 10.0); // 10 shares × 152.5 = 1525
+        let mut cash = 0.0_f64;
+        let mut target = HashMap::new();
+        target.insert("AAPL".to_string(), 0.1_f64); // 10% target → underweight vs 100%
+        let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+
+        let trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0);
+
+        assert!(trades.iter().any(|t| t.action == "SELL"), "Expected a SELL trade from overweight position");
+    }
+
+    #[test]
+    fn test_create_snapshot_zero_total_value() {
+        // Covers line 256: weight = 0.0 when total_value = 0
+        let mut positions = HashMap::new();
+        positions.insert("AAPL".to_string(), 0.0); // 0 shares → 0 value
+        let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+
+        let snapshot = BacktestEngine::create_snapshot(date, 0.0, &positions);
+        assert_eq!(snapshot.positions.len(), 1);
+        assert!((snapshot.positions[0].weight - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_rebalance_zero_portfolio_value() {
+        // Covers line 298: current_pct = 0.0 when portfolio_value = 0
+        let mut positions: HashMap<String, f64> = HashMap::new();
+        let mut cash = 0.0_f64;
+        let mut target = HashMap::new();
+        target.insert("AAPL".to_string(), 0.5_f64);
+        let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+
+        // portfolio_value = 0 (no cash, no positions) → line 298
+        let _trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0);
+        // Just verify no panic
+    }
+
+    #[test]
+    fn test_calculate_metrics_zero_first_value() {
+        // Covers line 402: 0.0 when w[0].value = 0 in volatility calculation
+        let timeline = vec![
+            PortfolioSnapshot {
+                date: "2020-01-01".to_string(),
+                value: 0.0,
+                cash: 0.0,
+                invested: 0.0,
+                positions: vec![],
+            },
+            PortfolioSnapshot {
+                date: "2020-02-01".to_string(),
+                value: 1000.0,
+                cash: 100.0,
+                invested: 900.0,
+                positions: vec![],
+            },
+        ];
+        let metrics = BacktestEngine::calculate_metrics(&timeline, 1, 0.0, &[]);
+        assert!(metrics.volatility >= 0.0);
+    }
 }

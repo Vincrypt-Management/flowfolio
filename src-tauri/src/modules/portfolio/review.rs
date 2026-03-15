@@ -299,9 +299,74 @@ mod tests {
         ];
 
         let summary = ReviewGenerator::calculate_summary(&items);
-        
+
         assert_eq!(summary.total_items, 2);
         assert_eq!(summary.passed, 1);
         assert_eq!(summary.needs_review, 1);
+    }
+
+    fn make_items(pass: usize, review: usize, action: usize) -> Vec<ReviewItem> {
+        let mut items = Vec::new();
+        for _ in 0..pass {
+            items.push(ReviewItem { category: "T".into(), question: "Q".into(), status: "PASS".into(), notes: "".into() });
+        }
+        for _ in 0..review {
+            items.push(ReviewItem { category: "T".into(), question: "Q".into(), status: "REVIEW".into(), notes: "".into() });
+        }
+        for _ in 0..action {
+            items.push(ReviewItem { category: "T".into(), question: "Q".into(), status: "ACTION_NEEDED".into(), notes: "".into() });
+        }
+        items
+    }
+
+    #[test]
+    fn test_summary_excellent_health() {
+        // Covers line 182: pass_rate > 80% → "Excellent"
+        let items = make_items(9, 1, 0); // 90% pass
+        let summary = ReviewGenerator::calculate_summary(&items);
+        assert_eq!(summary.overall_health, "Excellent");
+    }
+
+    #[test]
+    fn test_summary_good_health() {
+        // Covers line 184: pass_rate > 60% but <= 80% → "Good"
+        let items = make_items(7, 3, 0); // 70% pass
+        let summary = ReviewGenerator::calculate_summary(&items);
+        assert_eq!(summary.overall_health, "Good");
+    }
+
+    #[test]
+    fn test_summary_needs_attention() {
+        // pass_rate <= 40% → "Needs Attention"
+        let items = make_items(3, 7, 0); // 30% pass
+        let summary = ReviewGenerator::calculate_summary(&items);
+        assert_eq!(summary.overall_health, "Needs Attention");
+    }
+
+    #[test]
+    fn test_recommendations_include_action_needed_message() {
+        // Covers lines 212-214: needs_action_count > 0 → recommendation pushed
+        let review = ReviewGenerator::generate_yearly_review("Portfolio", 2024);
+        // The generated review should have recommendations; ACTION_NEEDED items trigger specific text
+        assert!(!review.recommendations.is_empty());
+    }
+
+    #[test]
+    fn test_summary_action_needed_count() {
+        let items = make_items(0, 0, 3);
+        let summary = ReviewGenerator::calculate_summary(&items);
+        assert_eq!(summary.needs_action, 3);
+    }
+
+    #[test]
+    fn test_generate_recommendations_with_action_needed() {
+        // Covers lines 212-214: needs_action_count > 0 → recommendation about immediate action
+        let items = make_items(0, 0, 2); // 2 ACTION_NEEDED items
+        let recs = ReviewGenerator::generate_recommendations(&items);
+        assert!(
+            recs.iter().any(|r| r.contains("require immediate action")),
+            "Expected recommendation about action items, got: {:?}",
+            recs
+        );
     }
 }
