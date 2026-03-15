@@ -41,7 +41,7 @@ import {
   ScheduleProfile,
 } from './schedule-config';
 import { launchBrowser, login, saveSession } from './auth';
-import { uploadReel } from './upload';
+import { uploadReel, uploadStory } from './upload';
 
 // --- CLI parsing ---
 
@@ -244,6 +244,9 @@ async function cmdRun() {
         if (success) {
           updatePostStatus(db, post.id, 'posted', { posted_at: new Date().toISOString() });
           console.log(`✅ Posted: ${post.id}`);
+          // Auto-share to story after every feed post
+          console.log(`📖 Sharing to story...`);
+          await uploadStory(page, videoPath!);
         } else {
           updatePostStatus(db, post.id, 'failed', { error: 'Upload failed' });
           console.error(`❌ Failed to post: ${post.id}`);

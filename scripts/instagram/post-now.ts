@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 import { launchBrowser, login, saveSession } from './auth';
-import { uploadReel } from './upload';
+import { uploadReel, uploadStory } from './upload';
 import { getDb, updatePostStatus } from './schedule-db';
 
 const POST_ID = process.argv[2] || 'post-2026-03-11T04-30-00';
@@ -54,15 +54,20 @@ async function main() {
     console.log('\nUploading', post.composition, '...');
     updatePostStatus(db, post.id, 'posting');
 
+    const fullCaption = post.caption + (post.hashtags ? '\n\n' + post.hashtags : '');
     const success = await uploadReel(page, {
       mediaPath: post.video_path,
-      caption: post.caption,
-      addTrendingAudio: true,
+      caption: fullCaption,
+      addTrendingAudio: false,
     });
 
     if (success) {
       updatePostStatus(db, post.id, 'posted', { posted_at: new Date().toISOString() });
       console.log('\nPosted successfully!');
+
+      // Auto-share to story
+      console.log('\nSharing to story...');
+      await uploadStory(page, post.video_path);
     } else {
       updatePostStatus(db, post.id, 'failed', { error: 'Upload failed' });
       console.error('\nUpload failed');

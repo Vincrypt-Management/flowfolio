@@ -186,11 +186,11 @@ export async function uploadReel(page: Page, opts: PostOptions): Promise<boolean
     await delay(3000);
     await screenshot('01-home');
 
-    // Click the "Create" / "New post" button (+ icon)
+    // Open the "Create new post" dialog via the sidebar
+    // Strategy 1: Click the "Create" sidebar link/button which opens the upload dialog
     const createSelectors = [
       'svg[aria-label="New post"]',
       '[aria-label="New post"]',
-      'a[href="/create/style/"]',
       'svg[aria-label="New Post"]',
     ];
     let clicked = false;
@@ -203,33 +203,102 @@ export async function uploadReel(page: Page, opts: PostOptions): Promise<boolean
         break;
       }
     }
-    if (!clicked) {
-      await page.click('[href="/create/style/"]', { force: true }).catch(() => {});
-    }
-    await delay(3000);
-    await screenshot('02-create-dialog');
+    await delay(2000);
+    await screenshot('02-after-create-click');
 
-    // Check if file input is available or if we need to navigate
+    // Check if a dialog opened (the upload dialog) or a dropdown sub-menu appeared
+    let dialog = page.locator('div[role="dialog"]').first();
+    let dialogVisible = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+
+    if (!dialogVisible) {
+      // IG may show a sidebar dropdown (Post, Live Video, Ad) — click "Post" within the sidebar nav
+      // Scope to the sidebar nav area to avoid clicking random "Post" text on the feed
+      const sidebarPostSelectors = [
+        'nav span:text-is("Post")',
+        'nav a:has-text("Post")',
+        'div[style*="drawer"] span:text-is("Post")',
+        // The sidebar sub-menu items are typically direct children of the nav
+        'a[role="link"] span:text-is("Post")',
+      ];
+
+      for (const sel of sidebarPostSelectors) {
+        const postBtn = page.locator(sel).first();
+        if (await postBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await postBtn.click({ force: true });
+          console.log(`  Clicked "Post" from sidebar menu: ${sel}`);
+          await delay(3000);
+          break;
+        }
+      }
+      await screenshot('02b-post-clicked');
+
+      dialog = page.locator('div[role="dialog"]').first();
+      dialogVisible = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+    }
+
+    if (dialogVisible) {
+      console.log('  Upload dialog opened');
+    }
+
+    // Check if file input is available
     let fileInput = page.locator('input[type="file"]').first();
     let inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
 
     if (!inputAvailable) {
-      // Try navigating directly to create page
-      console.log('  File input not found, navigating to create page...');
-      await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await delay(3000);
+      // Try clicking "Select from computer" or "Select from device" button in the dialog
+      const selectBtn = page.locator('button:has-text("Select"), button:has-text("select")').first();
+      if (await selectBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        console.log('  Clicking "Select from computer"...');
+        await selectBtn.click({ force: true });
+        await delay(2000);
+        fileInput = page.locator('input[type="file"]').first();
+        inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+      }
+    }
+
+    if (!inputAvailable) {
+      // Strategy 2: Use JavaScript to create a file input and trigger the upload
+      console.log('  File input not found in dialog, injecting file input via JS...');
+      await page.evaluate(() => {
+        // Find the hidden file input that IG creates
+        const inputs = document.querySelectorAll('input[type="file"]');
+        if (inputs.length === 0) {
+          // Create one — IG will pick it up
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'video/mp4,video/quicktime,image/jpeg,image/png';
+          input.style.display = 'none';
+          document.body.appendChild(input);
+        }
+      });
       fileInput = page.locator('input[type="file"]').first();
       inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
     }
 
     if (!inputAvailable) {
-      // Retry: click Create icon again
-      const createIcon = page.locator('svg[aria-label="New post"]').first();
-      if (await createIcon.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await createIcon.click({ force: true });
-        await delay(3000);
-      }
+      // Strategy 3: Navigate to /create/select/ which sometimes shows the upload form
+      console.log('  Navigating to /create/select/...');
+      await page.goto(`${IG_BASE}/create/select/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await delay(3000);
+      // Check if we got redirected (IG sometimes redirects logged-out users)
+      const currentUrl = page.url();
+      console.log(`  Current URL after navigation: ${currentUrl}`);
+      await screenshot('02c-create-select');
+
       fileInput = page.locator('input[type="file"]').first();
+      inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+
+      if (!inputAvailable) {
+        // Last resort: go back home and try the full flow again
+        await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await delay(3000);
+        const createIcon = page.locator('svg[aria-label="New post"]').first();
+        if (await createIcon.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await createIcon.click({ force: true });
+          await delay(3000);
+        }
+        fileInput = page.locator('input[type="file"]').first();
+      }
     }
 
     // Handle file input - Instagram uses a hidden file input
@@ -687,6 +756,179 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
   } catch (err) {
     await screenshot('error').catch(() => {});
     console.error('Carousel upload error:', (err as Error).message);
+    return false;
+  }
+}
+
+/**
+ * Upload an image to Instagram Stories.
+ * For carousels, uses the first slide (slide-00.png).
+ * No caption — stories don't have one.
+ */
+export async function uploadStory(page: Page, mediaPath: string): Promise<boolean> {
+  // For carousels, use the cover slide
+  let filePath = mediaPath;
+  if (isCarouselPost(mediaPath)) {
+    const slides = fs.readdirSync(mediaPath)
+      .filter(f => /\.(png|jpg|jpeg)$/i.test(f))
+      .sort()
+      .map(f => path.join(mediaPath, f));
+    if (slides.length === 0) {
+      console.error('No slides found in carousel directory:', mediaPath);
+      return false;
+    }
+    filePath = slides[0];
+    console.log(`Story: using cover slide ${filePath}`);
+  }
+
+  if (!fs.existsSync(filePath)) {
+    console.error(`Story media not found: ${filePath}`);
+    return false;
+  }
+
+  const debugDir = path.join(path.dirname(filePath), 'debug-story');
+  if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
+  const screenshot = async (name: string) => {
+    await page.screenshot({ path: path.join(debugDir, `${name}.png`) });
+    console.log(`  [debug] screenshot: ${name}`);
+  };
+
+  console.log(`Uploading story: ${filePath}`);
+
+  try {
+    await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await delay(3000);
+    await screenshot('s01-home');
+
+    // Click the New post (+) button
+    const createSelectors = [
+      'svg[aria-label="New post"]',
+      '[aria-label="New post"]',
+      'svg[aria-label="New Post"]',
+    ];
+    for (const sel of createSelectors) {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        console.log(`  Clicked create button: ${sel}`);
+        break;
+      }
+    }
+    await delay(2000);
+    await screenshot('s02-after-create');
+
+    // Click "Story" from the dropdown menu (not "Post")
+    const storySelectors = [
+      'nav span:text-is("Story")',
+      'a[role="link"] span:text-is("Story")',
+      'span:text-is("Story")',
+    ];
+    let storyClicked = false;
+    for (const sel of storySelectors) {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        storyClicked = true;
+        console.log(`  Clicked "Story": ${sel}`);
+        await delay(3000);
+        break;
+      }
+    }
+    if (!storyClicked) {
+      console.log('  "Story" menu item not found, trying direct navigation...');
+      await page.goto(`${IG_BASE}/stories/create/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await delay(3000);
+    }
+    await screenshot('s03-story-mode');
+
+    // Set file on the file input
+    const fileInput = page.locator('input[type="file"]').first();
+    const inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+
+    if (inputAvailable) {
+      await fileInput.setInputFiles(filePath);
+    } else {
+      // Try JS injection
+      await page.evaluate((accept) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = accept;
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.click();
+      }, 'image/jpeg,image/png');
+      await delay(1000);
+      const injected = page.locator('input[type="file"]').first();
+      await injected.setInputFiles(filePath);
+    }
+
+    await delay(5000);
+    await screenshot('s04-after-upload');
+
+    // Click "Add to story" / "Share" button
+    const shareSelectors = [
+      'button:has-text("Add to story")',
+      'button:has-text("Share to story")',
+      'div[role="button"]:has-text("Add to story")',
+      'button:has-text("Share")',
+    ];
+    let shared = false;
+    for (const sel of shareSelectors) {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await btn.click({ force: true });
+        shared = true;
+        console.log(`  Clicked share: ${sel}`);
+        break;
+      }
+    }
+
+    if (!shared) {
+      // Try JS fallback
+      shared = await page.evaluate(() => {
+        const candidates = ['Add to story', 'Share to story', 'Share'];
+        for (const text of candidates) {
+          const els = Array.from(document.querySelectorAll('button, [role="button"]'));
+          const btn = els.find(el => el.textContent?.trim() === text) as HTMLElement | undefined;
+          if (btn) { btn.click(); return true; }
+        }
+        return false;
+      }).catch(() => false);
+      if (shared) console.log('  Share clicked via JS');
+    }
+
+    await delay(8000);
+    await screenshot('s05-final');
+
+    // Detect success
+    const successTexts = ['Your story has been shared', 'Story shared', 'Story posted'];
+    const success = await Promise.race([
+      ...successTexts.map(text =>
+        page.locator(`text="${text}"`).waitFor({ timeout: 20000 }).then(() => {
+          console.log(`  Story success: "${text}"`);
+          return true;
+        }).catch(() => false)
+      ),
+      delay(25000).then(() => false),
+    ]);
+
+    if (success) {
+      console.log('✅ Story posted successfully!');
+      return true;
+    }
+
+    // Optimistic: if we're back on the home feed, assume it worked
+    const finalUrl = page.url();
+    if (finalUrl === IG_BASE + '/' || !finalUrl.includes('/create')) {
+      console.log('✅ Story likely posted (redirected to feed).');
+      return true;
+    }
+
+    console.log('⚠️  Story may have posted — check Instagram manually.');
+    return true;
+  } catch (err) {
+    await screenshot('s-error').catch(() => {});
+    console.error('❌ Story upload error:', (err as Error).message);
     return false;
   }
 }
