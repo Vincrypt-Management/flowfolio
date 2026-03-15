@@ -76,6 +76,10 @@ function TabLoading() {
   );
 }
 
+interface ScoringConfig {
+  factor_weights: Record<string, number>;
+}
+
 interface SymbolScore {
   symbol: string;
   total_score: number;
@@ -350,78 +354,29 @@ function App() {
 
   const scoreSymbols = useCallback(async () => {
     if (!plan) {
-      addToast("Please select a plan first", "warning");
+      addToast('Please select a plan first', 'warning');
       return;
     }
 
     setIsScoring(true);
     setScores([]);
-    
+
     try {
-      const symbolsList = rankingsSymbols.split(",").map(s => s.trim()).filter(s => s);
-      
-      // Get scoring config from plan
-      const config = await invoke<{ factor_weights: Record<string, number> }>("get_scoring_config", { plan });
-      
-      // Score symbols using quant metrics
-      const metrics = await invoke<Array<{
-        symbol: string;
-        rsi: number;
-        macd_signal: string;
-        trend: string;
-        volatility: number;
-        signal: string;
-      }>>("get_quant_metrics_batch", { symbols: symbolsList });
-      
-      // Convert metrics to scores
-      const results: SymbolScore[] = metrics.map(m => {
-        const factors = [
-          {
-            name: "momentum",
-            raw_value: m.rsi,
-            normalized_value: Math.min(100, Math.max(0, 100 - Math.abs(50 - m.rsi) * 2)),
-            weight: config.factor_weights["momentum"] || 0.25,
-            contribution: 0,
-          },
-          {
-            name: "trend",
-            raw_value: m.trend === "bullish" ? 80 : m.trend === "bearish" ? 20 : 50,
-            normalized_value: m.trend === "bullish" ? 80 : m.trend === "bearish" ? 20 : 50,
-            weight: config.factor_weights["quality"] || 0.25,
-            contribution: 0,
-          },
-          {
-            name: "volatility",
-            raw_value: m.volatility,
-            normalized_value: Math.max(0, 100 - m.volatility * 2),
-            weight: config.factor_weights["value"] || 0.25,
-            contribution: 0,
-          },
-        ];
-        
-        // Calculate contributions
-        factors.forEach(f => {
-          f.contribution = f.normalized_value * f.weight;
-        });
-        
-        const total_score = factors.reduce((sum, f) => sum + f.contribution, 0);
-        
-        return {
-          symbol: m.symbol,
-          total_score,
-          factors,
-          explanation: `${m.symbol}: RSI=${m.rsi.toFixed(1)}, Trend=${m.trend}, Signal=${m.signal}, Volatility=${m.volatility.toFixed(2)}%`,
-        };
+      const symbolsList = rankingsSymbols.split(',').map(s => s.trim()).filter(s => s);
+
+      const config = await invokeWithResilience<ScoringConfig>('get_scoring_config', { plan });
+      const results = await invokeWithResilience<SymbolScore[]>('score_symbols_batch', {
+        symbols: symbolsList,
+        config,
       });
-      
-      // Sort by score descending
+
       results.sort((a, b) => b.total_score - a.total_score);
       if (isMountedRef.current) {
         setScores(results);
       }
     } catch (error) {
       if (isMountedRef.current) {
-        addToast("Error scoring symbols: " + (error instanceof Error ? error.message : String(error)), "error");
+        addToast('Error scoring symbols: ' + (error instanceof Error ? error.message : String(error)), 'error');
       }
     } finally {
       if (isMountedRef.current) {
