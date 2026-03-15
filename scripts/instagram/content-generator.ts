@@ -587,16 +587,24 @@ function stripEmoji(text: string): string {
 }
 
 /**
- * Generate captions with varied structures.
- * Rotates between formats to keep the feed visually fresh:
+ * Caption style setting. Set CAPTION_STYLE=professional in .env to enforce
+ * clean, human-sounding captions: no "Bottom line:", no "---" dividers,
+ * no emoticons anywhere. Default keeps the original format rotation.
+ *
+ * Format options (default mode only):
  *   0 = Standard (hook + body + CTA)
- *   1 = Thread-style (hook + numbered insights + CTA)
- *   2 = Story-led (hook + narrative body + lesson + CTA)
- *   3 = Mic-drop (short hook + bold body + sharp CTA)
+ *   1 = Thread-style (hook + body + CTA, body paragraphs separated)
+ *   2 = Story-led — DISABLED in professional mode (adds AI-sounding "Bottom line:")
+ *   3 = Mic-drop (hook + body + CTA)
  */
+const CAPTION_STYLE = (process.env.CAPTION_STYLE ?? 'professional') as 'default' | 'professional';
+
 export function generateCaption(theme: string, seed: number): { caption: string; hashtags: string } {
   const t = THEMES[theme] || THEMES['vibe-investing'];
-  const format = Math.abs(seed) % 4;
+
+  // In professional mode: always use format 0 (clean hook + body + CTA).
+  // Formats 1 (adds "---") and 2 (adds "Bottom line:") are AI tells — skip them.
+  const format = CAPTION_STYLE === 'professional' ? (Math.abs(seed) % 2 === 0 ? 0 : 3) : Math.abs(seed) % 4;
 
   const hook = pickRandom(t.hook, seed);
   const body = pickRandom(t.body, seed >> 3);
@@ -607,34 +615,32 @@ export function generateCaption(theme: string, seed: number): { caption: string;
 
   switch (format) {
     case 0:
-      // Standard: clean hook + body + CTA
+    case 3:
+      // Clean: hook + body + CTA. No dividers, no meta-commentary.
       caption = `${hook}\n\n${body}\n\n${cta}`;
       break;
 
     case 1: {
-      // Thread-style: hook + body split into a punchy list feel + CTA
+      // Thread-style: body paragraphs separated — only used in default mode
       const bodyLines = body.split('\n').filter(l => l.trim());
-      const formatted = bodyLines.length > 1
-        ? bodyLines.join('\n\n')
-        : body;
-      caption = `${hook}\n\n${formatted}\n\n---\n\n${cta}`;
+      const formatted = bodyLines.length > 1 ? bodyLines.join('\n\n') : body;
+      caption = `${hook}\n\n${formatted}\n\n${cta}`;
       break;
     }
 
     case 2: {
-      // Story-led: personal angle + body + bottom line + CTA
+      // Story-led — only used in default mode
       const altHook = pickSecond(t.hook, seed >> 2);
       caption = `${hook}\n\n${body}\n\nBottom line: ${altHook.toLowerCase().replace(/\.$/, '')}\n\n${cta}`;
       break;
     }
 
-    case 3:
-      // Mic-drop: short, high-impact
+    default:
       caption = `${hook}\n\n${body}\n\n${cta}`;
-      break;
   }
 
-  return { caption: stripEmoji(caption!), hashtags: stripEmoji(hashtags) };
+  // Always strip emoji from both caption and hashtags — no emoticons in posts
+  return { caption: stripEmoji(caption), hashtags: stripEmoji(hashtags) };
 }
 
 export function pickTheme(seed: number): string {
