@@ -312,12 +312,12 @@ mod tests {
             ..Default::default()
         };
         let breaker = CircuitBreaker::new("test", config);
-        
+
         // Record failures
         breaker.record_failure();
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Closed);
-        
+
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Open);
     }
@@ -330,8 +330,261 @@ mod tests {
             ..Default::default()
         };
         let breaker = CircuitBreaker::new("test", config);
-        
+
         breaker.record_failure();
         assert!(!breaker.can_execute());
+    }
+
+    #[test]
+    fn test_circuit_breaker_starts_closed() {
+        let breaker = CircuitBreaker::new("test", CircuitBreakerConfig::default());
+        assert_eq!(breaker.state(), CircuitState::Closed);
+        assert!(breaker.can_execute());
+    }
+
+    #[test]
+    fn test_circuit_breaker_default_config() {
+        let config = CircuitBreakerConfig::default();
+        assert_eq!(config.failure_threshold, 5);
+        assert_eq!(config.success_threshold, 3);
+        assert_eq!(config.open_duration, Duration::from_secs(30));
+        assert_eq!(config.failure_window, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_circuit_breaker_success_resets_failure_count() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 5,
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+
+        // Record 3 failures
+        breaker.record_failure();
+        breaker.record_failure();
+        breaker.record_failure();
+
+        // A success in Closed state resets the failure count
+        breaker.record_success();
+        assert_eq!(breaker.state(), CircuitState::Closed);
+
+        // Now need full 5 failures again to open
+        breaker.record_failure();
+        breaker.record_failure();
+        breaker.record_failure();
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Closed);
+
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+    }
+
+    #[test]
+    fn test_half_open_failure_reopens() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_millis(1), // Very short so it transitions quickly
+            success_threshold: 3,
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+
+        // Open the circuit
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+
+        // Wait for open duration then allow attempt
+        std::thread::sleep(Duration::from_millis(10));
+        assert!(breaker.can_execute()); // Should transition to HalfOpen
+        assert_eq!(breaker.state(), CircuitState::HalfOpen);
+
+        // Failure in HalfOpen reopens
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+    }
+
+    #[test]
+    fn test_half_open_success_closes_after_threshold() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_millis(1),
+            success_threshold: 2,
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+
+        // Open the circuit
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+
+        // Wait for open duration
+        std::thread::sleep(Duration::from_millis(10));
+        breaker.can_execute(); // Transitions to HalfOpen
+        assert_eq!(breaker.state(), CircuitState::HalfOpen);
+
+        // First success keeps it in HalfOpen
+        breaker.record_success();
+        assert_eq!(breaker.state(), CircuitState::HalfOpen);
+
+        // Second success closes it (success_threshold = 2)
+        breaker.record_success();
+        assert_eq!(breaker.state(), CircuitState::Closed);
+    }
+
+    #[test]
+    fn test_circuit_breaker_stats() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 5,
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("mybreaker", config);
+
+        breaker.record_success();
+        breaker.record_success();
+        breaker.record_failure();
+
+        let stats = breaker.stats();
+        assert_eq!(stats.name, "mybreaker");
+        assert_eq!(stats.total_requests, 3);
+        assert_eq!(stats.total_failures, 1);
+        assert_eq!(stats.current_failure_count, 1);
+        assert_eq!(stats.state, CircuitState::Closed);
+    }
+
+    #[test]
+    fn test_circuit_stats_success_rate_no_requests() {
+        let stats = CircuitStats {
+            name: "empty".to_string(),
+            state: CircuitState::Closed,
+            total_requests: 0,
+            total_failures: 0,
+            current_failure_count: 0,
+        };
+        assert_eq!(stats.success_rate(), 1.0);
+    }
+
+    #[test]
+    fn test_circuit_stats_success_rate_with_requests() {
+        let stats = CircuitStats {
+            name: "test".to_string(),
+            state: CircuitState::Closed,
+            total_requests: 10,
+            total_failures: 3,
+            current_failure_count: 0,
+        };
+        // 7/10 success = 0.7
+        assert!((stats.success_rate() - 0.7).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_circuit_stats_success_rate_all_fail() {
+        let stats = CircuitStats {
+            name: "test".to_string(),
+            state: CircuitState::Open,
+            total_requests: 5,
+            total_failures: 5,
+            current_failure_count: 5,
+        };
+        assert_eq!(stats.success_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_circuit_breaker_reset() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 2,
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+
+        breaker.record_failure();
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+
+        breaker.reset();
+        assert_eq!(breaker.state(), CircuitState::Closed);
+        assert!(breaker.can_execute());
+
+        let stats = breaker.stats();
+        assert_eq!(stats.current_failure_count, 0);
+    }
+
+    #[test]
+    fn test_circuit_breaker_manager_get_or_create() {
+        let manager = CircuitBreakerManager::new();
+
+        let b1 = manager.get_or_create("svc_a");
+        let b2 = manager.get_or_create("svc_a");
+        // Same service returns the same Arc instance
+        assert!(Arc::ptr_eq(&b1, &b2));
+
+        let b3 = manager.get_or_create("svc_b");
+        assert!(!Arc::ptr_eq(&b1, &b3));
+    }
+
+    #[test]
+    fn test_circuit_breaker_manager_all_stats() {
+        let manager = CircuitBreakerManager::new();
+        manager.get_or_create("alpha");
+        manager.get_or_create("beta");
+
+        let stats = manager.all_stats();
+        assert_eq!(stats.len(), 2);
+    }
+
+    #[test]
+    fn test_circuit_breaker_manager_reset_all() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            ..Default::default()
+        };
+        let manager = CircuitBreakerManager::with_config(config);
+
+        let b = manager.get_or_create("svc");
+        b.record_failure();
+        assert_eq!(b.state(), CircuitState::Open);
+
+        manager.reset_all();
+        assert_eq!(b.state(), CircuitState::Closed);
+    }
+
+    #[test]
+    fn test_circuit_breaker_error_display_open() {
+        let err: CircuitBreakerError<String> = CircuitBreakerError::Open {
+            name: "svc".to_string(),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("svc"));
+        assert!(msg.contains("open"));
+    }
+
+    #[test]
+    fn test_circuit_breaker_error_display_service_error() {
+        let err: CircuitBreakerError<String> = CircuitBreakerError::ServiceError("timeout".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("timeout"));
+    }
+
+    #[test]
+    fn test_circuit_breaker_can_execute_while_open_before_timeout() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_secs(3600), // 1 hour - won't expire
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+        assert!(!breaker.can_execute());
+        // State should remain Open since timeout hasn't passed
+        assert_eq!(breaker.state(), CircuitState::Open);
+    }
+
+    #[test]
+    fn test_circuit_state_equality() {
+        assert_eq!(CircuitState::Closed, CircuitState::Closed);
+        assert_eq!(CircuitState::Open, CircuitState::Open);
+        assert_eq!(CircuitState::HalfOpen, CircuitState::HalfOpen);
+        assert_ne!(CircuitState::Closed, CircuitState::Open);
+        assert_ne!(CircuitState::Open, CircuitState::HalfOpen);
     }
 }

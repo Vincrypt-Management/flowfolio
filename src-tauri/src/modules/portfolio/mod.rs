@@ -411,4 +411,311 @@ mod tests {
         assert!((portfolio.holdings[1].current_pct - 40.0).abs() < 0.1);
         assert!(portfolio.holdings[1].drift_pct.abs() < 0.1);
     }
+
+    // ===== Portfolio::calculate_total_value tests =====
+
+    #[test]
+    fn test_total_value_with_cash() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        portfolio.cash = 500.0;
+        portfolio.holdings.push(Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0));
+        portfolio.calculate_total_value();
+        // 10 * 150 + 500 = 2000
+        assert!((portfolio.total_value - 2000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_total_value_empty_portfolio() {
+        let mut portfolio = Portfolio::new("Empty".to_string());
+        portfolio.cash = 1000.0;
+        portfolio.calculate_total_value();
+        assert!((portfolio.total_value - 1000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_total_value_no_cash() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        portfolio.holdings.push(Holding::new("AAPL".to_string(), 5.0, 100.0, 200.0, 100.0));
+        portfolio.calculate_total_value();
+        assert!((portfolio.total_value - 1000.0).abs() < f64::EPSILON);
+    }
+
+    // ===== Portfolio::update_percentages tests =====
+
+    #[test]
+    fn test_update_percentages_zero_total() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        portfolio.total_value = 0.0;
+        portfolio.holdings.push(Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0));
+        portfolio.update_percentages();
+        // Should not panic, percentages unchanged
+        assert!((portfolio.holdings[0].current_pct - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_update_percentages_drift() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        let h1 = Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 40.0); // mv=1500, target 40%
+        let h2 = Holding::new("MSFT".to_string(), 10.0, 100.0, 100.0, 60.0); // mv=1000, target 60%
+        portfolio.holdings.push(h1);
+        portfolio.holdings.push(h2);
+        portfolio.calculate_total_value();
+        portfolio.update_percentages();
+        // total = 2500
+        // AAPL: 1500/2500*100 = 60%, drift = 60-40 = 20
+        // MSFT: 1000/2500*100 = 40%, drift = 40-60 = -20
+        assert!((portfolio.holdings[0].current_pct - 60.0).abs() < 1e-6);
+        assert!((portfolio.holdings[0].drift_pct - 20.0).abs() < 1e-6);
+        assert!((portfolio.holdings[1].current_pct - 40.0).abs() < 1e-6);
+        assert!((portfolio.holdings[1].drift_pct - (-20.0)).abs() < 1e-6);
+    }
+
+    // ===== Portfolio::get_max_drift tests =====
+
+    #[test]
+    fn test_max_drift_no_holdings() {
+        let portfolio = Portfolio::new("Empty".to_string());
+        assert!((portfolio.get_max_drift() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_max_drift_with_drift() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        let mut h1 = Holding::new("A".to_string(), 10.0, 100.0, 150.0, 50.0);
+        h1.drift_pct = 5.0;
+        let mut h2 = Holding::new("B".to_string(), 10.0, 100.0, 100.0, 50.0);
+        h2.drift_pct = -8.0;
+        portfolio.holdings.push(h1);
+        portfolio.holdings.push(h2);
+        assert!((portfolio.get_max_drift() - 8.0).abs() < f64::EPSILON);
+    }
+
+    // ===== Holding::update_price tests =====
+
+    #[test]
+    fn test_holding_update_price() {
+        let mut holding = Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0);
+        assert!((holding.market_value - 1500.0).abs() < f64::EPSILON);
+        holding.update_price(200.0);
+        assert!((holding.current_price - 200.0).abs() < f64::EPSILON);
+        assert!((holding.market_value - 2000.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_holding_update_price_zero() {
+        let mut holding = Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0);
+        holding.update_price(0.0);
+        assert!((holding.market_value - 0.0).abs() < f64::EPSILON);
+    }
+
+    // ===== Holding::new tests =====
+
+    #[test]
+    fn test_holding_new() {
+        let h = Holding::new("AAPL".to_string(), 5.0, 100.0, 200.0, 30.0);
+        assert_eq!(h.symbol, "AAPL");
+        assert!((h.shares - 5.0).abs() < f64::EPSILON);
+        assert!((h.cost_basis - 100.0).abs() < f64::EPSILON);
+        assert!((h.current_price - 200.0).abs() < f64::EPSILON);
+        assert!((h.market_value - 1000.0).abs() < f64::EPSILON);
+        assert!((h.target_pct - 30.0).abs() < f64::EPSILON);
+        assert!((h.current_pct - 0.0).abs() < f64::EPSILON);
+        assert!((h.drift_pct - 0.0).abs() < f64::EPSILON);
+    }
+
+    // ===== PortfolioManager::score_weighted_allocation tests =====
+
+    #[test]
+    fn test_score_weighted_allocation() {
+        let symbols = vec![
+            ("AAPL".to_string(), 80.0),
+            ("MSFT".to_string(), 20.0),
+        ];
+        let constraints = AllocationConstraints {
+            max_position_pct: 50.0,
+            min_position_pct: 5.0,
+            max_sector_pct: None,
+            cash_buffer_pct: 10.0,
+        };
+        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints);
+        assert_eq!(plan.method, "score_weighted");
+        assert_eq!(plan.allocations.len(), 2);
+        // AAPL: 80/100 * 90 = 72 -> clamped to max 50
+        assert!((plan.allocations[0].target_pct - 50.0).abs() < 1e-6);
+        // MSFT: 20/100 * 90 = 18 -> within bounds
+        assert!((plan.allocations[1].target_pct - 18.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_score_weighted_allocation_zero_scores() {
+        let symbols = vec![
+            ("AAPL".to_string(), 0.0),
+            ("MSFT".to_string(), 0.0),
+        ];
+        let constraints = AllocationConstraints {
+            max_position_pct: 50.0,
+            min_position_pct: 1.0,
+            max_sector_pct: None,
+            cash_buffer_pct: 5.0,
+        };
+        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints);
+        // Falls back to equal weight
+        assert_eq!(plan.method, "equal_weight");
+    }
+
+    #[test]
+    fn test_score_weighted_min_position() {
+        let symbols = vec![
+            ("A".to_string(), 99.0),
+            ("B".to_string(), 1.0),
+        ];
+        let constraints = AllocationConstraints {
+            max_position_pct: 80.0,
+            min_position_pct: 5.0,
+            max_sector_pct: None,
+            cash_buffer_pct: 0.0,
+        };
+        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints);
+        // B raw = 1/100*100 = 1% -> clamped to min 5%
+        assert!(plan.allocations[1].target_pct >= 5.0);
+    }
+
+    // ===== PortfolioManager::generate_buy_list tests =====
+
+    #[test]
+    fn test_generate_buy_list_basic() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        portfolio.total_value = 10000.0;
+        portfolio.holdings.push(Holding {
+            symbol: "AAPL".to_string(), shares: 10.0, cost_basis: 100.0,
+            current_price: 150.0, market_value: 1500.0, target_pct: 30.0,
+            current_pct: 15.0, drift_pct: -15.0,
+        });
+
+        let plan = AllocationPlan {
+            method: "equal_weight".to_string(),
+            allocations: vec![
+                TargetAllocation { symbol: "AAPL".to_string(), target_pct: 30.0, score: 80.0, weight_reason: "test".to_string() },
+                TargetAllocation { symbol: "MSFT".to_string(), target_pct: 30.0, score: 75.0, weight_reason: "test".to_string() },
+            ],
+            constraints: AllocationConstraints { max_position_pct: 50.0, min_position_pct: 1.0, max_sector_pct: None, cash_buffer_pct: 5.0 },
+        };
+
+        let mut prices = HashMap::new();
+        prices.insert("AAPL".to_string(), 150.0);
+        prices.insert("MSFT".to_string(), 300.0);
+
+        let buy_list = PortfolioManager::generate_buy_list(1000.0, &portfolio, &plan, &prices);
+        assert!(!buy_list.recommendations.is_empty());
+        assert!(buy_list.rationale.contains("1000.00"));
+    }
+
+    #[test]
+    fn test_generate_buy_list_empty_portfolio() {
+        let portfolio = Portfolio::new("Empty".to_string());
+        let plan = AllocationPlan {
+            method: "equal_weight".to_string(),
+            allocations: vec![
+                TargetAllocation { symbol: "AAPL".to_string(), target_pct: 50.0, score: 80.0, weight_reason: "test".to_string() },
+            ],
+            constraints: AllocationConstraints { max_position_pct: 50.0, min_position_pct: 1.0, max_sector_pct: None, cash_buffer_pct: 5.0 },
+        };
+        let mut prices = HashMap::new();
+        prices.insert("AAPL".to_string(), 150.0);
+
+        let buy_list = PortfolioManager::generate_buy_list(1000.0, &portfolio, &plan, &prices);
+        // target_value = 50% of 1000 = 500, current = 0, needed = 500
+        // shares = floor(500/150) = 3
+        assert_eq!(buy_list.recommendations.len(), 1);
+        assert_eq!(buy_list.recommendations[0].action, "BUY");
+        assert!((buy_list.recommendations[0].shares - 3.0).abs() < f64::EPSILON);
+    }
+
+    // ===== PortfolioManager::check_rebalance tests =====
+
+    #[test]
+    fn test_check_rebalance_no_drift() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        let mut h = Holding::new("AAPL".to_string(), 10.0, 100.0, 100.0, 100.0);
+        h.current_pct = 100.0;
+        h.drift_pct = 0.0;
+        portfolio.holdings.push(h);
+        portfolio.total_value = 1000.0;
+
+        let report = PortfolioManager::check_rebalance(&portfolio, 5.0);
+        assert!(!report.drift_detected);
+        assert!(report.actions.is_empty());
+    }
+
+    #[test]
+    fn test_check_rebalance_with_drift() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        let mut h1 = Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0);
+        h1.market_value = 1500.0;
+        h1.current_pct = 60.0;
+        h1.drift_pct = 10.0; // 60 - 50 = 10% drift
+        let mut h2 = Holding::new("MSFT".to_string(), 10.0, 100.0, 100.0, 50.0);
+        h2.market_value = 1000.0;
+        h2.current_pct = 40.0;
+        h2.drift_pct = -10.0;
+        portfolio.holdings.push(h1);
+        portfolio.holdings.push(h2);
+        portfolio.total_value = 2500.0;
+
+        let report = PortfolioManager::check_rebalance(&portfolio, 5.0);
+        assert!(report.drift_detected);
+        assert_eq!(report.actions.len(), 2);
+        // AAPL drifted +10% -> should SELL
+        let aapl_action = report.actions.iter().find(|a| a.symbol == "AAPL").unwrap();
+        assert_eq!(aapl_action.action, "SELL");
+        // MSFT drifted -10% -> should BUY
+        let msft_action = report.actions.iter().find(|a| a.symbol == "MSFT").unwrap();
+        assert_eq!(msft_action.action, "BUY");
+    }
+
+    #[test]
+    fn test_check_rebalance_threshold_boundary() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        let mut h = Holding::new("AAPL".to_string(), 10.0, 100.0, 100.0, 50.0);
+        h.current_pct = 55.0;
+        h.drift_pct = 5.0; // Exactly at threshold
+        portfolio.holdings.push(h);
+        portfolio.total_value = 1000.0;
+
+        let report = PortfolioManager::check_rebalance(&portfolio, 5.0);
+        // max_drift = 5.0, threshold = 5.0, drift_detected = 5.0 > 5.0 = false
+        assert!(!report.drift_detected);
+    }
+
+    // ===== equal_weight with max_position constraint =====
+
+    #[test]
+    fn test_equal_weight_capped_by_max() {
+        let symbols = vec!["A".to_string(), "B".to_string()];
+        let constraints = AllocationConstraints {
+            max_position_pct: 20.0, // cap at 20%
+            min_position_pct: 1.0,
+            max_sector_pct: None,
+            cash_buffer_pct: 0.0,
+        };
+        let plan = PortfolioManager::equal_weight_allocation(symbols, constraints);
+        // equal = 100/2 = 50, but capped at 20
+        for alloc in &plan.allocations {
+            assert!((alloc.target_pct - 20.0).abs() < f64::EPSILON);
+        }
+    }
+
+    // ===== Portfolio::add_holding tests =====
+
+    #[test]
+    fn test_add_holding_recalculates() {
+        let mut portfolio = Portfolio::new("Test".to_string());
+        portfolio.cash = 500.0;
+        let h = Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0);
+        portfolio.add_holding(h);
+        // total_value = 1500 + 500 = 2000
+        assert!((portfolio.total_value - 2000.0).abs() < f64::EPSILON);
+        // AAPL pct = 1500/2000*100 = 75
+        assert!((portfolio.holdings[0].current_pct - 75.0).abs() < 1e-6);
+    }
 }

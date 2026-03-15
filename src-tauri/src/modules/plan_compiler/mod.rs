@@ -472,3 +472,239 @@ impl PlanCompiler {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- list_templates ---
+
+    #[test]
+    fn test_list_templates_returns_six_entries() {
+        let templates = PlanCompiler::list_templates();
+        assert_eq!(templates.len(), 6);
+    }
+
+    #[test]
+    fn test_list_templates_contains_expected_names() {
+        let templates = PlanCompiler::list_templates();
+        let expected = [
+            "Quality Compounders",
+            "Dividend Calm",
+            "AI Picks & Shovels",
+            "Value Deep Dive",
+            "Small Cap Growth",
+            "Global Diversified",
+        ];
+        for name in &expected {
+            assert!(templates.contains(&name.to_string()), "Missing template: {}", name);
+        }
+    }
+
+    // --- get_template ---
+
+    #[test]
+    fn test_get_template_quality_compounders() {
+        let plan = PlanCompiler::get_template("Quality Compounders").unwrap();
+        assert_eq!(plan.name, "Quality Compounders");
+    }
+
+    #[test]
+    fn test_get_template_dividend_calm() {
+        let plan = PlanCompiler::get_template("Dividend Calm").unwrap();
+        assert_eq!(plan.name, "Dividend Calm");
+    }
+
+    #[test]
+    fn test_get_template_ai_infrastructure() {
+        let plan = PlanCompiler::get_template("AI Picks & Shovels").unwrap();
+        assert_eq!(plan.name, "AI Picks & Shovels");
+    }
+
+    #[test]
+    fn test_get_template_value_deep_dive() {
+        let plan = PlanCompiler::get_template("Value Deep Dive").unwrap();
+        assert_eq!(plan.name, "Value Deep Dive");
+    }
+
+    #[test]
+    fn test_get_template_small_cap_growth() {
+        let plan = PlanCompiler::get_template("Small Cap Growth").unwrap();
+        assert_eq!(plan.name, "Small Cap Growth");
+    }
+
+    #[test]
+    fn test_get_template_global_diversified() {
+        let plan = PlanCompiler::get_template("Global Diversified").unwrap();
+        assert_eq!(plan.name, "Global Diversified");
+    }
+
+    #[test]
+    fn test_get_template_unknown_returns_none() {
+        assert!(PlanCompiler::get_template("Nonexistent Template").is_none());
+    }
+
+    // --- default_template ---
+
+    #[test]
+    fn test_default_template_is_quality_compounders() {
+        let plan = PlanCompiler::default_template();
+        assert_eq!(plan.name, "Quality Compounders");
+    }
+
+    // --- from_prompt ---
+
+    #[test]
+    fn test_from_prompt_returns_plan() {
+        let plan = PlanCompiler::from_prompt("some prompt").unwrap();
+        // Should return the default template for now
+        assert!(!plan.name.is_empty());
+    }
+
+    // --- validate ---
+
+    #[test]
+    fn test_validate_valid_plan_passes() {
+        let plan = PlanCompiler::default_template();
+        assert!(PlanCompiler::validate(&plan).is_ok());
+    }
+
+    #[test]
+    fn test_validate_zero_max_position_fails() {
+        let mut plan = PlanCompiler::default_template();
+        plan.portfolio.max_position_pct = 0.0;
+        assert!(PlanCompiler::validate(&plan).is_err());
+    }
+
+    #[test]
+    fn test_validate_negative_max_position_fails() {
+        let mut plan = PlanCompiler::default_template();
+        plan.portfolio.max_position_pct = -5.0;
+        assert!(PlanCompiler::validate(&plan).is_err());
+    }
+
+    #[test]
+    fn test_validate_max_position_over_100_fails() {
+        let mut plan = PlanCompiler::default_template();
+        plan.portfolio.max_position_pct = 101.0;
+        assert!(PlanCompiler::validate(&plan).is_err());
+    }
+
+    #[test]
+    fn test_validate_exactly_100_position_passes() {
+        let mut plan = PlanCompiler::default_template();
+        plan.portfolio.max_position_pct = 100.0;
+        // Need weights to sum to 1.0 — keep the ranking factors
+        assert!(PlanCompiler::validate(&plan).is_ok());
+    }
+
+    #[test]
+    fn test_validate_weights_not_summing_to_one_fails() {
+        let mut plan = PlanCompiler::default_template();
+        // Corrupt one factor weight
+        plan.ranking.factors[0].weight = 0.9;
+        assert!(PlanCompiler::validate(&plan).is_err());
+    }
+
+    #[test]
+    fn test_validate_weights_exactly_one_passes() {
+        let mut plan = PlanCompiler::default_template();
+        // Overwrite factors to exactly 3 items summing to 1.0
+        plan.ranking.factors = vec![
+            FactorWeight { name: "quality".to_string(), weight: 0.5 },
+            FactorWeight { name: "value".to_string(), weight: 0.5 },
+        ];
+        assert!(PlanCompiler::validate(&plan).is_ok());
+    }
+
+    #[test]
+    fn test_validate_empty_factors_fails() {
+        let mut plan = PlanCompiler::default_template();
+        plan.ranking.factors = vec![];
+        // Sum = 0.0, not 1.0 → should fail
+        assert!(PlanCompiler::validate(&plan).is_err());
+    }
+
+    // --- structure assertions on templates ---
+
+    #[test]
+    fn test_quality_compounders_uses_nyse_and_nasdaq() {
+        let plan = PlanCompiler::get_template("Quality Compounders").unwrap();
+        assert!(plan.universe.exchanges.contains(&"NYSE".to_string()));
+        assert!(plan.universe.exchanges.contains(&"NASDAQ".to_string()));
+    }
+
+    #[test]
+    fn test_dividend_calm_has_sector_caps() {
+        let plan = PlanCompiler::get_template("Dividend Calm").unwrap();
+        assert!(plan.portfolio.sector_caps.is_some());
+    }
+
+    #[test]
+    fn test_quality_compounders_has_no_sector_caps() {
+        let plan = PlanCompiler::get_template("Quality Compounders").unwrap();
+        assert!(plan.portfolio.sector_caps.is_none());
+    }
+
+    #[test]
+    fn test_every_template_has_at_least_one_filter() {
+        for name in PlanCompiler::list_templates() {
+            let plan = PlanCompiler::get_template(&name).unwrap();
+            assert!(
+                !plan.filters.is_empty(),
+                "Template '{}' has no filters",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_every_template_has_at_least_one_factor() {
+        for name in PlanCompiler::list_templates() {
+            let plan = PlanCompiler::get_template(&name).unwrap();
+            assert!(
+                !plan.ranking.factors.is_empty(),
+                "Template '{}' has no ranking factors",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_every_template_passes_validation() {
+        for name in PlanCompiler::list_templates() {
+            let plan = PlanCompiler::get_template(&name).unwrap();
+            assert!(
+                PlanCompiler::validate(&plan).is_ok(),
+                "Template '{}' failed validation",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_cadence_policy_quarterly_rebalance_quality_compounders() {
+        let plan = PlanCompiler::get_template("Quality Compounders").unwrap();
+        assert!(plan.cadence.quarterly_rebalance);
+        assert!(plan.cadence.monthly_contributions);
+        assert!(plan.cadence.yearly_review);
+    }
+
+    #[test]
+    fn test_risk_policy_max_drawdown_set_for_all_templates() {
+        for name in PlanCompiler::list_templates() {
+            let plan = PlanCompiler::get_template(&name).unwrap();
+            assert!(
+                plan.risk.max_drawdown_pct.is_some(),
+                "Template '{}' has no max_drawdown_pct",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_global_diversified_includes_multiple_regions() {
+        let plan = PlanCompiler::get_template("Global Diversified").unwrap();
+        assert!(plan.universe.regions.len() > 1);
+    }
+}

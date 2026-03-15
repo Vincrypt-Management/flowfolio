@@ -503,9 +503,8 @@ impl BacktestEngine {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_backtest_basic() {
-        let config = BacktestConfig {
+    fn default_config() -> BacktestConfig {
+        BacktestConfig {
             start_date: "2020-01-01".to_string(),
             end_date: "2021-01-01".to_string(),
             initial_cash: 10000.0,
@@ -514,12 +513,218 @@ mod tests {
             rebalance_threshold: 5.0,
             symbols: vec!["AAPL".to_string(), "MSFT".to_string()],
             allocation_method: "equal_weight".to_string(),
-        };
+        }
+    }
 
-        let result = BacktestEngine::run_backtest(config);
-        
+    #[test]
+    fn test_backtest_basic() {
+        let result = BacktestEngine::run_backtest(default_config());
+
         assert!(result.metrics.final_value > 0.0);
         assert!(!result.timeline.is_empty());
         assert!(result.duration_months > 0);
+    }
+
+    #[test]
+    fn test_backtest_duration_months_correct() {
+        // Jan 2020 → Jan 2021 = 12 months
+        let result = BacktestEngine::run_backtest(default_config());
+        assert_eq!(result.duration_months, 12);
+    }
+
+    #[test]
+    fn test_backtest_start_and_end_dates_preserved() {
+        let config = default_config();
+        let result = BacktestEngine::run_backtest(config);
+        assert_eq!(result.start_date, "2020-01-01");
+        assert_eq!(result.end_date, "2021-01-01");
+    }
+
+    #[test]
+    fn test_backtest_total_invested_includes_contributions() {
+        let config = BacktestConfig {
+            initial_cash: 10_000.0,
+            monthly_contribution: 1_000.0,
+            start_date: "2020-01-01".to_string(),
+            end_date: "2021-01-01".to_string(), // 12 months
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        // total_invested = 10_000 + 12 * 1_000 = 22_000
+        assert_eq!(result.metrics.total_invested, 22_000.0);
+    }
+
+    #[test]
+    fn test_backtest_timeline_not_empty() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert!(!result.timeline.is_empty());
+    }
+
+    #[test]
+    fn test_backtest_trades_not_empty() {
+        let result = BacktestEngine::run_backtest(default_config());
+        // There should be at least the initial allocation trades
+        assert!(!result.trades.is_empty());
+    }
+
+    #[test]
+    fn test_backtest_num_trades_matches_trades_vec() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert_eq!(result.metrics.num_trades, result.trades.len());
+    }
+
+    #[test]
+    fn test_backtest_max_drawdown_non_negative() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert!(result.metrics.max_drawdown >= 0.0);
+    }
+
+    #[test]
+    fn test_backtest_volatility_non_negative() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert!(result.metrics.volatility >= 0.0);
+    }
+
+    #[test]
+    fn test_backtest_cagr_finite() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert!(result.metrics.cagr.is_finite());
+    }
+
+    #[test]
+    fn test_backtest_summary_contains_cagr() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert!(result.summary.contains("CAGR"));
+    }
+
+    #[test]
+    fn test_backtest_summary_contains_total_return() {
+        let result = BacktestEngine::run_backtest(default_config());
+        assert!(result.summary.contains("Total Return"));
+    }
+
+    #[test]
+    fn test_backtest_monthly_rebalance_mode() {
+        let config = BacktestConfig {
+            rebalance_frequency: "monthly".to_string(),
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert!(result.metrics.final_value > 0.0);
+    }
+
+    #[test]
+    fn test_backtest_yearly_rebalance_mode() {
+        let config = BacktestConfig {
+            rebalance_frequency: "yearly".to_string(),
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert!(result.metrics.final_value > 0.0);
+    }
+
+    #[test]
+    fn test_backtest_no_contribution() {
+        let config = BacktestConfig {
+            monthly_contribution: 0.0,
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert_eq!(result.metrics.total_invested, 10_000.0);
+    }
+
+    #[test]
+    fn test_backtest_single_symbol() {
+        let config = BacktestConfig {
+            symbols: vec!["AAPL".to_string()],
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert!(result.metrics.final_value > 0.0);
+    }
+
+    #[test]
+    fn test_backtest_many_symbols() {
+        let config = BacktestConfig {
+            symbols: vec![
+                "AAPL".to_string(),
+                "MSFT".to_string(),
+                "GOOGL".to_string(),
+                "AMZN".to_string(),
+                "META".to_string(),
+            ],
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert!(result.metrics.final_value > 0.0);
+        assert!(!result.trades.is_empty());
+    }
+
+    // --- months_between via run_backtest ---
+
+    #[test]
+    fn test_months_between_same_month_is_zero() {
+        let config = BacktestConfig {
+            start_date: "2020-06-01".to_string(),
+            end_date: "2020-06-30".to_string(),
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert_eq!(result.duration_months, 0);
+    }
+
+    #[test]
+    fn test_months_between_three_months() {
+        let config = BacktestConfig {
+            start_date: "2020-01-01".to_string(),
+            end_date: "2020-04-01".to_string(),
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert_eq!(result.duration_months, 3);
+    }
+
+    #[test]
+    fn test_backtest_trade_actions_are_buy_or_sell() {
+        let result = BacktestEngine::run_backtest(default_config());
+        for trade in &result.trades {
+            assert!(
+                trade.action == "BUY" || trade.action == "SELL",
+                "Unexpected trade action: {}",
+                trade.action
+            );
+        }
+    }
+
+    #[test]
+    fn test_backtest_trade_amounts_positive() {
+        let result = BacktestEngine::run_backtest(default_config());
+        for trade in &result.trades {
+            assert!(trade.amount >= 0.0, "Trade amount negative: {}", trade.amount);
+        }
+    }
+
+    #[test]
+    fn test_backtest_snapshot_values_positive() {
+        let result = BacktestEngine::run_backtest(default_config());
+        for snap in &result.timeline {
+            assert!(snap.value >= 0.0);
+        }
+    }
+
+    // --- position weight calculation ---
+
+    #[test]
+    fn test_snapshot_position_weights_sum_near_100() {
+        let result = BacktestEngine::run_backtest(default_config());
+        if let Some(snap) = result.timeline.last() {
+            if !snap.positions.is_empty() {
+                // Cash is excluded from position weights, so weights are of invested portion only
+                let weight_sum: f64 = snap.positions.iter().map(|p| p.weight).sum();
+                // weights should sum close to (invested / total_value) * 100
+                let invested_ratio = (snap.invested / snap.value) * 100.0;
+                assert!((weight_sum - invested_ratio).abs() < 1.0);
+            }
+        }
     }
 }

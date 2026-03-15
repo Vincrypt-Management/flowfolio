@@ -204,24 +204,250 @@ pub fn generate_operation_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_progress_reporter() {
         let manager = ProgressManager::new();
         let mut receiver = manager.subscribe();
-        
+
         let reporter = manager.create_reporter("test_op");
         reporter.start("test", Some(3), "Starting test");
-        
+
         // Check we received the event
         let event = receiver.try_recv();
         assert!(event.is_ok());
-        
+
         match event.unwrap() {
             ProgressEvent::Started { operation_id, .. } => {
                 assert_eq!(operation_id, "test_op");
             }
             _ => panic!("Expected Started event"),
+        }
+    }
+
+    // --- new tests ---
+
+    #[test]
+    fn test_generate_operation_id_starts_with_op() {
+        let id = generate_operation_id();
+        assert!(id.starts_with("op_"));
+    }
+
+    #[test]
+    fn test_generate_operation_id_unique() {
+        let id1 = generate_operation_id();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let id2 = generate_operation_id();
+        // Should differ since they're based on millisecond timestamps
+        assert_ne!(id1, id2);
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_started_fields() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op123");
+        reporter.start("scoring", Some(10), "Begin");
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Started {
+                operation_id,
+                operation_type,
+                total_steps,
+                message,
+            } => {
+                assert_eq!(operation_id, "op123");
+                assert_eq!(operation_type, "scoring");
+                assert_eq!(total_steps, Some(10));
+                assert_eq!(message, "Begin");
+            }
+            _ => panic!("Expected Started"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_progress_percentage_calculated() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.progress(5, Some(10), "halfway", None);
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Progress { percentage, current_step, total_steps, .. } => {
+                assert!((percentage - 50.0).abs() < 0.01);
+                assert_eq!(current_step, 5);
+                assert_eq!(total_steps, Some(10));
+            }
+            _ => panic!("Expected Progress"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_progress_zero_total_gives_zero_pct() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.progress(3, Some(0), "undefined", None);
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Progress { percentage, .. } => {
+                assert_eq!(percentage, 0.0);
+            }
+            _ => panic!("Expected Progress"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_progress_no_total_gives_zero_pct() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.progress(3, None, "unknown total", None);
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Progress { percentage, total_steps, .. } => {
+                assert_eq!(percentage, 0.0);
+                assert_eq!(total_steps, None);
+            }
+            _ => panic!("Expected Progress"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_completed_fields() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.complete(true, "All done");
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Completed { operation_id, success, message, .. } => {
+                assert_eq!(operation_id, "op");
+                assert!(success);
+                assert_eq!(message, "All done");
+            }
+            _ => panic!("Expected Completed"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_error_fields() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.error("something broke", true);
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Error { operation_id, error, recoverable } => {
+                assert_eq!(operation_id, "op");
+                assert_eq!(error, "something broke");
+                assert!(recoverable);
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_retry_fields() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.retry(2, 5, "timeout", 1000);
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Retry { operation_id, attempt, max_attempts, error, next_retry_ms } => {
+                assert_eq!(operation_id, "op");
+                assert_eq!(attempt, 2);
+                assert_eq!(max_attempts, 5);
+                assert_eq!(error, "timeout");
+                assert_eq!(next_retry_ms, 1000);
+            }
+            _ => panic!("Expected Retry"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_partial_result_fields() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.partial_result("prices", serde_json::json!({"AAPL": 150.0}));
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::PartialResult { operation_id, result_type, data } => {
+                assert_eq!(operation_id, "op");
+                assert_eq!(result_type, "prices");
+                assert!(data.is_object());
+            }
+            _ => panic!("Expected PartialResult"),
+        }
+    }
+
+    #[test]
+    fn test_progress_manager_create_multiple_reporters() {
+        let manager = ProgressManager::new();
+        let _r1 = manager.create_reporter("op1");
+        let _r2 = manager.create_reporter("op2");
+        // Just verify creation doesn't panic
+    }
+
+    #[tokio::test]
+    async fn test_multiple_subscribers_receive_events() {
+        let manager = ProgressManager::new();
+        let mut rx1 = manager.subscribe();
+        let mut rx2 = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        reporter.start("test", None, "hi");
+
+        // Both should receive
+        assert!(rx1.try_recv().is_ok());
+        assert!(rx2.try_recv().is_ok());
+    }
+
+    #[test]
+    fn test_progress_detail_all_none_by_default() {
+        let detail = ProgressDetail {
+            symbol: None,
+            provider: None,
+            metric: None,
+            value: None,
+        };
+        assert!(detail.symbol.is_none());
+        assert!(detail.provider.is_none());
+        assert!(detail.metric.is_none());
+        assert!(detail.value.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_progress_with_detail() {
+        let manager = ProgressManager::new();
+        let mut rx = manager.subscribe();
+
+        let reporter = manager.create_reporter("op");
+        let detail = ProgressDetail {
+            symbol: Some("AAPL".to_string()),
+            provider: Some("yahoo".to_string()),
+            metric: Some("price".to_string()),
+            value: Some(150.0),
+        };
+        reporter.progress(1, Some(5), "fetching", Some(detail));
+
+        match rx.try_recv().unwrap() {
+            ProgressEvent::Progress { detail, .. } => {
+                let d = detail.unwrap();
+                assert_eq!(d.symbol, Some("AAPL".to_string()));
+                assert_eq!(d.provider, Some("yahoo".to_string()));
+            }
+            _ => panic!("Expected Progress"),
         }
     }
 }

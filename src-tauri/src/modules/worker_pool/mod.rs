@@ -114,11 +114,13 @@ impl PriorityWorkerPool {
 mod tests {
     use super::*;
 
+    type BoxFut = std::pin::Pin<Box<dyn std::future::Future<Output = Result<i32, String>> + Send>>;
+
     #[tokio::test]
     async fn test_worker_pool_concurrency() {
         let pool = WorkerPool::new(3);
-        
-        let tasks: Vec<std::pin::Pin<Box<dyn std::future::Future<Output = Result<i32, String>> + Send>>> = vec![
+
+        let tasks: Vec<BoxFut> = vec![
             Box::pin(async { Ok::<_, String>(1) }),
             Box::pin(async { Ok::<_, String>(2) }),
             Box::pin(async { Ok::<_, String>(3) }),
@@ -128,6 +130,108 @@ mod tests {
 
         let results = pool.execute_batch(tasks).await;
         assert_eq!(results.len(), 5);
+        assert!(results.iter().all(|r| r.is_ok()));
+    }
+
+    // --- new tests ---
+
+    #[test]
+    fn test_worker_pool_max_concurrent() {
+        let pool = WorkerPool::new(7);
+        assert_eq!(pool.max_concurrent(), 7);
+    }
+
+    #[test]
+    fn test_worker_pool_max_concurrent_one() {
+        let pool = WorkerPool::new(1);
+        assert_eq!(pool.max_concurrent(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_empty_batch() {
+        let pool = WorkerPool::new(4);
+        let tasks: Vec<BoxFut> = vec![];
+        let results = pool.execute_batch(tasks).await;
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_single_task() {
+        let pool = WorkerPool::new(2);
+        let tasks: Vec<BoxFut> = vec![Box::pin(async { Ok::<_, String>(42) })];
+        let results = pool.execute_batch(tasks).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], Ok(42));
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_propagates_errors() {
+        let pool = WorkerPool::new(2);
+        let tasks: Vec<BoxFut> = vec![
+            Box::pin(async { Ok::<_, String>(1) }),
+            Box::pin(async { Err::<i32, String>("failed task".to_string()) }),
+            Box::pin(async { Ok::<_, String>(3) }),
+        ];
+        let results = pool.execute_batch(tasks).await;
+        assert_eq!(results.len(), 3);
+        assert!(results[0].is_ok());
+        assert!(results[1].is_err());
+        assert!(results[2].is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_more_tasks_than_workers() {
+        let pool = WorkerPool::new(2);
+        let tasks: Vec<BoxFut> = (0..10).map(|i| {
+            Box::pin(async move { Ok::<i32, String>(i) }) as BoxFut
+        }).collect();
+        let results = pool.execute_batch(tasks).await;
+        assert_eq!(results.len(), 10);
+        assert!(results.iter().all(|r| r.is_ok()));
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_all_values_returned() {
+        let pool = WorkerPool::new(3);
+        let tasks: Vec<BoxFut> = (1..=5).map(|i| {
+            Box::pin(async move { Ok::<i32, String>(i) }) as BoxFut
+        }).collect();
+        let results = pool.execute_batch(tasks).await;
+        let values: Vec<i32> = results.into_iter().map(|r| r.unwrap()).collect();
+        // All values 1-5 should be present (order may vary)
+        let mut sorted = values.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_priority_worker_pool_construction() {
+        let pool = PriorityWorkerPool::new(2, 4);
+        assert_eq!(pool.high_priority.max_concurrent(), 2);
+        assert_eq!(pool.normal_priority.max_concurrent(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_priority_worker_pool_high_priority() {
+        let pool = PriorityWorkerPool::new(2, 2);
+        let tasks: Vec<BoxFut> = vec![
+            Box::pin(async { Ok::<_, String>(100) }),
+            Box::pin(async { Ok::<_, String>(200) }),
+        ];
+        let results = pool.execute_high_priority(tasks).await;
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|r| r.is_ok()));
+    }
+
+    #[tokio::test]
+    async fn test_priority_worker_pool_normal_priority() {
+        let pool = PriorityWorkerPool::new(2, 2);
+        let tasks: Vec<BoxFut> = vec![
+            Box::pin(async { Ok::<_, String>(10) }),
+            Box::pin(async { Ok::<_, String>(20) }),
+        ];
+        let results = pool.execute_normal_priority(tasks).await;
+        assert_eq!(results.len(), 2);
         assert!(results.iter().all(|r| r.is_ok()));
     }
 }

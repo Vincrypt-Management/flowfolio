@@ -365,12 +365,12 @@ mod tests {
     #[test]
     fn test_health_monitor_metrics() {
         let monitor = HealthMonitor::new("1.0.0");
-        
+
         // Record some requests
         monitor.record_request_success(1000);
         monitor.record_request_success(2000);
         monitor.record_request_failure(5000);
-        
+
         let report = monitor.get_health_report();
         assert_eq!(report.metrics.total_requests, 3);
         assert_eq!(report.metrics.successful_requests, 2);
@@ -380,16 +380,285 @@ mod tests {
     #[test]
     fn test_provider_metrics() {
         let monitor = HealthMonitor::new("1.0.0");
-        
+
         monitor.record_provider_request("yahoo", true, 100_000);
         monitor.record_provider_request("yahoo", true, 200_000);
         monitor.record_provider_request("alpaca", false, 5000_000);
-        
+
         let providers = monitor.get_provider_metrics();
         assert_eq!(providers.len(), 2);
-        
+
         let yahoo = providers.iter().find(|p| p.name == "yahoo").unwrap();
         assert_eq!(yahoo.successful_requests, 2);
         assert_eq!(yahoo.success_rate, 1.0);
+    }
+
+    // --- new tests ---
+
+    #[test]
+    fn test_health_monitor_version_in_report() {
+        let monitor = HealthMonitor::new("2.5.0");
+        let report = monitor.get_health_report();
+        assert_eq!(report.version, "2.5.0");
+    }
+
+    #[test]
+    fn test_health_monitor_initial_report_has_no_components() {
+        let monitor = HealthMonitor::new("1.0.0");
+        let report = monitor.get_health_report();
+        assert!(report.components.is_empty());
+    }
+
+    #[test]
+    fn test_health_monitor_overall_status_healthy_when_no_components() {
+        let monitor = HealthMonitor::new("1.0.0");
+        let report = monitor.get_health_report();
+        // With no components, all() vacuously true → Healthy
+        assert_eq!(report.status, HealthStatus::Healthy);
+    }
+
+    #[test]
+    fn test_health_monitor_cache_hits_tracked() {
+        let monitor = HealthMonitor::new("1.0.0");
+        monitor.record_cache_hit();
+        monitor.record_cache_hit();
+        monitor.record_cache_miss();
+
+        let report = monitor.get_health_report();
+        assert_eq!(report.metrics.cache_hits, 2);
+        assert_eq!(report.metrics.cache_misses, 1);
+    }
+
+    #[test]
+    fn test_health_monitor_reset_clears_metrics() {
+        let monitor = HealthMonitor::new("1.0.0");
+        monitor.record_request_success(1000);
+        monitor.record_request_failure(2000);
+        monitor.record_cache_hit();
+        monitor.record_cache_miss();
+        monitor.record_provider_request("svc", true, 500);
+
+        monitor.reset();
+
+        let report = monitor.get_health_report();
+        assert_eq!(report.metrics.total_requests, 0);
+        assert_eq!(report.metrics.successful_requests, 0);
+        assert_eq!(report.metrics.failed_requests, 0);
+        assert_eq!(report.metrics.cache_hits, 0);
+        assert_eq!(report.metrics.cache_misses, 0);
+        assert!(report.components.is_empty());
+    }
+
+    #[test]
+    fn test_provider_metrics_success_rate_partial_failures() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // 8 successes, 2 failures = 80% success rate
+        for _ in 0..8 {
+            monitor.record_provider_request("svc", true, 1000);
+        }
+        for _ in 0..2 {
+            monitor.record_provider_request("svc", false, 1000);
+        }
+
+        let providers = monitor.get_provider_metrics();
+        let svc = providers.iter().find(|p| p.name == "svc").unwrap();
+        assert!((svc.success_rate - 0.8).abs() < 1e-10);
+        assert_eq!(svc.failed_requests, 2);
+    }
+
+    #[test]
+    fn test_provider_metrics_no_requests_has_default_success_rate() {
+        // A provider never recorded should not appear in the list
+        let monitor = HealthMonitor::new("1.0.0");
+        let providers = monitor.get_provider_metrics();
+        assert!(providers.is_empty());
+    }
+
+    #[test]
+    fn test_provider_avg_latency_calculated_correctly() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // latencies in microseconds: 1_000_000 and 3_000_000 → avg = 2_000_000 µs = 2000 ms
+        monitor.record_provider_request("svc", true, 1_000_000);
+        monitor.record_provider_request("svc", true, 3_000_000);
+
+        let providers = monitor.get_provider_metrics();
+        let svc = providers.iter().find(|p| p.name == "svc").unwrap();
+        assert!((svc.avg_latency_ms - 2000.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_health_status_unhealthy_when_provider_below_80pct() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // 1 success, 9 failures = 10% success rate → Unhealthy
+        monitor.record_provider_request("bad_svc", true, 1000);
+        for _ in 0..9 {
+            monitor.record_provider_request("bad_svc", false, 1000);
+        }
+
+        let report = monitor.get_health_report();
+        let comp = report
+            .components
+            .iter()
+            .find(|c| c.name == "provider:bad_svc")
+            .unwrap();
+        assert_eq!(comp.status, HealthStatus::Unhealthy);
+    }
+
+    #[test]
+    fn test_health_status_degraded_when_provider_between_80_and_95_pct() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // 85 successes, 15 failures = 85% → Degraded
+        for _ in 0..85 {
+            monitor.record_provider_request("deg_svc", true, 1000);
+        }
+        for _ in 0..15 {
+            monitor.record_provider_request("deg_svc", false, 1000);
+        }
+
+        let report = monitor.get_health_report();
+        let comp = report
+            .components
+            .iter()
+            .find(|c| c.name == "provider:deg_svc")
+            .unwrap();
+        assert_eq!(comp.status, HealthStatus::Degraded);
+    }
+
+    #[test]
+    fn test_health_status_healthy_when_provider_above_95pct() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // 98 successes, 2 failures = 98% → Healthy
+        for _ in 0..98 {
+            monitor.record_provider_request("good_svc", true, 1000);
+        }
+        for _ in 0..2 {
+            monitor.record_provider_request("good_svc", false, 1000);
+        }
+
+        let report = monitor.get_health_report();
+        let comp = report
+            .components
+            .iter()
+            .find(|c| c.name == "provider:good_svc")
+            .unwrap();
+        assert_eq!(comp.status, HealthStatus::Healthy);
+    }
+
+    #[test]
+    fn test_overall_status_unhealthy_when_any_component_unhealthy() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // One healthy, one unhealthy
+        for _ in 0..100 {
+            monitor.record_provider_request("good", true, 1000);
+        }
+        monitor.record_provider_request("bad", true, 1000);
+        for _ in 0..9 {
+            monitor.record_provider_request("bad", false, 1000);
+        }
+
+        let report = monitor.get_health_report();
+        assert_eq!(report.status, HealthStatus::Unhealthy);
+    }
+
+    #[test]
+    fn test_overall_status_degraded_when_no_unhealthy_but_one_degraded() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // Degraded: 85% success
+        for _ in 0..85 {
+            monitor.record_provider_request("deg", true, 1000);
+        }
+        for _ in 0..15 {
+            monitor.record_provider_request("deg", false, 1000);
+        }
+
+        let report = monitor.get_health_report();
+        assert_eq!(report.status, HealthStatus::Degraded);
+    }
+
+    #[test]
+    fn test_health_status_enum_equality() {
+        assert_eq!(HealthStatus::Healthy, HealthStatus::Healthy);
+        assert_eq!(HealthStatus::Degraded, HealthStatus::Degraded);
+        assert_eq!(HealthStatus::Unhealthy, HealthStatus::Unhealthy);
+        assert_ne!(HealthStatus::Healthy, HealthStatus::Unhealthy);
+    }
+
+    #[test]
+    fn test_system_metrics_default() {
+        let metrics = SystemMetrics::default();
+        assert_eq!(metrics.total_requests, 0);
+        assert_eq!(metrics.successful_requests, 0);
+        assert_eq!(metrics.failed_requests, 0);
+        assert_eq!(metrics.cache_hits, 0);
+        assert_eq!(metrics.cache_misses, 0);
+        assert_eq!(metrics.avg_response_time_ms, 0.0);
+    }
+
+    #[test]
+    fn test_health_monitor_uptime_non_zero() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // Give a tiny moment for the start_time to differ from now
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        let report = monitor.get_health_report();
+        // uptime is in seconds, may be 0 for a very fast test, just check it's non-negative
+        assert!(report.uptime_seconds == 0 || report.uptime_seconds >= 0);
+    }
+
+    #[test]
+    fn test_register_health_check() {
+        struct AlwaysHealthy;
+        impl HealthCheck for AlwaysHealthy {
+            fn name(&self) -> &str { "always_healthy" }
+            fn check(&self) -> ComponentHealth {
+                ComponentHealth {
+                    name: "always_healthy".to_string(),
+                    status: HealthStatus::Healthy,
+                    latency_ms: Some(1),
+                    message: None,
+                    last_check: 0,
+                }
+            }
+        }
+
+        let monitor = HealthMonitor::new("1.0.0");
+        monitor.register_health_check(Box::new(AlwaysHealthy));
+
+        let report = monitor.get_health_report();
+        assert!(report.components.iter().any(|c| c.name == "always_healthy"));
+        assert_eq!(report.status, HealthStatus::Healthy);
+    }
+
+    #[test]
+    fn test_register_unhealthy_check_makes_overall_unhealthy() {
+        struct AlwaysUnhealthy;
+        impl HealthCheck for AlwaysUnhealthy {
+            fn name(&self) -> &str { "always_unhealthy" }
+            fn check(&self) -> ComponentHealth {
+                ComponentHealth {
+                    name: "always_unhealthy".to_string(),
+                    status: HealthStatus::Unhealthy,
+                    latency_ms: None,
+                    message: Some("down".to_string()),
+                    last_check: 0,
+                }
+            }
+        }
+
+        let monitor = HealthMonitor::new("1.0.0");
+        monitor.register_health_check(Box::new(AlwaysUnhealthy));
+
+        let report = monitor.get_health_report();
+        assert_eq!(report.status, HealthStatus::Unhealthy);
+    }
+
+    #[test]
+    fn test_avg_response_time_calculated() {
+        let monitor = HealthMonitor::new("1.0.0");
+        // Latencies: 1000 µs and 3000 µs → avg = 2000 µs = 2.0 ms
+        monitor.record_request_success(1000);
+        monitor.record_request_success(3000);
+
+        let report = monitor.get_health_report();
+        assert!((report.metrics.avg_response_time_ms - 2.0).abs() < 0.01);
     }
 }

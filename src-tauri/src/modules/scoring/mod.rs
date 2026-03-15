@@ -224,32 +224,197 @@ impl ScoringEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    #[test]
-    fn test_scoring_engine() {
-        let engine = ScoringEngine::with_default_config();
-        
-        let financial = FinancialMetrics {
+
+    fn sample_financial() -> FinancialMetrics {
+        FinancialMetrics {
             roe: Some(0.20),
             roic: Some(0.15),
             pe_ratio: Some(15.0),
             pb_ratio: Some(2.0),
             revenue_growth_yoy: Some(0.12),
             ..Default::default()
-        };
-        
-        let momentum = MomentumMetrics {
+        }
+    }
+
+    fn sample_momentum() -> MomentumMetrics {
+        MomentumMetrics {
             return_3m: Some(0.05),
             return_6m: Some(0.10),
             return_12m: Some(0.15),
             ..Default::default()
-        };
-        
-        let score = engine.calculate_score("TEST", &financial, &momentum);
-        
+        }
+    }
+
+    #[test]
+    fn test_scoring_engine() {
+        let engine = ScoringEngine::with_default_config();
+
+        let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
+
         assert!(score.total_score > 0.0);
         assert!(score.total_score <= 100.0);
         assert!(!score.factors.is_empty());
         assert!(!score.explanation.is_empty());
+    }
+
+    #[test]
+    fn test_scoring_config_default_weights() {
+        let config = ScoringConfig::default();
+        assert_eq!(config.factor_weights.len(), 4);
+        assert_eq!(*config.factor_weights.get("quality").unwrap(), 0.25);
+        assert_eq!(*config.factor_weights.get("value").unwrap(), 0.25);
+        assert_eq!(*config.factor_weights.get("momentum").unwrap(), 0.25);
+        assert_eq!(*config.factor_weights.get("growth").unwrap(), 0.25);
+    }
+
+    #[test]
+    fn test_scoring_config_weights_sum_to_one() {
+        let config = ScoringConfig::default();
+        let total: f64 = config.factor_weights.values().sum();
+        assert!((total - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_scoring_engine_symbol_name_preserved() {
+        let engine = ScoringEngine::with_default_config();
+        let score = engine.calculate_score("AAPL", &sample_financial(), &sample_momentum());
+        assert_eq!(score.symbol, "AAPL");
+    }
+
+    #[test]
+    fn test_scoring_engine_score_in_range() {
+        let engine = ScoringEngine::with_default_config();
+        let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
+        assert!(score.total_score >= 0.0);
+        assert!(score.total_score <= 100.0);
+    }
+
+    #[test]
+    fn test_scoring_engine_no_data_gives_zero() {
+        let engine = ScoringEngine::with_default_config();
+        let financial = FinancialMetrics::default();
+        let momentum = MomentumMetrics::default();
+        let score = engine.calculate_score("EMPTY", &financial, &momentum);
+        assert_eq!(score.total_score, 0.0);
+        assert!(score.factors.is_empty());
+    }
+
+    #[test]
+    fn test_factor_score_contribution() {
+        let engine = ScoringEngine::with_default_config();
+        let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
+
+        for fs in &score.factors {
+            // contribution should equal normalized_value * weight
+            let expected = fs.normalized_value * fs.weight;
+            assert!((fs.contribution - expected).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_rank_symbols_descending_order() {
+        let engine = ScoringEngine::with_default_config();
+
+        let scores = vec![
+            SymbolScore {
+                symbol: "A".to_string(),
+                total_score: 30.0,
+                factors: vec![],
+                explanation: String::new(),
+            },
+            SymbolScore {
+                symbol: "B".to_string(),
+                total_score: 80.0,
+                factors: vec![],
+                explanation: String::new(),
+            },
+            SymbolScore {
+                symbol: "C".to_string(),
+                total_score: 55.0,
+                factors: vec![],
+                explanation: String::new(),
+            },
+        ];
+
+        let ranked = engine.rank_symbols(scores);
+        assert_eq!(ranked[0].symbol, "B");
+        assert_eq!(ranked[1].symbol, "C");
+        assert_eq!(ranked[2].symbol, "A");
+    }
+
+    #[test]
+    fn test_rank_symbols_empty_input() {
+        let engine = ScoringEngine::with_default_config();
+        let ranked = engine.rank_symbols(vec![]);
+        assert!(ranked.is_empty());
+    }
+
+    #[test]
+    fn test_score_batch_returns_all_symbols() {
+        let engine = ScoringEngine::with_default_config();
+
+        let batch = vec![
+            ("AAPL".to_string(), sample_financial(), sample_momentum()),
+            ("MSFT".to_string(), sample_financial(), sample_momentum()),
+            ("GOOGL".to_string(), sample_financial(), sample_momentum()),
+        ];
+
+        let scores = engine.score_batch(batch);
+        assert_eq!(scores.len(), 3);
+        let symbols: Vec<&str> = scores.iter().map(|s| s.symbol.as_str()).collect();
+        assert!(symbols.contains(&"AAPL"));
+        assert!(symbols.contains(&"MSFT"));
+        assert!(symbols.contains(&"GOOGL"));
+    }
+
+    #[test]
+    fn test_score_batch_empty_input() {
+        let engine = ScoringEngine::with_default_config();
+        let scores = engine.score_batch(vec![]);
+        assert!(scores.is_empty());
+    }
+
+    #[test]
+    fn test_explanation_contains_overall_score() {
+        let engine = ScoringEngine::with_default_config();
+        let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
+        assert!(score.explanation.contains("Overall Score"));
+    }
+
+    #[test]
+    fn test_explanation_contains_factor_breakdown() {
+        let engine = ScoringEngine::with_default_config();
+        let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
+        assert!(score.explanation.contains("Factor Breakdown"));
+    }
+
+    #[test]
+    fn test_custom_scoring_config_only_quality() {
+        let mut weights = HashMap::new();
+        weights.insert("quality".to_string(), 1.0);
+        let config = ScoringConfig { factor_weights: weights };
+        let engine = ScoringEngine::new(config);
+
+        let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
+        // Only quality factor should appear
+        assert!(score.factors.iter().all(|f| f.name == "quality"));
+    }
+
+    #[test]
+    fn test_dividend_factor_included_when_weight_configured() {
+        let mut weights = HashMap::new();
+        weights.insert("dividend".to_string(), 1.0);
+        let config = ScoringConfig { factor_weights: weights };
+        let engine = ScoringEngine::new(config);
+
+        let financial = FinancialMetrics {
+            dividend_yield: Some(0.04),
+            payout_ratio: Some(0.50),
+            ..Default::default()
+        };
+
+        let score = engine.calculate_score("DIV", &financial, &MomentumMetrics::default());
+        assert!(score.factors.iter().any(|f| f.name == "dividend"));
+        assert!(score.total_score > 0.0);
     }
 }

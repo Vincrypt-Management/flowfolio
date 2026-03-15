@@ -299,7 +299,7 @@ mod tests {
         };
 
         let executor = RetryExecutor::new(config);
-        
+
         let result = executor.execute(|| {
             let c = counter_clone.clone();
             async move {
@@ -328,12 +328,199 @@ mod tests {
         };
 
         let executor = RetryExecutor::new(config);
-        
+
         let result: RetryResult<(), &str> = executor.execute(|| async {
             Err("Always fails")
         }).await;
 
         assert!(result.result.is_err());
         assert_eq!(result.attempts, 3);
+    }
+
+    // --- new tests ---
+
+    #[test]
+    fn test_retry_config_default_values() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_retries, 3);
+        assert_eq!(config.initial_delay, Duration::from_millis(100));
+        assert_eq!(config.max_delay, Duration::from_secs(10));
+        assert_eq!(config.backoff_multiplier, 2.0);
+        assert!(config.jitter);
+        assert_eq!(config.attempt_timeout, Some(Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn test_retry_config_aggressive_values() {
+        let config = RetryConfig::aggressive();
+        assert_eq!(config.max_retries, 5);
+        assert_eq!(config.initial_delay, Duration::from_millis(50));
+        assert_eq!(config.max_delay, Duration::from_secs(2));
+        assert_eq!(config.backoff_multiplier, 1.5);
+        assert!(config.jitter);
+        assert_eq!(config.attempt_timeout, Some(Duration::from_secs(10)));
+    }
+
+    #[test]
+    fn test_retry_config_conservative_values() {
+        let config = RetryConfig::conservative();
+        assert_eq!(config.max_retries, 2);
+        assert_eq!(config.initial_delay, Duration::from_secs(1));
+        assert_eq!(config.max_delay, Duration::from_secs(30));
+        assert_eq!(config.backoff_multiplier, 3.0);
+        assert!(config.jitter);
+        assert_eq!(config.attempt_timeout, Some(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_retry_config_network_values() {
+        let config = RetryConfig::network();
+        assert_eq!(config.max_retries, 4);
+        assert_eq!(config.initial_delay, Duration::from_millis(500));
+        assert_eq!(config.max_delay, Duration::from_secs(15));
+        assert_eq!(config.backoff_multiplier, 2.0);
+        assert_eq!(config.attempt_timeout, Some(Duration::from_secs(30)));
+    }
+
+    #[tokio::test]
+    async fn test_retry_succeeds_on_first_attempt() {
+        let config = RetryConfig {
+            max_retries: 3,
+            initial_delay: Duration::from_millis(1),
+            max_delay: Duration::from_millis(10),
+            backoff_multiplier: 2.0,
+            jitter: false,
+            attempt_timeout: None,
+        };
+        let executor = RetryExecutor::new(config);
+
+        let result: RetryResult<i32, &str> = executor.execute(|| async {
+            Ok(42)
+        }).await;
+
+        assert!(result.result.is_ok());
+        assert_eq!(result.result.unwrap(), 42);
+        assert_eq!(result.attempts, 1);
+        assert_eq!(result.total_delay, Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_retry_total_delay_accumulates() {
+        let config = RetryConfig {
+            max_retries: 3,
+            initial_delay: Duration::from_millis(10),
+            max_delay: Duration::from_millis(100),
+            backoff_multiplier: 2.0,
+            jitter: false,
+            attempt_timeout: None,
+        };
+        let executor = RetryExecutor::new(config);
+
+        let result: RetryResult<(), &str> = executor.execute(|| async {
+            Err("fail")
+        }).await;
+
+        assert!(result.result.is_err());
+        // With 3 max retries: attempts 1 and 2 trigger delays (attempt 3 is the last)
+        // delay after attempt 1 = 10ms, delay after attempt 2 = 20ms; total = 30ms
+        assert!(result.total_delay >= Duration::from_millis(29));
+    }
+
+    #[tokio::test]
+    async fn test_retry_with_predicate_non_retryable_error() {
+        let config = RetryConfig {
+            max_retries: 5,
+            initial_delay: Duration::from_millis(1),
+            max_delay: Duration::from_millis(10),
+            backoff_multiplier: 2.0,
+            jitter: false,
+            attempt_timeout: None,
+        };
+        let executor = RetryExecutor::new(config);
+
+        let counter = Arc::new(AtomicU32::new(0));
+        let counter_clone = counter.clone();
+
+        let result: RetryResult<(), &str> = executor
+            .execute_with_predicate(
+                || {
+                    let c = counter_clone.clone();
+                    async move {
+                        c.fetch_add(1, Ordering::SeqCst);
+                        Err("permanent_error")
+                    }
+                },
+                |e| *e != "permanent_error", // non-retryable
+            )
+            .await;
+
+        assert!(result.result.is_err());
+        // Should stop after first attempt since predicate returns false
+        assert_eq!(result.attempts, 1);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_retry_with_predicate_retryable_then_success() {
+        let config = RetryConfig {
+            max_retries: 5,
+            initial_delay: Duration::from_millis(1),
+            max_delay: Duration::from_millis(10),
+            backoff_multiplier: 2.0,
+            jitter: false,
+            attempt_timeout: None,
+        };
+        let executor = RetryExecutor::new(config);
+
+        let counter = Arc::new(AtomicU32::new(0));
+        let counter_clone = counter.clone();
+
+        let result: RetryResult<&str, &str> = executor
+            .execute_with_predicate(
+                || {
+                    let c = counter_clone.clone();
+                    async move {
+                        let n = c.fetch_add(1, Ordering::SeqCst);
+                        if n < 2 {
+                            Err("transient")
+                        } else {
+                            Ok("done")
+                        }
+                    }
+                },
+                |e| *e == "transient", // retryable
+            )
+            .await;
+
+        assert!(result.result.is_ok());
+        assert_eq!(result.attempts, 3);
+    }
+
+    #[tokio::test]
+    async fn test_retry_max_retries_1_means_single_attempt() {
+        let config = RetryConfig {
+            max_retries: 1,
+            initial_delay: Duration::from_millis(1),
+            max_delay: Duration::from_millis(10),
+            backoff_multiplier: 2.0,
+            jitter: false,
+            attempt_timeout: None,
+        };
+        let executor = RetryExecutor::new(config);
+
+        let counter = Arc::new(AtomicU32::new(0));
+        let counter_clone = counter.clone();
+
+        let result: RetryResult<(), &str> = executor.execute(|| {
+            let c = counter_clone.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Err("fail")
+            }
+        }).await;
+
+        assert!(result.result.is_err());
+        assert_eq!(result.attempts, 1);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 }
