@@ -64,6 +64,7 @@ const RiskDashboard = lazy(() => import("./components/RiskDashboard").then(m => 
 const ComparisonMode = lazy(() => import("./components/ComparisonMode").then(m => ({ default: m.ComparisonMode })));
 const RebalanceScheduler = lazy(() => import("./components/RebalanceScheduler").then(m => ({ default: m.RebalanceScheduler })));
 const NewsFeed = lazy(() => import("./components/NewsFeed").then(m => ({ default: m.NewsFeed })));
+const TickerAnalysis = lazy(() => import('./components/TickerAnalysis'));
 
 import Dashboard from "./components/Dashboard";
 import { UserProfileCard } from "./components/UserProfileCard";
@@ -138,6 +139,9 @@ function App() {
   
   // Portfolio to load into VibeStudio (from SavedPortfoliosTab)
   const [portfolioToLoad, setPortfolioToLoad] = useState<GeneratedPortfolio | null>(null);
+
+  // Analysis tab symbol
+  const [analysisSymbol, setAnalysisSymbol] = useState<string>('');
 
   // Real holdings lifted from PortfolioTab for RiskDashboard
   const [portfolioHoldings, setPortfolioHoldings] = useState<Array<{
@@ -386,8 +390,13 @@ function App() {
     }
   }, [plan, rankingsSymbols, addToast]);
 
-  const handleNavClick = useCallback((tab: string) => {
-    setActiveTab(tab);
+  const handleNavClick = useCallback((tab: string, data?: Record<string, unknown>) => {
+    // WatchlistTab calls onNavigate('ticker-analysis', { symbol }) — map to our tab key
+    const resolvedTab = tab === 'ticker-analysis' ? 'analysis' : tab;
+    if (resolvedTab === 'analysis' && typeof data?.symbol === 'string') {
+      setAnalysisSymbol(data.symbol);
+    }
+    setActiveTab(resolvedTab);
     setIsMobileMenuOpen(false);
   }, []);
 
@@ -507,6 +516,16 @@ function App() {
         >
           <Eye className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Watchlist</span>}
+        </button>
+        <button
+          className={`nav-item ${activeTab === "analysis" ? "active" : ""}`}
+          onClick={() => handleNavClick("analysis")}
+          title={isSidebarCollapsed ? "Analysis" : ""}
+          role="menuitem"
+          aria-current={activeTab === "analysis" ? "page" : undefined}
+        >
+          <TrendingUp className="nav-icon" size={20} />
+          {!isSidebarCollapsed && <span>Analysis</span>}
         </button>
         <button
           className={`nav-item ${activeTab === "alerts" ? "active" : ""}`}
@@ -936,6 +955,10 @@ function App() {
             <Suspense fallback={<TabLoading />}>
               <PortfolioTab
                 onHoldingsChange={handleHoldingsChange}
+                onAnalyze={(symbol) => {
+                  setAnalysisSymbol(symbol);
+                  handleNavClick('analysis');
+                }}
               />
             </Suspense>
           </div>
@@ -1122,6 +1145,23 @@ function App() {
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <WatchlistTab onNavigate={handleNavClick} />
+            </Suspense>
+          </div>
+        )}
+
+        {activeTab === 'analysis' && (
+          <div className="animate-fade-in">
+            <header className="page-header">
+              <h1 className="page-title">Ticker Analysis</h1>
+              <p className="page-subtitle">Deep-dive analysis for any symbol</p>
+            </header>
+            <Suspense fallback={<TabLoading />}>
+              <TickerAnalysis
+                symbol={analysisSymbol}
+                onClose={() => {}}
+                inline={true}
+                onTickerChange={setAnalysisSymbol}
+              />
             </Suspense>
           </div>
         )}

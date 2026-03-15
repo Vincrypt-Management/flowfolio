@@ -77,9 +77,10 @@ interface PortfolioTabProps {
     symbol: string; shares: number; currentPrice: number;
     value: number; weight: number;
   }>, totalValue: number) => void;
+  onAnalyze?: (symbol: string) => void;
 }
 
-export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
+export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps = {}) {
   const { addToast } = useToast();
   const { isAdvanced } = useUserMode();
   const [rebalanceThreshold, setRebalanceThreshold] = useState(5.0);
@@ -518,8 +519,17 @@ export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
                             </td>
                           )}
                           <td>
-                            <button 
-                              className="btn-small btn-danger" 
+                            {onAnalyze && (
+                              <button
+                                className="btn-small"
+                                onClick={() => onAnalyze(holding.symbol)}
+                                title="Deep analysis"
+                              >
+                                Analyze →
+                              </button>
+                            )}
+                            <button
+                              className="btn-small btn-danger"
                               onClick={() => removeHolding(holding.symbol)}
                             >
                               Remove
