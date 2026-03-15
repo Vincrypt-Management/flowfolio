@@ -22,3 +22,23 @@ impl HealthCommands {
         "FlowFolio API is running".to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn health_check_returns_expected_string() {
+        assert_eq!(HealthCommands::health_check(), "FlowFolio API is running");
+    }
+
+    #[test]
+    fn get_health_report_returns_ok() {
+        assert!(HealthCommands::get_health_report().is_ok());
+    }
+
+    #[test]
+    fn get_provider_metrics_returns_ok() {
+        assert!(HealthCommands::get_provider_metrics().is_ok());
+    }
+}

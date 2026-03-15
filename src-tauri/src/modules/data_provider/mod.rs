@@ -216,4 +216,81 @@ mod tests {
         let provider: &dyn DataProvider = &client;
         assert_eq!(provider.remaining_quota(), 25);
     }
+
+    #[test]
+    fn new_sets_base_url() {
+        let client = AlphaVantageClient::new("key".to_string());
+        assert_eq!(client.base_url, "https://www.alphavantage.co/query");
+    }
+
+    #[test]
+    fn new_stores_api_key() {
+        let client = AlphaVantageClient::new("test_key".to_string());
+        assert_eq!(client.api_key, "test_key");
+    }
+
+    #[test]
+    fn remaining_quota_starts_positive() {
+        let client = AlphaVantageClient::new("k".to_string());
+        assert!(client.remaining_quota() > 0);
+    }
+
+    #[test]
+    fn time_series_daily_serializes() {
+        let entry = TimeSeriesDaily {
+            date: "2024-01-15".to_string(),
+            open: 100.0,
+            high: 105.0,
+            low: 99.0,
+            close: 103.0,
+            volume: 1_000_000,
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(json["date"], "2024-01-15");
+    }
+
+    #[test]
+    fn time_series_daily_deserializes() {
+        let raw = r#"{"date":"2024-01-15","open":100.0,"high":105.0,"low":99.0,"close":103.0,"volume":1000000}"#;
+        let entry: TimeSeriesDaily = serde_json::from_str(raw).unwrap();
+        assert_eq!(entry.date, "2024-01-15");
+        assert_eq!(entry.open, 100.0);
+        assert_eq!(entry.high, 105.0);
+        assert_eq!(entry.low, 99.0);
+        assert_eq!(entry.close, 103.0);
+        assert_eq!(entry.volume, 1_000_000);
+    }
+
+    #[test]
+    fn company_overview_deserializes_renamed_fields() {
+        let raw = r#"{"Symbol":"AAPL","Name":"Apple Inc","PERatio":"25.5"}"#;
+        let overview: CompanyOverview = serde_json::from_str(raw).unwrap();
+        assert_eq!(overview.symbol, "AAPL");
+        assert_eq!(overview.pe_ratio, Some("25.5".to_string()));
+    }
+
+    #[test]
+    fn company_overview_serializes_with_renames() {
+        let overview = CompanyOverview {
+            symbol: "AAPL".to_string(),
+            name: None,
+            exchange: None,
+            currency: None,
+            market_cap: None,
+            pe_ratio: None,
+            dividend_yield: None,
+            roe: None,
+            roic: None,
+        };
+        let json = serde_json::to_value(&overview).unwrap();
+        assert!(json.get("Symbol").is_some(), "expected key 'Symbol' not 'symbol'");
+        assert_eq!(json["Symbol"], "AAPL");
+    }
+
+    #[test]
+    fn alpha_vantage_error_deserializes_note() {
+        let raw = r#"{"Note": "API rate limit"}"#;
+        let err: AlphaVantageError = serde_json::from_str(raw).unwrap();
+        assert_eq!(err.note, Some("API rate limit".to_string()));
+    }
 }

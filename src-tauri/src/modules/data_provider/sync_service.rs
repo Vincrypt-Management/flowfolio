@@ -130,3 +130,45 @@ pub struct SyncReport {
     pub fundamentals_synced: usize,
     pub errors: Vec<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_constructs_without_panic() {
+        let _service = DataSyncService::new("key".to_string());
+    }
+
+    #[test]
+    fn remaining_quota_delegates_to_provider() {
+        let service = DataSyncService::new("k".to_string());
+        assert!(service.remaining_quota() > 0);
+    }
+
+    #[test]
+    fn sync_report_default_values() {
+        let report = SyncReport {
+            symbols_synced: 0,
+            prices_inserted: 0,
+            fundamentals_synced: 0,
+            errors: Vec::new(),
+        };
+        assert_eq!(report.symbols_synced, 0);
+        assert_eq!(report.prices_inserted, 0);
+        assert_eq!(report.fundamentals_synced, 0);
+        assert!(report.errors.is_empty());
+    }
+
+    #[test]
+    fn sync_report_is_debug() {
+        let report = SyncReport {
+            symbols_synced: 1,
+            prices_inserted: 5,
+            fundamentals_synced: 1,
+            errors: Vec::new(),
+        };
+        let debug_str = format!("{:?}", report);
+        assert!(!debug_str.is_empty());
+    }
+}

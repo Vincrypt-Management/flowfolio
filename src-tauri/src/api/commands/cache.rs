@@ -26,3 +26,13 @@ impl CacheCommands {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_commands_struct_exists() {
+        let _c = CacheCommands;
+    }
+}

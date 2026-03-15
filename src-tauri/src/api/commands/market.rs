@@ -32,3 +32,13 @@ impl MarketCommands {
         Ok(svc.get_batch_prices(symbols).await)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn market_commands_struct_exists() {
+        let _c = MarketCommands;
+    }
+}

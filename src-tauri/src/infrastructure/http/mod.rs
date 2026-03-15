@@ -21,3 +21,20 @@ pub static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {
 pub fn get_client() -> &'static Client {
     &HTTP_CLIENT
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_client_returns_a_client() {
+        let a = get_client();
+        let b = get_client();
+        assert!(std::ptr::eq(a, b));
+    }
+
+    #[test]
+    fn http_client_is_initialized() {
+        let _ = get_client();
+    }
+}
