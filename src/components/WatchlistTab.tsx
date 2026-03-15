@@ -6,7 +6,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { invoke } from '../services/tauri';
 import { useToast } from './Toast';
-import { useAuth } from '../contexts/AuthContext';
 import { createLogger } from '../core/logger';
 import {
   Eye,
@@ -53,7 +52,6 @@ interface SymbolPriceData {
 
 export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
   const { addToast } = useToast();
-  const { subscription } = useAuth();
   const isMountedRef = useRef(true);
 
   // Universe list state
@@ -89,8 +87,6 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
   const totalSymbolCount = useMemo(() => {
     return universes.reduce((sum, u) => sum + u.symbols.length, 0);
   }, [universes]);
-
-  const maxItems = subscription?.max_watchlist_items ?? 50;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -199,10 +195,6 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     }
 
     const symbols = parseSymbols(createSymbols);
-    if (totalSymbolCount + symbols.length > maxItems) {
-      addToast(`Symbol limit reached. You can add up to ${maxItems - totalSymbolCount} more symbols.`, 'warning');
-      return;
-    }
 
     setIsCreating(true);
     try {
@@ -238,11 +230,6 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     const uniqueNew = newSymbols.filter(s => !universe.symbols.includes(s));
     if (uniqueNew.length === 0) {
       addToast('All symbols already in this watchlist', 'info');
-      return;
-    }
-
-    if (totalSymbolCount + uniqueNew.length > maxItems) {
-      addToast(`Symbol limit reached. You can add up to ${maxItems - totalSymbolCount} more symbols.`, 'warning');
       return;
     }
 
@@ -371,7 +358,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
         </div>
         <div className="page-header-actions">
           <span className="tier-limit-badge">
-            {totalSymbolCount} / {maxItems} symbols
+            {totalSymbolCount} symbols
           </span>
           <button
             className="btn-icon"
