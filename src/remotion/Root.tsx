@@ -7,6 +7,7 @@ import { FlowFolioShowcaseIG } from './FlowFolioShowcaseIG';
 import { FlowFolioAppShowcase } from './FlowFolioAppShowcase';
 import { FeedTipCard, FeedMetricsCard, FeedBacktestCard, FeedFeatureCard, FeedQuoteCard } from './FlowFolioFeedPosts';
 import { FeedCarousel } from './FlowFolioCarousel';
+import { FlowFolioRelease022 } from './FlowFolioRelease022';
 
 export const Root: React.FC = () => {
   const defaultSeed = Date.now();
@@ -111,6 +112,15 @@ export const Root: React.FC = () => {
         width={1080}
         height={1080}
         defaultProps={{ seed: defaultSeed, slide: 0 }}
+      />
+      <Composition
+        id="FlowFolioRelease022"
+        component={FlowFolioRelease022}
+        durationInFrames={1960}
+        fps={60}
+        width={1080}
+        height={1920}
+        defaultProps={{ seed: defaultSeed }}
       />
     </>
   );
