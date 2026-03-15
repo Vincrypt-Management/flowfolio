@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  body {
+    width: 1080px; height: 1080px;
+    background: #060608; color: #f8fafc;
+    font-family: 'Inter', sans-serif;
+    position: relative; display: flex; flex-direction: column;
+  }
+  .grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 36px 36px; pointer-events: none;
+  }
+  .glow-a {
+    position: absolute; width: 360px; height: 360px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,229,153,0.08) 0%, transparent 70%);
+    top: -80px; right: -60px; filter: blur(50px);
+  }
+  .glow-b {
+    position: absolute; width: 280px; height: 280px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(129,140,248,0.07) 0%, transparent 70%);
+    bottom: -60px; left: -40px; filter: blur(50px);
+  }
+
+  /* Header (all slides) */
+  .slide-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 48px 64px 0; position: relative;
+  }
+  .pill {
+    background: rgba(0,229,153,0.12); border: 1px solid rgba(0,229,153,0.25);
+    color: #00e599; font-family: 'JetBrains Mono', monospace;
+    font-size: 17px; font-weight: 600; letter-spacing: 0.06em;
+    padding: 7px 18px; border-radius: 99px; text-transform: uppercase;
+  }
+  .slide-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px; color: #334155; letter-spacing: 0.04em;
+  }
+  .slide-counter .current { color: #64748b; }
+
+  /* All layout divs hidden by default; JS shows the correct one */
+  .slide-body { display: none; flex-direction: column; }
+
+  /* Cover layout */
+  #layout-cover {
+    flex: 1;
+    align-items: center; justify-content: center;
+    padding: 40px 80px; text-align: center; gap: 32px;
+  }
+  .cover-logo { width: 80px; height: 80px; object-fit: contain; filter: drop-shadow(0 0 20px rgba(0,229,153,0.4)); }
+  .cover-headline { font-size: 64px; font-weight: 900; line-height: 1.1; letter-spacing: -0.04em; color: #f8fafc; }
+  .cover-headline .accent { color: #00e599; }
+  .cover-sub { font-size: 22px; color: #64748b; line-height: 1.5; font-weight: 500; max-width: 700px; }
+  .cover-swipe { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: #334155; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  /* Content layout */
+  #layout-content {
+    flex: 1;
+    padding: 40px 64px 0; gap: 28px; position: relative;
+  }
+  .concept-label { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #00e599; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+  .concept-title { font-size: 52px; font-weight: 900; line-height: 1.1; letter-spacing: -0.04em; color: #f8fafc; }
+  .concept-title .accent { color: #00e599; }
+  .divider { width: 56px; height: 3px; background: #00e599; border-radius: 2px; }
+  .body-text { font-size: 22px; color: #94a3b8; line-height: 1.6; font-weight: 400; flex: 1; }
+  .stat-chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(0,229,153,0.08); border: 1px solid rgba(0,229,153,0.2);
+    border-radius: 12px; padding: 10px 20px; align-self: flex-start;
+  }
+  .stat-chip-val { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; color: #00e599; }
+  .stat-chip-lbl { font-size: 14px; color: #64748b; font-family: 'JetBrains Mono', monospace; }
+
+  /* CTA layout */
+  #layout-cta {
+    flex: 1;
+    align-items: center; justify-content: center;
+    padding: 40px 80px; text-align: center; gap: 32px;
+  }
+  .cta-logo { width: 80px; height: 80px; object-fit: contain; filter: drop-shadow(0 0 20px rgba(0,229,153,0.4)); }
+  .cta-headline { font-size: 56px; font-weight: 900; line-height: 1.15; letter-spacing: -0.04em; color: #f8fafc; }
+  .cta-handle { font-size: 32px; font-weight: 700; color: #00e599; letter-spacing: -0.02em; }
+  .cta-btn { background: linear-gradient(135deg, #00e599, #34ffc2); color: #060608; font-weight: 700; font-size: 20px; padding: 16px 48px; border-radius: 12px; letter-spacing: -0.01em; }
+  .cta-sub { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #334155; letter-spacing: 0.04em; }
+
+  /* Footer (shown on cover + content; hidden on CTA) */
+  .slide-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 64px 48px; position: relative;
+  }
+  .logo-mark { display: flex; align-items: center; gap: 12px; }
+  .logo-img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(0,229,153,0.3)); }
+  .logo-name { font-size: 22px; font-weight: 700; color: #f8fafc; letter-spacing: -0.03em; }
+  .footer-counter { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #334155; }
+</style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="glow-a"></div>
+  <div class="glow-b"></div>
+
+  <div class="slide-header">
+    <div class="pill">{{PILL}}</div>
+    <div class="slide-counter">
+      <span class="current">{{SLIDE_N}}</span> / {{SLIDE_TOTAL}}
+    </div>
+  </div>
+
+  <!-- COVER -->
+  <div class="slide-body" id="layout-cover">
+    <img class="cover-logo" src="data:image/png;base64,{{LOGO_B64}}" alt="">
+    <div class="cover-headline">{{HEADLINE}}<br><span class="accent">{{HEADLINE_ACCENT}}</span>{{HEADLINE_2}}</div>
+    <div class="cover-sub">{{BODY}}</div>
+    <div class="cover-swipe">Swipe to learn →</div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="slide-body" id="layout-content">
+    <div class="concept-label">Concept {{SLIDE_N}}</div>
+    <div class="concept-title">{{CONCEPT}}<span class="accent">{{HEADLINE_ACCENT}}</span></div>
+    <div class="divider"></div>
+    <div class="body-text">{{BODY}}</div>
+    <div class="stat-chip" id="stat-chip">
+      <span class="stat-chip-val">{{STAT}}</span>
+      <span class="stat-chip-lbl">{{STAT_LBL}}</span>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="slide-body" id="layout-cta">
+    <img class="cta-logo" src="data:image/png;base64,{{LOGO_B64}}" alt="">
+    <div class="cta-headline">{{HEADLINE}}</div>
+    <div class="cta-handle">{{CTA_HANDLE}}</div>
+    <div class="cta-btn">{{CTA_LINE}}</div>
+    <div class="cta-sub">{{CTA_SUB}}</div>
+  </div>
+
+  <div class="slide-footer" id="slide-footer">
+    <div class="logo-mark">
+      <img class="logo-img" src="data:image/png;base64,{{LOGO_B64}}" alt="">
+      <span class="logo-name">FlowFolio</span>
+    </div>
+    <div class="footer-counter">{{SLIDE_N}} / {{SLIDE_TOTAL}}</div>
+  </div>
+
+  <script>
+    // Show only the layout div matching the injected SLIDE_TYPE token.
+    // All .slide-body divs start display:none via CSS; this JS sets the correct one to flex.
+    const type = '{{SLIDE_TYPE}}';
+    const layoutDiv = document.getElementById('layout-' + type);
+    if (layoutDiv) layoutDiv.style.display = 'flex';
+
+    // Hide footer on CTA slide
+    if (type === 'cta') {
+      document.getElementById('slide-footer').style.display = 'none';
+    }
+
+    // Hide stat chip when STAT token is empty string.
+    // Must use JS (not CSS :empty) because the chip has child <span> elements
+    // regardless of whether those spans contain text.
+    const statChip = document.getElementById('stat-chip');
+    if (statChip) {
+      const statVal = statChip.querySelector('.stat-chip-val');
+      if (!statVal || !statVal.textContent.trim()) {
+        statChip.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>
