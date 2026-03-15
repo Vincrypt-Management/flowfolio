@@ -11,17 +11,17 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider>
+      <UserProfileProvider>
       <AuthProvider>
       <UserModeProvider>
-      <UserProfileProvider>
       <ToastProvider>
         <ErrorBoundary>
           <App />
         </ErrorBoundary>
       </ToastProvider>
-      </UserProfileProvider>
       </UserModeProvider>
       </AuthProvider>
+      </UserProfileProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );
