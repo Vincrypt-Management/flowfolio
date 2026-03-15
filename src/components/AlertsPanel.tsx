@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '../services/tauri';
 import {
   Bell,
+  BellOff,
   Plus,
   Trash2,
   Power,
@@ -118,6 +119,21 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
   const [formNote, setFormNote] = useState('');
   const [formError, setFormError] = useState('');
 
+  // Desktop notifications toggle (persisted to localStorage)
+  const [desktopNotifs, setDesktopNotifs] = useState<boolean>(() => {
+    return localStorage.getItem('flowfolio-desktop-notifs') !== 'false';
+  });
+  const desktopNotifsRef = useRef(desktopNotifs);
+  useEffect(() => { desktopNotifsRef.current = desktopNotifs; }, [desktopNotifs]);
+
+  const toggleDesktopNotifs = useCallback(() => {
+    setDesktopNotifs(prev => {
+      const next = !prev;
+      localStorage.setItem('flowfolio-desktop-notifs', String(next));
+      return next;
+    });
+  }, []);
+
   // Keep callback ref current
   useEffect(() => {
     onAlertTriggeredRef.current = onAlertTriggered;
@@ -145,6 +161,8 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       const prices = await invoke<Record<string, number>>('get_current_prices_batch', {
         symbols,
       });
+
+      const triggered: Array<{ symbol: string; condition: PriceAlert['condition']; threshold: number; price: number }> = [];
 
       setAlerts((prev) => {
         let changed = false;
@@ -183,6 +201,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
 
           if (fired) {
             changed = true;
+            triggered.push({ symbol: alert.symbol, condition: alert.condition, threshold: alert.threshold, price });
             const updated: PriceAlert = {
               ...alert,
               triggered: true,
@@ -196,6 +215,16 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
 
         return changed ? next : prev;
       });
+
+      // Fire desktop notifications OUTSIDE the state updater (must be pure)
+      if (desktopNotifsRef.current) {
+        for (const t of triggered) {
+          invoke('send_price_alert_notification', {
+            symbol: t.symbol,
+            message: `${t.symbol} hit ${t.threshold} — current price: ${t.price.toFixed(2)}`,
+          }).catch(() => {});
+        }
+      }
 
       setLastChecked(new Date());
     } catch {
@@ -318,6 +347,14 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
               })}
             </span>
           )}
+          <button
+            className="btn-small"
+            onClick={toggleDesktopNotifs}
+            title={desktopNotifs ? 'Disable desktop notifications' : 'Enable desktop notifications'}
+          >
+            {desktopNotifs ? <Bell size={14} /> : <BellOff size={14} />}
+            {desktopNotifs ? ' Desktop On' : ' Desktop Off'}
+          </button>
           <button
             className="btn-small btn-secondary"
             onClick={checkAlerts}

@@ -2228,6 +2228,21 @@ async fn save_api_keys(
     Ok(())
 }
 
+#[tauri::command]
+fn send_price_alert_notification(
+    app: tauri::AppHandle,
+    symbol: String,
+    message: String,
+) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification()
+        .builder()
+        .title(format!("FlowFolio Alert: {symbol}"))
+        .body(message)
+        .show()
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging for observability
@@ -2247,6 +2262,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_default_plan,
@@ -2332,6 +2348,8 @@ pub fn run() {
             auth_is_configured,
             get_api_key_statuses,
             save_api_keys,
+            // Price alert desktop notifications
+            send_price_alert_notification,
         ])
         .setup(|app| {
             // Initialize local database for caching
