@@ -56,3 +56,4 @@ SESSION*.md
 .ig-schedule.db-shm
 .ig-schedule.db-wal
 out/
+.superpowers/
