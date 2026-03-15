@@ -529,3 +529,267 @@ pub struct CacheStats {
     pub db_stats: Option<(i64, i64, i64, i64, i64)>,
     pub provider_health: HashMap<String, (u32, u32)>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- Test 1: new_without_db constructs successfully ----
+
+    #[tokio::test]
+    async fn test_new_without_db_has_no_db_cache() {
+        let svc = EnhancedMarketDataService::new_without_db();
+        assert!(svc.db_cache.is_none(), "db_cache should be None for new_without_db()");
+    }
+
+    #[tokio::test]
+    async fn test_new_without_db_ttls_are_set() {
+        let svc = EnhancedMarketDataService::new_without_db();
+        assert_eq!(
+            svc.price_cache_ttl,
+            std::time::Duration::from_secs(120),
+            "price_cache_ttl should be 120 seconds"
+        );
+        assert_eq!(
+            svc.quant_cache_ttl,
+            std::time::Duration::from_secs(7200),
+            "quant_cache_ttl should be 7200 seconds"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_new_without_db_caches_start_empty() {
+        let svc = EnhancedMarketDataService::new_without_db();
+        let price_len = svc.price_cache.read().await.len();
+        let quant_len = svc.quant_cache.read().await.len();
+        assert_eq!(price_len, 0, "price_cache should be empty on construction");
+        assert_eq!(quant_len, 0, "quant_cache should be empty on construction");
+    }
+
+    // ---- Test 2: get_cache_stats returns zeros when caches are empty ----
+
+    #[tokio::test]
+    async fn test_get_cache_stats_empty() {
+        let svc = EnhancedMarketDataService::new_without_db();
+        let stats = svc.get_cache_stats().await;
+        assert_eq!(stats.memory_prices, 0, "memory_prices should be 0 when cache is empty");
+        assert_eq!(stats.memory_quant, 0, "memory_quant should be 0 when cache is empty");
+        assert!(stats.db_stats.is_none(), "db_stats should be None without a database");
+    }
+
+    // ---- Test 3: get_cache_stats reflects manually populated price_cache ----
+
+    #[tokio::test]
+    async fn test_get_cache_stats_reflects_populated_price_cache() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        {
+            let mut cache = svc.price_cache.write().await;
+            cache.insert("AAPL".to_string(), (150.0, std::time::Instant::now()));
+            cache.insert("MSFT".to_string(), (300.0, std::time::Instant::now()));
+            cache.insert("TSLA".to_string(), (250.0, std::time::Instant::now()));
+        }
+
+        let stats = svc.get_cache_stats().await;
+        assert_eq!(stats.memory_prices, 3, "memory_prices should equal number of inserted entries");
+        assert_eq!(stats.memory_quant, 0, "memory_quant should still be 0");
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_stats_reflects_populated_quant_cache() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        let dummy_metrics = crate::modules::quant_analysis::QuantMetrics {
+            symbol: "AAPL".to_string(),
+            sharpe_ratio: 1.5,
+            annualized_return: 0.25,
+            volatility: 0.18,
+            max_drawdown: -0.12,
+            rsi: 55.0,
+            signal: "BUY".to_string(),
+            confidence: 0.8,
+            sortino_ratio: None,
+            calmar_ratio: None,
+            beta: None,
+            alpha: None,
+            var_95: None,
+            omega_ratio: None,
+            tail_ratio: None,
+            skewness: None,
+            kurtosis: None,
+            ulcer_index: None,
+            gain_to_loss_ratio: None,
+            win_rate: None,
+            daily_returns: None,
+        };
+
+        {
+            let mut cache = svc.quant_cache.write().await;
+            cache.insert("AAPL".to_string(), (dummy_metrics, std::time::Instant::now()));
+        }
+
+        let stats = svc.get_cache_stats().await;
+        assert_eq!(stats.memory_prices, 0, "memory_prices should be 0");
+        assert_eq!(stats.memory_quant, 1, "memory_quant should equal number of inserted entries");
+    }
+
+    // ---- Test 4: clear_all_caches empties the memory caches ----
+
+    #[tokio::test]
+    async fn test_clear_all_caches_empties_price_cache() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        // Populate the price cache
+        {
+            let mut cache = svc.price_cache.write().await;
+            cache.insert("AAPL".to_string(), (150.0, std::time::Instant::now()));
+            cache.insert("GOOG".to_string(), (180.0, std::time::Instant::now()));
+        }
+
+        // Verify it's populated
+        let stats_before = svc.get_cache_stats().await;
+        assert_eq!(stats_before.memory_prices, 2, "pre-condition: price cache should have 2 entries");
+
+        // Clear caches
+        svc.clear_all_caches().await;
+
+        // Verify it's now empty
+        let stats_after = svc.get_cache_stats().await;
+        assert_eq!(stats_after.memory_prices, 0, "price cache should be empty after clear_all_caches");
+    }
+
+    #[tokio::test]
+    async fn test_clear_all_caches_empties_quant_cache() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        let dummy_metrics = crate::modules::quant_analysis::QuantMetrics {
+            symbol: "TSLA".to_string(),
+            sharpe_ratio: 0.9,
+            annualized_return: 0.40,
+            volatility: 0.55,
+            max_drawdown: -0.30,
+            rsi: 62.0,
+            signal: "HOLD".to_string(),
+            confidence: 0.6,
+            sortino_ratio: None,
+            calmar_ratio: None,
+            beta: None,
+            alpha: None,
+            var_95: None,
+            omega_ratio: None,
+            tail_ratio: None,
+            skewness: None,
+            kurtosis: None,
+            ulcer_index: None,
+            gain_to_loss_ratio: None,
+            win_rate: None,
+            daily_returns: None,
+        };
+
+        {
+            let mut cache = svc.quant_cache.write().await;
+            cache.insert("TSLA".to_string(), (dummy_metrics, std::time::Instant::now()));
+        }
+
+        let stats_before = svc.get_cache_stats().await;
+        assert_eq!(stats_before.memory_quant, 1, "pre-condition: quant cache should have 1 entry");
+
+        svc.clear_all_caches().await;
+
+        let stats_after = svc.get_cache_stats().await;
+        assert_eq!(stats_after.memory_quant, 0, "quant cache should be empty after clear_all_caches");
+    }
+
+    // ---- Test 5: get_batch_prices with empty input returns empty HashMap ----
+
+    #[tokio::test]
+    async fn test_get_batch_prices_empty_input_returns_empty_map() {
+        let svc = EnhancedMarketDataService::new_without_db();
+        let result = svc.get_batch_prices(vec![]).await;
+        assert!(result.is_empty(), "get_batch_prices with empty input should return an empty HashMap");
+    }
+
+    // ---- Test 6: Memory cache TTL - expired vs fresh entries ----
+
+    #[tokio::test]
+    async fn test_cache_ttl_fresh_entry_is_a_hit() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        // Insert a fresh entry (timestamp = now)
+        {
+            let mut cache = svc.price_cache.write().await;
+            cache.insert("AAPL".to_string(), (150.0, std::time::Instant::now()));
+        }
+
+        // Read the cache and verify the fresh entry is within TTL
+        let cache = svc.price_cache.read().await;
+        let entry = cache.get("AAPL").expect("AAPL should be in price cache");
+        let elapsed = entry.1.elapsed();
+        assert!(
+            elapsed < svc.price_cache_ttl,
+            "fresh entry elapsed ({:?}) should be less than TTL ({:?})",
+            elapsed,
+            svc.price_cache_ttl
+        );
+        assert_eq!(entry.0, 150.0, "price should be 150.0");
+    }
+
+    #[tokio::test]
+    async fn test_cache_ttl_expired_entry_is_a_miss() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        // Insert an expired entry by using a timestamp far in the past (beyond TTL)
+        let expired_timestamp =
+            std::time::Instant::now() - svc.price_cache_ttl - std::time::Duration::from_secs(1);
+
+        {
+            let mut cache = svc.price_cache.write().await;
+            cache.insert("STALE".to_string(), (99.0, expired_timestamp));
+        }
+
+        // Read the cache and verify the entry is past its TTL (would be a cache miss)
+        let cache = svc.price_cache.read().await;
+        let entry = cache.get("STALE").expect("STALE should be in price cache");
+        let elapsed = entry.1.elapsed();
+        assert!(
+            elapsed >= svc.price_cache_ttl,
+            "expired entry elapsed ({:?}) should be >= TTL ({:?}), marking it as a miss",
+            elapsed,
+            svc.price_cache_ttl
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cache_ttl_mixed_fresh_and_expired() {
+        let svc = EnhancedMarketDataService::new_without_db();
+
+        let expired_timestamp =
+            std::time::Instant::now() - svc.price_cache_ttl - std::time::Duration::from_secs(1);
+
+        {
+            let mut cache = svc.price_cache.write().await;
+            cache.insert("FRESH".to_string(), (200.0, std::time::Instant::now()));
+            cache.insert("STALE".to_string(), (50.0, expired_timestamp));
+        }
+
+        let cache = svc.price_cache.read().await;
+
+        let fresh_entry = cache.get("FRESH").expect("FRESH should be in cache");
+        assert!(
+            fresh_entry.1.elapsed() < svc.price_cache_ttl,
+            "FRESH entry should be within TTL"
+        );
+
+        let stale_entry = cache.get("STALE").expect("STALE should be in cache");
+        assert!(
+            stale_entry.1.elapsed() >= svc.price_cache_ttl,
+            "STALE entry should be past TTL"
+        );
+
+        // Simulate what get_current_price does: only return the entry if within TTL
+        let fresh_is_hit = fresh_entry.1.elapsed() < svc.price_cache_ttl;
+        let stale_is_hit = stale_entry.1.elapsed() < svc.price_cache_ttl;
+        assert!(fresh_is_hit, "FRESH should be a cache hit");
+        assert!(!stale_is_hit, "STALE should be a cache miss");
+    }
+}

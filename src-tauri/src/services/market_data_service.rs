@@ -542,3 +542,150 @@ impl MarketDataService {
         results
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -----------------------------------------------------------------------
+    // 1. new() constructs successfully
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_new_constructs_successfully() {
+        let svc = MarketDataService::new();
+        // No panic means construction succeeded. Verify the caches are empty.
+        let cache = svc.cache.try_read().expect("cache lock");
+        assert!(cache.is_empty());
+        drop(cache);
+        let pc = svc.price_cache.try_read().expect("price_cache lock");
+        assert!(pc.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. parse_yahoo_response – valid JSON returns correct prices
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_parse_yahoo_response_valid() {
+        let svc = MarketDataService::new();
+        let data = serde_json::json!({
+            "chart": {
+                "result": [{
+                    "timestamp": [1704067200, 1704153600],
+                    "indicators": {
+                        "quote": [{
+                            "close": [150.0, 155.0]
+                        }]
+                    }
+                }],
+                "error": null
+            }
+        });
+        let result = svc.parse_yahoo_response(&data);
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        let prices = result.unwrap();
+        assert_eq!(prices.len(), 2);
+        assert_eq!(prices[0].close, 150.0);
+        assert_eq!(prices[1].close, 155.0);
+        // Dates should be formatted as YYYY-MM-DD
+        assert_eq!(prices[0].date, "2024-01-01");
+        assert_eq!(prices[1].date, "2024-01-02");
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. parse_yahoo_response – missing "chart" field returns Err
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_parse_yahoo_response_missing_chart() {
+        let svc = MarketDataService::new();
+        let data = serde_json::json!({ "other": "field" });
+        let result = svc.parse_yahoo_response(&data);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("chart"),
+            "error message should mention 'chart'"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. parse_yahoo_response – empty result array returns Err
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_parse_yahoo_response_empty_result() {
+        let svc = MarketDataService::new();
+        let data = serde_json::json!({
+            "chart": {
+                "result": [],
+                "error": null
+            }
+        });
+        let result = svc.parse_yahoo_response(&data);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. parse_yahoo_response – null close values are skipped
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_parse_yahoo_response_null_close_values_skipped() {
+        let svc = MarketDataService::new();
+        let data = serde_json::json!({
+            "chart": {
+                "result": [{
+                    "timestamp": [1704067200, 1704153600, 1704240000],
+                    "indicators": {
+                        "quote": [{
+                            "close": [150.0, null, 155.0]
+                        }]
+                    }
+                }],
+                "error": null
+            }
+        });
+        let result = svc.parse_yahoo_response(&data);
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        let prices = result.unwrap();
+        // The null entry at index 1 should be skipped
+        assert_eq!(prices.len(), 2);
+        assert_eq!(prices[0].close, 150.0);
+        assert_eq!(prices[1].close, 155.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. get_current_price – pre-populated price_cache returns cached price
+    // -----------------------------------------------------------------------
+    #[tokio::test]
+    async fn test_get_current_price_cache_hit() {
+        let svc = MarketDataService::new();
+        {
+            let mut pc = svc.price_cache.write().await;
+            pc.insert("AAPL".to_string(), 150.0);
+        }
+        let result = svc.get_current_price("AAPL").await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        assert_eq!(result.unwrap(), 150.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. batch_get_current_prices – all symbols in price_cache, no network call
+    // -----------------------------------------------------------------------
+    #[tokio::test]
+    async fn test_batch_get_current_prices_all_cached() {
+        let svc = MarketDataService::new();
+        {
+            let mut pc = svc.price_cache.write().await;
+            pc.insert("AAPL".to_string(), 150.0);
+            pc.insert("MSFT".to_string(), 300.0);
+            pc.insert("GOOG".to_string(), 2800.0);
+        }
+        let symbols = vec![
+            "AAPL".to_string(),
+            "MSFT".to_string(),
+            "GOOG".to_string(),
+        ];
+        let results = svc.batch_get_current_prices(symbols).await;
+        assert_eq!(results.len(), 3);
+        assert_eq!(results["AAPL"], 150.0);
+        assert_eq!(results["MSFT"], 300.0);
+        assert_eq!(results["GOOG"], 2800.0);
+    }
+}

@@ -1069,3 +1069,265 @@ impl MultiSourceProvider {
         self.historical_cache.clear();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Test 1: new() constructs with empty caches and default TTLs ──────────
+
+    #[test]
+    fn test_new_creates_empty_caches() {
+        let provider = MultiSourceProvider::new();
+        assert!(provider.quote_cache.is_empty(), "quote_cache should be empty on construction");
+        assert!(provider.historical_cache.is_empty(), "historical_cache should be empty on construction");
+        assert!(provider.rate_limits.is_empty(), "rate_limits should be empty on construction");
+        assert!(provider.provider_health.is_empty(), "provider_health should be empty on construction");
+    }
+
+    #[test]
+    fn test_new_default_ttls() {
+        let provider = MultiSourceProvider::new();
+        assert_eq!(provider.quote_cache_ttl, Duration::from_secs(120), "quote TTL should be 2 minutes");
+        assert_eq!(provider.historical_cache_ttl, Duration::from_secs(7200), "historical TTL should be 2 hours");
+    }
+
+    // ── Test 2: check_rate_limit ─────────────────────────────────────────────
+
+    #[test]
+    fn test_check_rate_limit_first_call_returns_true() {
+        let provider = MultiSourceProvider::new();
+        assert!(provider.check_rate_limit("test_provider_first", 5));
+    }
+
+    #[test]
+    fn test_check_rate_limit_subsequent_calls_within_limit_return_true() {
+        let provider = MultiSourceProvider::new();
+        let limit = 5u32;
+        // First call inserts with count=1; calls 2..limit should all succeed
+        assert!(provider.check_rate_limit("rl_within", limit));
+        for _ in 1..limit {
+            assert!(provider.check_rate_limit("rl_within", limit));
+        }
+    }
+
+    #[test]
+    fn test_check_rate_limit_at_limit_returns_false() {
+        let provider = MultiSourceProvider::new();
+        let limit = 3u32;
+        // Exhaust the limit
+        for _ in 0..limit {
+            provider.check_rate_limit("rl_exhaust", limit);
+        }
+        // Next call should be rejected
+        assert!(!provider.check_rate_limit("rl_exhaust", limit), "should return false when limit reached");
+    }
+
+    #[test]
+    fn test_check_rate_limit_window_resets_after_60s() {
+        let provider = MultiSourceProvider::new();
+        // Insert a "full" counter with a timestamp >60 s in the past
+        provider.rate_limits.insert(
+            "rl_old".to_string(),
+            (5, SystemTime::now() - Duration::from_secs(120)),
+        );
+        // The window is expired, so the counter resets and the call is allowed
+        assert!(provider.check_rate_limit("rl_old", 5), "should reset and return true after window expires");
+    }
+
+    // ── Test 3: track_success / track_failure / get_provider_health ──────────
+
+    #[test]
+    fn test_get_provider_health_new_provider_scores_100() {
+        let provider = MultiSourceProvider::new();
+        assert_eq!(provider.get_provider_health("unknown_provider"), 100);
+    }
+
+    #[test]
+    fn test_track_success_one_success_scores_100() {
+        let provider = MultiSourceProvider::new();
+        provider.track_success("prov_success");
+        assert_eq!(provider.get_provider_health("prov_success"), 100);
+    }
+
+    #[test]
+    fn test_track_failure_one_failure_scores_0() {
+        let provider = MultiSourceProvider::new();
+        provider.track_failure("prov_failure");
+        assert_eq!(provider.get_provider_health("prov_failure"), 0);
+    }
+
+    #[test]
+    fn test_mixed_success_failure_scores_correctly() {
+        let provider = MultiSourceProvider::new();
+        // 3 successes, 1 failure → 3/4 = 75
+        provider.track_success("prov_mixed");
+        provider.track_success("prov_mixed");
+        provider.track_success("prov_mixed");
+        provider.track_failure("prov_mixed");
+        assert_eq!(provider.get_provider_health("prov_mixed"), 75);
+    }
+
+    #[test]
+    fn test_equal_success_failure_scores_50() {
+        let provider = MultiSourceProvider::new();
+        provider.track_success("prov_equal");
+        provider.track_failure("prov_equal");
+        assert_eq!(provider.get_provider_health("prov_equal"), 50);
+    }
+
+    // ── Test 4: get_provider_order ───────────────────────────────────────────
+
+    #[test]
+    fn test_get_provider_order_returns_eight_providers() {
+        let provider = MultiSourceProvider::new();
+        let order = provider.get_provider_order();
+        assert_eq!(order.len(), 8, "should return exactly 8 providers");
+    }
+
+    #[test]
+    fn test_get_provider_order_alpaca_is_first() {
+        let provider = MultiSourceProvider::new();
+        let order = provider.get_provider_order();
+        assert_eq!(order[0], "alpaca", "alpaca should be first (highest tier)");
+    }
+
+    #[test]
+    fn test_get_provider_order_contains_all_expected_providers() {
+        let provider = MultiSourceProvider::new();
+        let order = provider.get_provider_order();
+        let expected = ["alpaca", "yahoo", "tiingo", "finnhub", "twelve_data", "fmp", "alphavantage", "polygon"];
+        for name in &expected {
+            assert!(order.contains(name), "provider order should contain {}", name);
+        }
+    }
+
+    #[test]
+    fn test_get_provider_order_unhealthy_provider_ranks_lower_within_tier() {
+        let provider = MultiSourceProvider::new();
+        // Degrade tiingo (tier 8) so yahoo (tier 9) stays ahead but also degrade
+        // both alpaca peers to check intra-tier health sorting.
+        // Degrade tiingo: inject many failures
+        for _ in 0..10 {
+            provider.track_failure("tiingo");
+        }
+        let order = provider.get_provider_order();
+        // tiingo should still exist but yahoo (tier 9) should precede it
+        let tiingo_pos = order.iter().position(|&p| p == "tiingo").unwrap();
+        let yahoo_pos = order.iter().position(|&p| p == "yahoo").unwrap();
+        assert!(yahoo_pos < tiingo_pos, "yahoo (tier 9) should appear before a degraded tiingo (tier 8)");
+    }
+
+    // ── Test 5: get_health_stats ─────────────────────────────────────────────
+
+    #[test]
+    fn test_get_health_stats_empty_initially() {
+        let provider = MultiSourceProvider::new();
+        let stats = provider.get_health_stats();
+        assert!(stats.is_empty(), "health stats should be empty on a fresh provider");
+    }
+
+    #[test]
+    fn test_get_health_stats_reflects_tracked_health() {
+        let provider = MultiSourceProvider::new();
+        provider.track_success("stat_prov");
+        provider.track_failure("stat_prov");
+        let stats = provider.get_health_stats();
+        assert!(stats.contains_key("stat_prov"), "stats should contain tracked provider");
+        let (successes, failures) = stats["stat_prov"];
+        assert_eq!(successes, 1);
+        assert_eq!(failures, 1);
+    }
+
+    #[test]
+    fn test_get_health_stats_multiple_providers() {
+        let provider = MultiSourceProvider::new();
+        provider.track_success("provA");
+        provider.track_success("provB");
+        provider.track_failure("provB");
+        let stats = provider.get_health_stats();
+        assert_eq!(stats.len(), 2);
+        assert_eq!(stats["provA"], (1, 0));
+        assert_eq!(stats["provB"], (1, 1));
+    }
+
+    // ── Test 6: clear_cache ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_clear_cache_empties_quote_cache() {
+        let provider = MultiSourceProvider::new();
+        let quote = StockQuote {
+            symbol: "AAPL".to_string(),
+            price: 150.0,
+            change: 1.0,
+            change_percent: 0.67,
+            volume: 1_000_000,
+            timestamp: "2026-01-01".to_string(),
+            source: "test".to_string(),
+        };
+        provider.quote_cache.insert(
+            "AAPL".to_string(),
+            CacheEntry {
+                data: quote,
+                timestamp: SystemTime::now(),
+                source: "test".to_string(),
+            },
+        );
+        assert!(!provider.quote_cache.is_empty(), "quote_cache should have one entry before clear");
+        provider.clear_cache();
+        assert!(provider.quote_cache.is_empty(), "quote_cache should be empty after clear_cache");
+    }
+
+    #[test]
+    fn test_clear_cache_empties_historical_cache() {
+        let provider = MultiSourceProvider::new();
+        let hist = vec![HistoricalPrice {
+            date: "2026-01-01".to_string(),
+            open: 148.0,
+            high: 152.0,
+            low: 147.0,
+            close: 150.0,
+            volume: 500_000,
+        }];
+        provider.historical_cache.insert(
+            "AAPL_90".to_string(),
+            CacheEntry {
+                data: hist,
+                timestamp: SystemTime::now(),
+                source: "test".to_string(),
+            },
+        );
+        assert!(!provider.historical_cache.is_empty(), "historical_cache should have one entry before clear");
+        provider.clear_cache();
+        assert!(provider.historical_cache.is_empty(), "historical_cache should be empty after clear_cache");
+    }
+
+    #[test]
+    fn test_clear_cache_empties_both_caches_together() {
+        let provider = MultiSourceProvider::new();
+        let quote = StockQuote {
+            symbol: "MSFT".to_string(),
+            price: 400.0,
+            change: 2.0,
+            change_percent: 0.5,
+            volume: 800_000,
+            timestamp: "2026-01-02".to_string(),
+            source: "test".to_string(),
+        };
+        provider.quote_cache.insert(
+            "MSFT".to_string(),
+            CacheEntry { data: quote, timestamp: SystemTime::now(), source: "test".to_string() },
+        );
+        provider.historical_cache.insert(
+            "MSFT_30".to_string(),
+            CacheEntry {
+                data: vec![],
+                timestamp: SystemTime::now(),
+                source: "test".to_string(),
+            },
+        );
+        provider.clear_cache();
+        assert!(provider.quote_cache.is_empty());
+        assert!(provider.historical_cache.is_empty());
+    }
+}
