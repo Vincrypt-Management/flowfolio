@@ -239,3 +239,110 @@ impl Default for AlpacaService {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_constructs_without_panic() {
+        let _svc = AlpacaService::new();
+    }
+
+    #[test]
+    fn is_configured_returns_false_without_env_vars() {
+        std::env::remove_var("VITE_ALPACA_API_KEY");
+        std::env::remove_var("VITE_ALPACA_API_SECRET");
+        let svc = AlpacaService::new();
+        assert!(!svc.is_configured());
+    }
+
+    #[test]
+    fn is_paper_defaults_to_true_when_env_var_absent() {
+        std::env::remove_var("VITE_ALPACA_PAPER_TRADING");
+        let svc = AlpacaService::new();
+        assert!(svc.is_paper);
+    }
+
+    #[test]
+    fn base_url_returns_paper_url_when_is_paper_true() {
+        std::env::remove_var("VITE_ALPACA_PAPER_TRADING");
+        let svc = AlpacaService::new();
+        assert_eq!(svc.base_url(), "https://paper-api.alpaca.markets");
+    }
+
+    #[test]
+    fn base_url_returns_live_url_when_is_paper_false() {
+        let svc = AlpacaService {
+            client: reqwest::Client::new(),
+            api_key: None,
+            api_secret: None,
+            is_paper: false,
+        };
+        assert_eq!(svc.base_url(), "https://api.alpaca.markets");
+    }
+
+    #[test]
+    fn alpaca_order_serializes_and_deserializes_correctly() {
+        let order = AlpacaOrder {
+            id: "order-1".to_string(),
+            client_order_id: "client-1".to_string(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: Some("2024-01-01T01:00:00Z".to_string()),
+            submitted_at: None,
+            filled_at: None,
+            expired_at: None,
+            canceled_at: None,
+            failed_at: None,
+            asset_id: "asset-1".to_string(),
+            symbol: "AAPL".to_string(),
+            asset_class: "us_equity".to_string(),
+            qty: "10".to_string(),
+            filled_qty: "0".to_string(),
+            r#type: "market".to_string(),
+            side: "buy".to_string(),
+            time_in_force: "day".to_string(),
+            status: "new".to_string(),
+        };
+
+        let json = serde_json::to_value(&order).expect("serialization failed");
+        assert_eq!(json["symbol"], "AAPL");
+        assert_eq!(json["type"], "market");
+        assert_eq!(json["side"], "buy");
+
+        let round_tripped: AlpacaOrder =
+            serde_json::from_value(json).expect("deserialization failed");
+        assert_eq!(round_tripped.symbol, "AAPL");
+        assert_eq!(round_tripped.r#type, "market");
+    }
+
+    #[test]
+    fn alpaca_account_serializes_correctly() {
+        let account = AlpacaAccount {
+            id: "acc-1".to_string(),
+            account_number: "PA123456".to_string(),
+            status: "ACTIVE".to_string(),
+            currency: "USD".to_string(),
+            buying_power: "10000.00".to_string(),
+            cash: "5000.00".to_string(),
+            portfolio_value: "15000.00".to_string(),
+            pattern_day_trader: false,
+            trading_blocked: false,
+            transfers_blocked: false,
+            account_blocked: false,
+            equity: "15000.00".to_string(),
+            last_equity: "14500.00".to_string(),
+            long_market_value: "10000.00".to_string(),
+            short_market_value: "0.00".to_string(),
+            initial_margin: "0.00".to_string(),
+            maintenance_margin: "0.00".to_string(),
+            daytrade_count: 0,
+        };
+
+        let json = serde_json::to_value(&account).expect("serialization failed");
+        assert_eq!(json["status"], "ACTIVE");
+        assert_eq!(json["currency"], "USD");
+        assert_eq!(json["portfolio_value"], "15000.00");
+        assert_eq!(json["pattern_day_trader"], false);
+    }
+}

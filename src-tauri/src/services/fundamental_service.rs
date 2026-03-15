@@ -360,3 +360,178 @@ impl Default for FundamentalDataService {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---------------------------------------------------------------------------
+    // 1. new() / has_alpha_vantage() without env var
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_new_does_not_panic_and_has_no_av_key_when_env_absent() {
+        // Make sure the env var is not set for this test.
+        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+
+        let svc = FundamentalDataService::new();
+        assert!(
+            !svc.has_alpha_vantage(),
+            "has_alpha_vantage() should be false when env var is absent"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // 2-4. parse_av_number
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_parse_av_number_valid_key_returns_parsed_f64() {
+        let data = serde_json::json!({"PERatio": "25.5"});
+        let result = FundamentalDataService::parse_av_number(&data, "PERatio");
+        assert!(
+            (result - 25.5).abs() < 0.001,
+            "expected 25.5, got {result}"
+        );
+    }
+
+    #[test]
+    fn test_parse_av_number_missing_key_returns_zero() {
+        let data = serde_json::json!({});
+        let result = FundamentalDataService::parse_av_number(&data, "NonExistentKey");
+        assert_eq!(result, 0.0, "missing key should return 0.0");
+    }
+
+    #[test]
+    fn test_parse_av_number_non_numeric_value_returns_zero() {
+        let data = serde_json::json!({"PERatio": "N/A"});
+        let result = FundamentalDataService::parse_av_number(&data, "PERatio");
+        assert_eq!(result, 0.0, "non-numeric string should return 0.0");
+    }
+
+    // ---------------------------------------------------------------------------
+    // 5-7. parse_av_number_opt
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_parse_av_number_opt_valid_key_returns_some() {
+        let data = serde_json::json!({"Beta": "1.23"});
+        let result = FundamentalDataService::parse_av_number_opt(&data, "Beta");
+        assert!(result.is_some(), "expected Some(f64)");
+        assert!(
+            (result.unwrap() - 1.23).abs() < 0.001,
+            "expected 1.23, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_parse_av_number_opt_missing_key_returns_none() {
+        let data = serde_json::json!({});
+        let result = FundamentalDataService::parse_av_number_opt(&data, "NonExistentKey");
+        assert!(result.is_none(), "missing key should return None");
+    }
+
+    #[test]
+    fn test_parse_av_number_opt_non_numeric_value_returns_none() {
+        let data = serde_json::json!({"Beta": "None"});
+        let result = FundamentalDataService::parse_av_number_opt(&data, "Beta");
+        assert!(result.is_none(), "non-numeric string should return None");
+    }
+
+    // ---------------------------------------------------------------------------
+    // 8. Cache TTL – fresh entry is still within cache_ttl
+    // ---------------------------------------------------------------------------
+    #[tokio::test]
+    async fn test_cache_fresh_entry_is_within_ttl() {
+        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+        let svc = FundamentalDataService::new();
+
+        let metrics = FundamentalMetrics {
+            symbol: "AAPL".to_string(),
+            company_name: "Apple Inc.".to_string(),
+            sector: "Technology".to_string(),
+            industry: "Consumer Electronics".to_string(),
+            market_cap: 3_000_000_000_000.0,
+            pe_ratio: Some(28.5),
+            forward_pe: None,
+            peg_ratio: None,
+            price_to_book: None,
+            price_to_sales: None,
+            ev_to_ebitda: None,
+            profit_margin: None,
+            operating_margin: None,
+            return_on_assets: None,
+            return_on_equity: None,
+            revenue_growth_yoy: None,
+            earnings_growth_yoy: None,
+            debt_to_equity: None,
+            current_ratio: None,
+            quick_ratio: None,
+            free_cash_flow: None,
+            dividend_yield: None,
+            payout_ratio: None,
+            eps: None,
+            beta: None,
+            fifty_two_week_high: None,
+            fifty_two_week_low: None,
+            source: "test".to_string(),
+            last_updated: "2026-03-15T00:00:00Z".to_string(),
+        };
+
+        // Insert a fresh entry directly into the cache.
+        {
+            let mut cache = svc.cache.write().await;
+            cache.insert(
+                "AAPL".to_string(),
+                CacheEntry {
+                    data: metrics,
+                    timestamp: Instant::now(),
+                },
+            );
+        }
+
+        // Verify the entry is present and still fresh.
+        let cache = svc.cache.read().await;
+        assert_eq!(cache.len(), 1, "cache should contain exactly one entry");
+
+        let entry = cache.get("AAPL").expect("AAPL entry should be in cache");
+        assert!(
+            entry.timestamp.elapsed() < svc.cache_ttl,
+            "fresh entry should have elapsed time less than cache_ttl (48h)"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // 9. Default delegates to new()
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_default_creates_service_equivalent_to_new() {
+        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+
+        let from_new = FundamentalDataService::new();
+        let from_default = FundamentalDataService::default();
+
+        // Both should agree on has_alpha_vantage() and cache_ttl.
+        assert_eq!(
+            from_new.has_alpha_vantage(),
+            from_default.has_alpha_vantage(),
+            "new() and default() should agree on has_alpha_vantage()"
+        );
+        assert_eq!(
+            from_new.cache_ttl, from_default.cache_ttl,
+            "new() and default() should have the same cache_ttl"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // 10. cache_ttl is 48 hours (172_800 seconds)
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_cache_ttl_is_48_hours() {
+        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+        let svc = FundamentalDataService::new();
+        assert_eq!(
+            svc.cache_ttl.as_secs(),
+            172_800,
+            "cache_ttl should be 172800 seconds (48 hours)"
+        );
+    }
+}

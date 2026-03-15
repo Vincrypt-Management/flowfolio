@@ -288,3 +288,88 @@ impl Default for OpenRouterService {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_constructs_without_panic() {
+        let _svc = OpenRouterService::new();
+    }
+
+    #[test]
+    fn is_configured_returns_false_when_no_env_var() {
+        // Ensure the env var is absent for this test
+        std::env::remove_var("VITE_OPENROUTER_API_KEY");
+        let svc = OpenRouterService::new();
+        assert!(!svc.is_configured());
+    }
+
+    #[test]
+    fn default_api_url_is_openrouter() {
+        std::env::remove_var("VITE_OPENROUTER_API_URL");
+        let svc = OpenRouterService::new();
+        assert_eq!(svc.api_url, "https://openrouter.ai/api/v1");
+    }
+
+    #[test]
+    fn default_model_is_claude_sonnet() {
+        std::env::remove_var("VITE_DEFAULT_LLM_MODEL");
+        let svc = OpenRouterService::new();
+        assert_eq!(svc.default_model, "anthropic/claude-3-sonnet-20240229");
+    }
+
+    #[test]
+    fn openrouter_message_serializes_correctly() {
+        let msg = OpenRouterMessage {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+        };
+        let json = serde_json::to_value(&msg).expect("serialization failed");
+        assert_eq!(json["role"], "user");
+        assert_eq!(json["content"], "Hello");
+    }
+
+    #[test]
+    fn openrouter_message_deserializes_from_json() {
+        let json = r#"{"role": "assistant", "content": "Hi there"}"#;
+        let msg: OpenRouterMessage = serde_json::from_str(json).expect("deserialization failed");
+        assert_eq!(msg.role, "assistant");
+        assert_eq!(msg.content, "Hi there");
+    }
+
+    #[test]
+    fn openrouter_request_omits_none_optional_fields() {
+        let req = OpenRouterRequest {
+            model: "test-model".to_string(),
+            messages: vec![],
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            stream: None,
+        };
+        let json = serde_json::to_value(&req).expect("serialization failed");
+        assert!(json.get("temperature").is_none());
+        assert!(json.get("max_tokens").is_none());
+        assert!(json.get("top_p").is_none());
+        assert!(json.get("stream").is_none());
+    }
+
+    #[test]
+    fn openrouter_request_includes_some_optional_fields() {
+        let req = OpenRouterRequest {
+            model: "test-model".to_string(),
+            messages: vec![],
+            temperature: Some(0.7),
+            max_tokens: Some(4000),
+            top_p: Some(1.0),
+            stream: Some(false),
+        };
+        let json = serde_json::to_value(&req).expect("serialization failed");
+        assert_eq!(json["temperature"], 0.7);
+        assert_eq!(json["max_tokens"], 4000);
+        assert_eq!(json["top_p"], 1.0);
+        assert_eq!(json["stream"], false);
+    }
+}

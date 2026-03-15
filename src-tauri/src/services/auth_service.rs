@@ -179,3 +179,119 @@ impl AuthService {
         serde_json::from_value(data).map_err(|e| format!("Parse error: {}", e))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auth_service_new_constructs_without_panic() {
+        let svc = AuthService::new(
+            "https://example.supabase.co".to_string(),
+            "service_key_123".to_string(),
+        );
+        assert_eq!(svc.supabase_url, "https://example.supabase.co");
+        assert_eq!(svc.service_role_key, "service_key_123");
+    }
+
+    #[test]
+    fn test_subscription_public_serializes_with_correct_field_names() {
+        let sub = SubscriptionPublic {
+            tier: "pro".to_string(),
+            credits: 100,
+            monthly_credits: 500,
+            max_portfolios: 10,
+            max_watchlist_items: 50,
+            backtest_limit: 20,
+            ai_queries_limit: 30,
+        };
+        let json = serde_json::to_string(&sub).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["tier"], "pro");
+        assert_eq!(value["credits"], 100);
+        assert_eq!(value["monthly_credits"], 500);
+        assert_eq!(value["max_portfolios"], 10);
+        assert_eq!(value["max_watchlist_items"], 50);
+        assert_eq!(value["backtest_limit"], 20);
+        assert_eq!(value["ai_queries_limit"], 30);
+    }
+
+    #[test]
+    fn test_subscription_public_deserializes_from_json() {
+        let json = r#"{
+            "tier": "free",
+            "credits": 0,
+            "monthly_credits": 0,
+            "max_portfolios": 1,
+            "max_watchlist_items": 5,
+            "backtest_limit": 1,
+            "ai_queries_limit": 2
+        }"#;
+        let sub: SubscriptionPublic = serde_json::from_str(json).unwrap();
+        assert_eq!(sub.tier, "free");
+        assert_eq!(sub.credits, 0);
+        assert_eq!(sub.max_portfolios, 1);
+        assert_eq!(sub.ai_queries_limit, 2);
+    }
+
+    #[test]
+    fn test_credit_transaction_row_serializes_type_rename() {
+        let row = CreditTransactionRow {
+            id: "txn-001".to_string(),
+            user_id: "user-abc".to_string(),
+            tx_type: "usage".to_string(),
+            amount: -5,
+            balance: 95,
+            description: Some("AI query".to_string()),
+            metadata: Some(serde_json::json!({"model": "gpt-4"})),
+            created_at: "2024-01-15T10:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&row).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        // tx_type must appear as "type" in JSON due to #[serde(rename = "type")]
+        assert_eq!(value["type"], "usage");
+        assert!(value.get("tx_type").is_none());
+        assert_eq!(value["id"], "txn-001");
+        assert_eq!(value["amount"], -5);
+    }
+
+    #[test]
+    fn test_credit_transaction_row_with_none_fields_serializes_correctly() {
+        let row = CreditTransactionRow {
+            id: "txn-002".to_string(),
+            user_id: "user-xyz".to_string(),
+            tx_type: "grant".to_string(),
+            amount: 100,
+            balance: 100,
+            description: None,
+            metadata: None,
+            created_at: "2024-01-16T12:00:00Z".to_string(),
+        };
+        let json = serde_json::to_string(&row).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["type"], "grant");
+        assert_eq!(value["balance"], 100);
+        // None fields serialize as JSON null
+        assert!(value["description"].is_null());
+        assert!(value["metadata"].is_null());
+    }
+
+    #[test]
+    fn test_credit_transaction_row_deserializes_type_key_to_tx_type() {
+        let json = r#"{
+            "id": "txn-003",
+            "user_id": "user-def",
+            "type": "refund",
+            "amount": 10,
+            "balance": 110,
+            "description": null,
+            "metadata": null,
+            "created_at": "2024-01-17T08:30:00Z"
+        }"#;
+        let row: CreditTransactionRow = serde_json::from_str(json).unwrap();
+        assert_eq!(row.tx_type, "refund");
+        assert_eq!(row.id, "txn-003");
+        assert_eq!(row.amount, 10);
+        assert!(row.description.is_none());
+    }
+}
