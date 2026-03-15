@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { invoke } from "../services/tauri";
 import { useToast } from "./Toast";
-import { useAuth } from "../contexts/AuthContext";
 import { useUserMode } from "../contexts/UserModeContext";
 import { logger } from "../core/logger";
 import { DEFAULT_SYMBOLS } from "../shared/constants";
@@ -18,7 +17,6 @@ import {
   Wallet,
   TrendingUp,
   TrendingDown,
-  CreditCard,
   ArrowUpRight,
   ArrowDownRight,
   Activity,
@@ -93,7 +91,6 @@ function Dashboard({
   isLoadingMarket,
 }: DashboardProps) {
   const { addToast } = useToast();
-  const { subscription } = useAuth();
   const { isAdvanced } = useUserMode();
 
   const [priceData, setPriceData] = useState<PriceData[]>([]);
@@ -172,8 +169,6 @@ function Dashboard({
     }
     return Object.entries(sectors).map(([name, value]) => ({ name, value }));
   }, [priceData]);
-
-  const credits = subscription?.credits ?? 0;
 
   // ---- Handlers ----
   const handleLoadPlan = useCallback(
@@ -305,16 +300,6 @@ function Dashboard({
           </div>
         </div>
 
-        <div className="summary-card">
-          <div className="summary-card-header">
-            <CreditCard size={18} className="summary-icon accent" />
-            <span className="summary-label">Credits</span>
-          </div>
-          <div className="value">{credits.toLocaleString()}</div>
-          <div className="change muted">
-            {subscription?.tier ?? "free"} plan
-          </div>
-        </div>
       </div>
 
       {/* ---- Main Content Sections ---- */}
