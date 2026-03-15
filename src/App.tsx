@@ -133,6 +133,13 @@ function App() {
   // Portfolio to load into VibeStudio (from SavedPortfoliosTab)
   const [portfolioToLoad, setPortfolioToLoad] = useState<GeneratedPortfolio | null>(null);
 
+  // Real holdings lifted from PortfolioTab for RiskDashboard
+  const [portfolioHoldings, setPortfolioHoldings] = useState<Array<{
+    symbol: string; shares: number; currentPrice: number;
+    value: number; weight: number;
+  }>>([]);
+  const [portfolioValue, setPortfolioValue] = useState<number>(0);
+
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
 
@@ -918,7 +925,12 @@ function App() {
         {activeTab === "portfolio" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
-              <PortfolioTab />
+              <PortfolioTab
+                onHoldingsChange={(h, v) => {
+                  setPortfolioHoldings(h);
+                  setPortfolioValue(v);
+                }}
+              />
             </Suspense>
           </div>
         )}
@@ -1136,8 +1148,8 @@ function App() {
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <RiskDashboard
-                holdings={[]}
-                portfolioValue={0}
+                holdings={portfolioHoldings}
+                portfolioValue={portfolioValue}
                 marketPrices={marketPrices}
               />
             </Suspense>

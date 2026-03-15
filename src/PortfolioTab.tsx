@@ -72,7 +72,14 @@ interface RebalanceAction {
   shares: number;
 }
 
-export function PortfolioTab() {
+interface PortfolioTabProps {
+  onHoldingsChange?: (holdings: Array<{
+    symbol: string; shares: number; currentPrice: number;
+    value: number; weight: number;
+  }>, totalValue: number) => void;
+}
+
+export function PortfolioTab({ onHoldingsChange }: PortfolioTabProps) {
   const { addToast } = useToast();
   const { isAdvanced } = useUserMode();
   const [rebalanceThreshold, setRebalanceThreshold] = useState(5.0);
@@ -154,6 +161,17 @@ export function PortfolioTab() {
         last_updated: new Date().toISOString(),
       });
 
+      if (onHoldingsChange) {
+        const riskHoldings = holdingsWithPct.map((h: Holding) => ({
+          symbol: h.symbol,
+          shares: h.shares,
+          currentPrice: h.current_price,
+          value: h.market_value,
+          weight: h.current_pct / 100,
+        }));
+        onHoldingsChange(riskHoldings, totalValue);
+      }
+
       // Clear form
       setNewSymbol("");
       setNewShares("");
@@ -201,6 +219,17 @@ export function PortfolioTab() {
         total_value: totalValue,
         last_updated: new Date().toISOString(),
       });
+
+      if (onHoldingsChange) {
+        const riskHoldings = holdingsWithPct.map((h: Holding) => ({
+          symbol: h.symbol,
+          shares: h.shares,
+          currentPrice: h.current_price,
+          value: h.market_value,
+          weight: h.current_pct / 100,
+        }));
+        onHoldingsChange(riskHoldings, totalValue);
+      }
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error updating prices: " + (error instanceof Error ? error.message : String(error)), "error");
@@ -228,6 +257,17 @@ export function PortfolioTab() {
       total_value: totalValue,
       last_updated: new Date().toISOString(),
     });
+
+    if (onHoldingsChange) {
+      const riskHoldings = holdingsWithPct.map((h: Holding) => ({
+        symbol: h.symbol,
+        shares: h.shares,
+        currentPrice: h.current_price,
+        value: h.market_value,
+        weight: h.current_pct / 100,
+      }));
+      onHoldingsChange(riskHoldings, totalValue);
+    }
   }
 
   function updateCash() {
@@ -247,6 +287,18 @@ export function PortfolioTab() {
       total_value: totalValue,
       last_updated: new Date().toISOString(),
     });
+
+    if (onHoldingsChange) {
+      const riskHoldings = holdingsWithPct.map((h: Holding) => ({
+        symbol: h.symbol,
+        shares: h.shares,
+        currentPrice: h.current_price,
+        value: h.market_value,
+        weight: h.current_pct / 100,
+      }));
+      onHoldingsChange(riskHoldings, totalValue);
+    }
+
     setCashAmount("");
   }
 
