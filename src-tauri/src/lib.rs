@@ -38,7 +38,6 @@ use services::{
     FundamentalDataService,
     FundamentalMetrics,
     openrouter_service::OpenRouterMessage,
-    AuthService,
 };
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -66,9 +65,6 @@ lazy_static::lazy_static! {
     static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> =
         Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    // Auth service (Supabase PostgreSQL)
-    static ref AUTH_SERVICE: Arc<Mutex<Option<AuthService>>> =
-        Arc::new(Mutex::new(None));
 }
 
 /// Initialize local SQLite database for caching
@@ -2129,67 +2125,6 @@ async fn clear_fundamentals_cache() -> Result<(), String> {
     Ok(())
 }
 
-// ==================== SUPABASE AUTH & CREDITS (backend) ====================
-
-/// Initialize Supabase REST-based credit/subscription service
-async fn init_supabase_service() -> Result<(), String> {
-    let supabase_url = std::env::var("VITE_SUPABASE_URL")
-        .map_err(|_| "VITE_SUPABASE_URL not set — Supabase features disabled".to_string())?;
-
-    let service_role_key = std::env::var("SUPABASE_SERVICE_ROLE_KEY")
-        .map_err(|_| "SUPABASE_SERVICE_ROLE_KEY not set — Supabase features disabled".to_string())?;
-
-    eprintln!("[INFO] [supabase] Initializing Supabase REST service...");
-
-    let auth = AuthService::new(supabase_url, service_role_key);
-    *AUTH_SERVICE.lock().await = Some(auth);
-
-    eprintln!("[INFO] [supabase] ✅ Supabase service initialized");
-    Ok(())
-}
-
-/// Get subscription for the authenticated user (user_id from Supabase session)
-#[tauri::command]
-async fn auth_get_subscription(user_id: String) -> Result<serde_json::Value, String> {
-    let guard = AUTH_SERVICE.lock().await;
-    let auth = guard.as_ref().ok_or("Supabase not connected")?;
-    let sub = auth.get_subscription(&user_id).await?;
-    serde_json::to_value(sub).map_err(|e| e.to_string())
-}
-
-/// Deduct credits for a server-side operation (backtest, AI query, etc.)
-#[tauri::command]
-async fn auth_deduct_credits(
-    user_id: String,
-    amount: i32,
-    description: String,
-) -> Result<serde_json::Value, String> {
-    let guard = AUTH_SERVICE.lock().await;
-    let auth = guard.as_ref().ok_or("Supabase not connected")?;
-    let remaining = auth.deduct_credits(&user_id, amount, &description, None).await?;
-    Ok(serde_json::json!({ "remaining": remaining }))
-}
-
-/// Get credit balance and recent transactions
-#[tauri::command]
-async fn auth_get_credits(user_id: String) -> Result<serde_json::Value, String> {
-    let guard = AUTH_SERVICE.lock().await;
-    let auth = guard.as_ref().ok_or("Supabase not connected")?;
-    let sub = auth.get_subscription(&user_id).await?;
-    let txns = auth.get_credit_history(&user_id, 20).await?;
-    Ok(serde_json::json!({
-        "balance": sub.credits,
-        "tier": sub.tier,
-        "monthly_credits": sub.monthly_credits,
-        "transactions": txns,
-    }))
-}
-
-/// Check if Supabase backend is connected
-#[tauri::command]
-async fn auth_is_configured() -> bool {
-    AUTH_SERVICE.lock().await.is_some()
-}
 
 const API_KEYS_STORE: &str = "api-keys.json";
 const API_KEY_NAMES: &[&str] = &[
@@ -2341,11 +2276,7 @@ pub fn run() {
             get_fundamentals,
             get_fundamentals_batch,
             clear_fundamentals_cache,
-            // Supabase Credits (server-side)
-            auth_get_subscription,
-            auth_deduct_credits,
-            auth_get_credits,
-            auth_is_configured,
+
             get_api_key_statuses,
             save_api_keys,
             // Price alert desktop notifications
@@ -2377,16 +2308,7 @@ pub fn run() {
                     }
                 }
 
-                // Initialize Supabase service (non-blocking — app works without it)
-                match init_supabase_service().await {
-                    Ok(_) => {
-                        eprintln!("[INFO] [app] ✅ Supabase service connected");
-                    }
-                    Err(e) => {
-                        eprintln!("[WARN] [app] ⚠️ Supabase not available: {}", e);
-                        eprintln!("[WARN] [app] App will run in offline/local mode");
-                    }
-                }
+
             });
             
             Ok(())
