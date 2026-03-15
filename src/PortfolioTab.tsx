@@ -4,6 +4,8 @@ import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
+import { parseBrokerCSV, ParsedHolding } from './shared/utils/csvParser';
+import { Upload } from 'lucide-react';
 
 interface Portfolio {
   name: string;
@@ -105,6 +107,13 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
   const [newCostBasis, setNewCostBasis] = useState("");
   const [newTargetPct, setNewTargetPct] = useState("");
   const [cashAmount, setCashAmount] = useState("");
+
+  // Broker import state
+  const [showImport, setShowImport] = useState(false);
+  const [importPreview, setImportPreview] = useState<ParsedHolding[]>([]);
+  const [importBroker, setImportBroker] = useState('');
+  const [importSkipped, setImportSkipped] = useState<Set<number>>(new Set());
+  const [importErrors, setImportErrors] = useState<string[]>([]);
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -373,6 +382,61 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     }
   }
 
+  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { holdings, broker, errors } = parseBrokerCSV(reader.result as string);
+      setImportPreview(holdings);
+      setImportBroker(broker);
+      setImportSkipped(new Set());
+      setImportErrors(errors);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }, []);
+
+  const handleConfirmImport = useCallback(() => {
+    const toImport = importPreview.filter((_, i) => !importSkipped.has(i));
+    if (toImport.length === 0) return;
+
+    // DO NOT call addHolding() — it takes no params and reads from form state
+    // Construct Holding objects directly using the local Holding interface
+    const newHoldings: Holding[] = toImport.map(h => {
+      const price = h.costBasis ?? 0;
+      return {
+        symbol: h.symbol,
+        shares: h.shares,
+        cost_basis: price,
+        current_price: price,
+        market_value: h.shares * price,
+        target_pct: 0,
+        current_pct: 0,
+        drift_pct: 0,
+      };
+    });
+
+    const updatedHoldings = [...portfolio.holdings, ...newHoldings];
+    const totalValue = updatedHoldings.reduce((sum, h) => sum + h.market_value, 0) + portfolio.cash;
+    const holdingsWithPct = updatedHoldings.map(h => ({
+      ...h,
+      current_pct: totalValue > 0 ? (h.market_value / totalValue) * 100 : 0,
+      drift_pct: totalValue > 0 ? ((h.market_value / totalValue) * 100) - h.target_pct : 0,
+    }));
+
+    setPortfolio({
+      ...portfolio,
+      holdings: holdingsWithPct,
+      total_value: totalValue,
+      last_updated: new Date().toISOString(),
+    });
+
+    setImportPreview([]);
+    setShowImport(false);
+    addToast(`Imported ${toImport.length} holdings. Click "Refresh Prices" to update current prices.`, 'success');
+  }, [importPreview, importSkipped, portfolio, addToast]);
+
   return (
     <div className="portfolio-tab">
       <h2>Portfolio Management</h2>
@@ -397,6 +461,77 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
           </div>
         </div>
       )}
+
+      {/* Broker Import Section */}
+      <div className="card mb-lg">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ margin: 0 }}>Import from Broker</h3>
+          <button className="btn-small" onClick={() => setShowImport(s => !s)}>
+            {showImport ? 'Hide ▲' : 'Show ▼'}
+          </button>
+        </div>
+
+        {showImport && (
+          <div style={{ marginTop: '12px' }}>
+            <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
+              Import holdings from a broker CSV export (Fidelity, Schwab, Vanguard, or generic).
+            </p>
+            <label className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <Upload size={14} /> Choose CSV File
+              <input type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+            </label>
+
+            {importPreview.length > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <p className="text-muted" style={{ fontSize: '13px', marginBottom: '8px' }}>
+                  Detected: <strong>{importBroker}</strong> — {importPreview.length} holdings found
+                  {importErrors.length > 0 && ` (${importErrors.length} rows skipped)`}
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="data-table" style={{ fontSize: '13px' }}>
+                    <thead>
+                      <tr>
+                        <th>Include</th>
+                        <th>Symbol</th>
+                        <th>Shares</th>
+                        <th>Cost Basis</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.map((h, i) => (
+                        <tr key={i} style={{ opacity: importSkipped.has(i) ? 0.4 : 1 }}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={!importSkipped.has(i)}
+                              onChange={() => setImportSkipped(prev => {
+                                const next = new Set(prev);
+                                next.has(i) ? next.delete(i) : next.add(i);
+                                return next;
+                              })}
+                            />
+                          </td>
+                          <td className="font-bold">{h.symbol}</td>
+                          <td>{h.shares}</td>
+                          <td>{h.costBasis != null ? `$${h.costBasis.toFixed(2)}` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  className="btn-primary"
+                  style={{ marginTop: '12px' }}
+                  onClick={handleConfirmImport}
+                  disabled={importPreview.every((_, i) => importSkipped.has(i))}
+                >
+                  Import {importPreview.filter((_, i) => !importSkipped.has(i)).length} Holdings
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Add Holding Form */}
       <div className="card">
