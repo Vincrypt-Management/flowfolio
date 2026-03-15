@@ -348,6 +348,81 @@ mod tests {
         assert_eq!(result, Some(0.05));
     }
 
+    // ===== parse_financial_metrics tests =====
+
+    fn make_overview(market_cap: Option<&str>, pe: Option<&str>, roe: Option<&str>, roic: Option<&str>, div: Option<&str>) -> CompanyOverview {
+        CompanyOverview {
+            symbol: "TEST".to_string(),
+            name: None,
+            exchange: None,
+            currency: None,
+            market_cap: market_cap.map(|s| s.to_string()),
+            pe_ratio: pe.map(|s| s.to_string()),
+            dividend_yield: div.map(|s| s.to_string()),
+            roe: roe.map(|s| s.to_string()),
+            roic: roic.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn test_parse_financial_metrics_all_none() {
+        let overview = make_overview(None, None, None, None, None);
+        let metrics = parse_financial_metrics(&overview);
+        assert!(metrics.market_cap.is_none());
+        assert!(metrics.pe_ratio.is_none());
+        assert!(metrics.roe.is_none());
+        assert!(metrics.roic.is_none());
+        assert!(metrics.dividend_yield.is_none());
+        // Non-overview fields should always be None
+        assert!(metrics.pb_ratio.is_none());
+        assert!(metrics.ps_ratio.is_none());
+    }
+
+    #[test]
+    fn test_parse_financial_metrics_with_values() {
+        let overview = make_overview(
+            Some("1000000000"),
+            Some("25.5"),
+            Some("0.15"),
+            Some("12%"),
+            Some("2.5%"),
+        );
+        let metrics = parse_financial_metrics(&overview);
+        assert!((metrics.market_cap.unwrap() - 1_000_000_000.0).abs() < 1.0);
+        assert!((metrics.pe_ratio.unwrap() - 25.5).abs() < f64::EPSILON);
+        assert!((metrics.roe.unwrap() - 0.15).abs() < f64::EPSILON);
+        // roic "12%" -> 0.12
+        assert!((metrics.roic.unwrap() - 0.12).abs() < f64::EPSILON);
+        // dividend_yield "2.5%" -> 0.025
+        assert!((metrics.dividend_yield.unwrap() - 0.025).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_financial_metrics_invalid_values() {
+        let overview = make_overview(
+            Some("not_a_number"),
+            Some("N/A"),
+            None,
+            None,
+            None,
+        );
+        let metrics = parse_financial_metrics(&overview);
+        assert!(metrics.market_cap.is_none());
+        assert!(metrics.pe_ratio.is_none());
+    }
+
+    // ===== calculate_volatility edge case: all-zero prices =====
+
+    #[test]
+    fn test_volatility_all_zero_prices() {
+        // All prices are 0 → the `if recent_prices[i - 1] != 0.0` guard skips all → returns is empty → returns None
+        let prices: Vec<PriceDaily> = (0..30).map(|i| {
+            make_price(&format!("2024-01-{:02}", (i % 28) + 1), 0.0, 0)
+        }).collect();
+        let result = calculate_volatility(&prices, 30);
+        assert!(result.is_none(), "All-zero prices should return None volatility");
+    }
+
     // ===== calculate_momentum_metrics test =====
 
     #[test]

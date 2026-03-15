@@ -195,4 +195,25 @@ mod tests {
         let client = AlphaVantageClient::new("demo".to_string());
         assert_eq!(client.name(), "Alpha Vantage");
     }
+
+    #[test]
+    fn test_remaining_quota_returns_placeholder() {
+        let client = AlphaVantageClient::new("test_key".to_string());
+        let quota = client.remaining_quota();
+        assert_eq!(quota, 25);
+    }
+
+    #[test]
+    fn test_data_provider_trait_name() {
+        let client = AlphaVantageClient::new("test_key".to_string());
+        let provider: &dyn DataProvider = &client;
+        assert_eq!(provider.name(), "Alpha Vantage");
+    }
+
+    #[test]
+    fn test_data_provider_trait_remaining_quota() {
+        let client = AlphaVantageClient::new("test_key".to_string());
+        let provider: &dyn DataProvider = &client;
+        assert_eq!(provider.remaining_quota(), 25);
+    }
 }

@@ -199,4 +199,74 @@ EMPTY_LINE_ABOVE=value
         assert_eq!(vars.get("VITE_QUOTED"), Some(&"quoted value".to_string()));
         assert_eq!(vars.get("VITE_SINGLE"), Some(&"single quoted".to_string()));
     }
+
+    #[test]
+    fn test_encrypt_env_file_roundtrip() {
+        // Covers lines 92-93: encrypt_env_file wraps encrypt_string
+        let content = "API_KEY=test123\nOTHER=value";
+        let encrypted = encrypt_env_file(content).unwrap();
+        // Should be a non-empty base64 string
+        assert!(!encrypted.is_empty());
+        // Should decrypt back to original
+        let decrypted = decrypt_string(&encrypted).unwrap();
+        assert_eq!(decrypted, content);
+    }
+
+    #[test]
+    fn test_decrypt_env_file_roundtrip() {
+        // Covers lines 97-99: decrypt_env_file wraps decrypt_string + parse_env_content
+        let content = "KEY1=val1\nKEY2=val2";
+        let encrypted = encrypt_string(content).unwrap();
+        let vars = decrypt_env_file(&encrypted).unwrap();
+        assert_eq!(vars.get("KEY1"), Some(&"val1".to_string()));
+        assert_eq!(vars.get("KEY2"), Some(&"val2".to_string()));
+    }
+
+    #[test]
+    fn test_decrypt_env_file_invalid_base64() {
+        // Covers error path in decrypt_string
+        let result = decrypt_env_file("not_valid_base64!!!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_env_content_empty_key_skipped() {
+        // A line starting with = should be skipped (empty key)
+        let content = "=value_without_key\nVALID=ok";
+        let vars = parse_env_content(content).unwrap();
+        assert_eq!(vars.len(), 1);
+        assert_eq!(vars.get("VALID"), Some(&"ok".to_string()));
+    }
+
+    #[test]
+    fn test_parse_env_content_no_equals_skipped() {
+        // A line without = should be skipped
+        let content = "NOT_AN_ASSIGNMENT\nVALID=yes";
+        let vars = parse_env_content(content).unwrap();
+        assert_eq!(vars.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_env_content_empty() {
+        let vars = parse_env_content("").unwrap();
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn test_load_encrypted_env_debug_mode() {
+        // In debug mode, this will try to find .env file. Either way, returns Ok(()).
+        // Covers lines 135, 139, possibly 144-148, and 157.
+        let result = load_encrypted_env(None);
+        // Should succeed regardless of whether .env exists
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_load_embedded_env_decrypts_successfully() {
+        // Covers lines 161-173: decrypt embedded env and set vars
+        // This reads the compile-time embedded .env.encrypted and decrypts it
+        let result = load_embedded_env();
+        // Should succeed since .env.encrypted is a valid encrypted payload
+        assert!(result.is_ok());
+    }
 }

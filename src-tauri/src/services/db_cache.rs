@@ -592,3 +592,378 @@ impl DatabaseCacheService {
         (prices, quant, sentiment, analyst, historical)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn setup_db() -> Pool<Sqlite> {
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create in-memory pool");
+
+        // Create required tables
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS price_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL UNIQUE,
+                current_price REAL NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS quant_metrics_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL UNIQUE,
+                sharpe_ratio REAL NOT NULL DEFAULT 0,
+                annualized_return REAL NOT NULL DEFAULT 0,
+                volatility REAL NOT NULL DEFAULT 0,
+                max_drawdown REAL NOT NULL DEFAULT 0,
+                rsi REAL NOT NULL DEFAULT 50,
+                signal TEXT NOT NULL DEFAULT 'HOLD',
+                confidence REAL NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS sentiment_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL UNIQUE,
+                overall_sentiment TEXT NOT NULL,
+                sentiment_score REAL NOT NULL,
+                news_count INTEGER NOT NULL DEFAULT 0,
+                buzz_score REAL NOT NULL DEFAULT 0,
+                raw_json TEXT,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS analyst_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL UNIQUE,
+                consensus_rating TEXT NOT NULL,
+                target_price_mean REAL,
+                target_price_high REAL,
+                target_price_low REAL,
+                number_of_analysts INTEGER NOT NULL DEFAULT 0,
+                strong_buy INTEGER NOT NULL DEFAULT 0,
+                buy INTEGER NOT NULL DEFAULT 0,
+                hold INTEGER NOT NULL DEFAULT 0,
+                sell INTEGER NOT NULL DEFAULT 0,
+                strong_sell INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS symbols (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL UNIQUE,
+                exchange TEXT,
+                name TEXT,
+                currency TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS prices_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol_id INTEGER NOT NULL,
+                date DATE NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                adj_close REAL,
+                volume INTEGER NOT NULL,
+                UNIQUE(symbol_id, date)
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS fundamentals_overview (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol_id INTEGER NOT NULL,
+                market_cap REAL,
+                pe_ratio REAL,
+                pb_ratio REAL,
+                dividend_yield REAL,
+                eps REAL,
+                roe REAL,
+                roic REAL,
+                raw_json TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_new_and_get_pool() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool.clone());
+        // get_pool should return the pool without panicking
+        let _ = svc.get_pool();
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_cached_price() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        svc.set_cached_price("AAPL", 150.0).await.unwrap();
+        let result = svc.get_cached_price("AAPL").await;
+        assert!(result.is_some());
+        let p = result.unwrap();
+        assert_eq!(p.symbol, "AAPL");
+        assert!((p.current_price - 150.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn test_get_cached_price_miss() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        let result = svc.get_cached_price("NONEXISTENT").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_set_cached_price_upsert() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        svc.set_cached_price("AAPL", 150.0).await.unwrap();
+        svc.set_cached_price("AAPL", 155.0).await.unwrap();
+
+        let result = svc.get_cached_price("AAPL").await;
+        assert!(result.is_some());
+        assert!((result.unwrap().current_price - 155.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_quant_metrics() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        svc.set_cached_quant_metrics("AAPL", 1.5, 12.0, 20.0, 15.0, 55.0, "BUY", 80.0).await.unwrap();
+        let result = svc.get_cached_quant_metrics("AAPL").await;
+        assert!(result.is_some());
+        let m = result.unwrap();
+        assert_eq!(m.symbol, "AAPL");
+        assert!((m.sharpe_ratio - 1.5).abs() < 1e-6);
+        assert_eq!(m.signal, "BUY");
+    }
+
+    #[tokio::test]
+    async fn test_get_quant_metrics_miss() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        let result = svc.get_cached_quant_metrics("MISSING").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_sentiment() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        svc.set_cached_sentiment("AAPL", "bullish", 0.75, 10, 0.85).await.unwrap();
+        let result = svc.get_cached_sentiment("AAPL").await;
+        assert!(result.is_some());
+        let s = result.unwrap();
+        assert_eq!(s.overall_sentiment, "bullish");
+        assert!((s.sentiment_score - 0.75).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn test_get_sentiment_miss() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        let result = svc.get_cached_sentiment("MISSING").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_analyst_rating() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        svc.set_cached_analyst_rating("AAPL", "BUY", Some(200.0), Some(220.0), Some(180.0), 15).await.unwrap();
+        let result = svc.get_cached_analyst_rating("AAPL").await;
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.consensus_rating, "BUY");
+        assert_eq!(r.number_of_analysts, 15);
+    }
+
+    #[tokio::test]
+    async fn test_get_analyst_rating_miss() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        let result = svc.get_cached_analyst_rating("MISSING").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_stats_empty() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        let (prices, quant, sentiment, analyst, historical) = svc.get_cache_stats().await;
+        assert_eq!(prices, 0);
+        assert_eq!(quant, 0);
+        assert_eq!(sentiment, 0);
+        assert_eq!(analyst, 0);
+        assert_eq!(historical, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_stats_with_data() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        svc.set_cached_price("AAPL", 150.0).await.unwrap();
+        svc.set_cached_price("MSFT", 300.0).await.unwrap();
+        svc.set_cached_quant_metrics("AAPL", 1.5, 12.0, 20.0, 15.0, 55.0, "BUY", 80.0).await.unwrap();
+        svc.set_cached_sentiment("GOOG", "neutral", 0.5, 5, 0.5).await.unwrap();
+        svc.set_cached_analyst_rating("MSFT", "HOLD", None, None, None, 10).await.unwrap();
+
+        let (prices, quant, sentiment, analyst, _historical) = svc.get_cache_stats().await;
+        assert_eq!(prices, 2);
+        assert_eq!(quant, 1);
+        assert_eq!(sentiment, 1);
+        assert_eq!(analyst, 1);
+    }
+
+    #[tokio::test]
+    async fn test_clear_expired_cache() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        // Insert some data and then clear expired (fresh data won't be cleared)
+        svc.set_cached_price("AAPL", 150.0).await.unwrap();
+        let result = svc.clear_expired_cache().await;
+        assert!(result.is_ok());
+
+        // Data should still be there since it was just inserted
+        let price = svc.get_cached_price("AAPL").await;
+        assert!(price.is_some());
+    }
+
+    #[test]
+    fn test_is_cache_valid_rfc3339() {
+        let now = Utc::now().to_rfc3339();
+        assert!(DatabaseCacheService::is_cache_valid(&now, 1));
+    }
+
+    #[test]
+    fn test_is_cache_valid_naive_datetime() {
+        let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        assert!(DatabaseCacheService::is_cache_valid(&now, 1));
+    }
+
+    #[test]
+    fn test_is_cache_valid_invalid_string() {
+        assert!(!DatabaseCacheService::is_cache_valid("not-a-date", 1));
+    }
+
+    #[test]
+    fn test_is_cache_valid_expired() {
+        // A timestamp from 10 hours ago with TTL of 1 hour should be invalid
+        let old_time = (Utc::now() - Duration::hours(10)).to_rfc3339();
+        assert!(!DatabaseCacheService::is_cache_valid(&old_time, 1));
+    }
+
+    #[tokio::test]
+    async fn test_get_cached_fundamentals_miss_no_symbol() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        // Symbol doesn't exist → should return None
+        let result = svc.get_cached_fundamentals("NONEXISTENT").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_cached_fundamentals_with_data() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool.clone());
+
+        // Insert a symbol directly
+        sqlx::query("INSERT INTO symbols (ticker, status) VALUES ('AAPL', 'active')")
+            .execute(&pool).await.unwrap();
+        let sym_id: i64 = sqlx::query_scalar("SELECT id FROM symbols WHERE ticker = 'AAPL'")
+            .fetch_one(&pool).await.unwrap();
+
+        // Insert fundamentals directly with fresh timestamp
+        let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        sqlx::query(
+            "INSERT INTO fundamentals_overview (symbol_id, market_cap, pe_ratio, raw_json, updated_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(sym_id)
+        .bind(1_000_000_000.0_f64)
+        .bind(25.5_f64)
+        .bind(r#"{"pe":25.5}"#)
+        .bind(&now)
+        .execute(&pool).await.unwrap();
+
+        let result = svc.get_cached_fundamentals("AAPL").await;
+        assert!(result.is_some());
+        let f = result.unwrap();
+        assert_eq!(f.symbol, "AAPL");
+        assert!((f.market_cap.unwrap() - 1_000_000_000.0).abs() < 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_historical_prices() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        // Use today's date so it won't be considered stale
+        let today = Utc::now().date_naive();
+        let date_str = today.format("%Y-%m-%d").to_string();
+
+        let prices = vec![
+            (date_str.clone(), 148.0_f64, 152.0_f64, 147.0_f64, 150.0_f64, 1_000_000_i64),
+        ];
+
+        svc.set_cached_historical_prices("AAPL", &prices).await.unwrap();
+        let result = svc.get_cached_historical_prices("AAPL").await;
+        assert!(result.is_some());
+        let fetched = result.unwrap();
+        assert_eq!(fetched.len(), 1);
+        assert!((fetched[0].4 - 150.0).abs() < 1e-6); // close price
+    }
+
+    #[tokio::test]
+    async fn test_get_historical_prices_miss() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+        let result = svc.get_cached_historical_prices("NONEXISTENT").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_set_historical_prices_upsert() {
+        let pool = setup_db().await;
+        let svc = DatabaseCacheService::new(pool);
+
+        let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let prices1 = vec![(today.clone(), 148.0_f64, 152.0_f64, 147.0_f64, 150.0_f64, 1_000_000_i64)];
+        let prices2 = vec![(today.clone(), 155.0_f64, 160.0_f64, 154.0_f64, 158.0_f64, 2_000_000_i64)];
+
+        svc.set_cached_historical_prices("AAPL", &prices1).await.unwrap();
+        svc.set_cached_historical_prices("AAPL", &prices2).await.unwrap();
+
+        let result = svc.get_cached_historical_prices("AAPL").await;
+        assert!(result.is_some());
+        // Should have updated to prices2 values
+        assert!((result.unwrap()[0].4 - 158.0).abs() < 1e-6);
+    }
+}

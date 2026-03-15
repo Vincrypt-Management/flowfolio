@@ -45,3 +45,4 @@ impl Store {
         "Local SQLite database in app data directory".to_string()
     }
 }
+

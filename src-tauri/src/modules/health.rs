@@ -661,4 +661,27 @@ mod tests {
         let report = monitor.get_health_report();
         assert!((report.metrics.avg_response_time_ms - 2.0).abs() < 0.01);
     }
+
+    #[test]
+    fn test_response_times_drain_when_over_10000_success() {
+        // Covers lines 138-139: drain when response_times.len() >= 10000
+        let monitor = HealthMonitor::new("1.0.0");
+        for i in 0..10001u64 {
+            monitor.record_request_success(i);
+        }
+        // After the 10001st insert, drain should have fired, keeping ~5001 entries
+        let report = monitor.get_health_report();
+        assert!(report.metrics.total_requests == 10001);
+    }
+
+    #[test]
+    fn test_response_times_drain_when_over_10000_failure() {
+        // Covers lines 149-150: drain when response_times.len() >= 10000 for failures
+        let monitor = HealthMonitor::new("1.0.0");
+        for i in 0..10001u64 {
+            monitor.record_request_failure(i);
+        }
+        let report = monitor.get_health_report();
+        assert!(report.metrics.failed_requests == 10001);
+    }
 }

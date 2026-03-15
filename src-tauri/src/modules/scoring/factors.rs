@@ -579,6 +579,41 @@ mod tests {
         assert!(approx_eq(score, 100.0, 0.01));
     }
 
+    #[test]
+    fn test_growth_score_with_revenue_growth_3y() {
+        // Covers lines 165-167: revenue_growth_3y branch in growth_score()
+        let metrics = FinancialMetrics {
+            revenue_growth_3y: Some(0.10),
+            ..Default::default()
+        };
+        let score = metrics.growth_score();
+        assert!(score.is_some());
+        assert!(score.unwrap() > 0.0);
+    }
+
+    #[test]
+    fn test_dividend_score_high_payout_lowers_score() {
+        // Covers line 273: normalize_payout_ratio with payout >= 0.60
+        // payout = 0.80 → (100 - (0.80-0.60)/0.40*75) = (100 - 37.5) = 62.5
+        let metrics = FinancialMetrics {
+            payout_ratio: Some(0.80),
+            ..Default::default()
+        };
+        let score = metrics.dividend_score().unwrap();
+        assert!(approx_eq(score, 62.5, 0.5));
+    }
+
+    #[test]
+    fn test_dividend_score_very_high_payout_clamped_to_zero() {
+        // payout = 1.20 → (100 - (1.20-0.60)/0.40*75).max(0) = (100 - 112.5).max(0) = 0
+        let metrics = FinancialMetrics {
+            payout_ratio: Some(1.20),
+            ..Default::default()
+        };
+        let score = metrics.dividend_score().unwrap();
+        assert!(approx_eq(score, 0.0, 0.01));
+    }
+
     // --- Normalization helpers via public scoring methods ---
 
     #[test]

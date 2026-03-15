@@ -236,3 +236,290 @@ impl Repository {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn setup_db() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create in-memory SQLite pool");
+
+        // Create required tables
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS symbols (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL UNIQUE,
+                exchange TEXT,
+                name TEXT,
+                currency TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS prices_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol_id INTEGER NOT NULL,
+                date DATE NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                adj_close REAL,
+                volume INTEGER NOT NULL,
+                UNIQUE(symbol_id, date)
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS fundamentals_overview (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol_id INTEGER NOT NULL,
+                market_cap REAL,
+                pe_ratio REAL,
+                pb_ratio REAL,
+                dividend_yield REAL,
+                eps REAL,
+                roe REAL,
+                roic REAL,
+                raw_json TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS vibe_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                script_json TEXT NOT NULL,
+                compiled_json TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS journal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_id INTEGER NOT NULL,
+                timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                event_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                plan_version_hash TEXT NOT NULL
+            )"
+        ).execute(&pool).await.unwrap();
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS refresh_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
+                symbol TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                scheduled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                last_error TEXT
+            )"
+        ).execute(&pool).await.unwrap();
+
+        pool
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_symbol() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let id = repo.create_symbol("AAPL", Some("NASDAQ"), Some("Apple Inc")).await.unwrap();
+        assert!(id > 0);
+
+        let sym = repo.get_symbol_by_ticker("AAPL").await.unwrap();
+        assert!(sym.is_some());
+        let sym = sym.unwrap();
+        assert_eq!(sym.ticker, "AAPL");
+        assert_eq!(sym.exchange, Some("NASDAQ".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_symbol_not_found() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+        let result = repo.get_symbol_by_ticker("NONEXISTENT").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_symbols() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        repo.create_symbol("AAPL", None, None).await.unwrap();
+        repo.create_symbol("MSFT", None, None).await.unwrap();
+
+        let symbols = repo.list_symbols(10).await.unwrap();
+        assert_eq!(symbols.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_insert_and_get_price() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
+        let price_id = repo.insert_price(sym_id, "2024-01-15", 150.0, 155.0, 148.0, 152.0, 1000000).await.unwrap();
+        assert!(price_id > 0);
+
+        let prices = repo.get_prices_for_symbol(sym_id, 10).await.unwrap();
+        assert_eq!(prices.len(), 1);
+        assert!((prices[0].close - 152.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_price_date() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
+        repo.insert_price(sym_id, "2024-01-10", 148.0, 150.0, 147.0, 149.0, 500000).await.unwrap();
+        repo.insert_price(sym_id, "2024-01-15", 150.0, 155.0, 148.0, 152.0, 1000000).await.unwrap();
+
+        let date = repo.get_latest_price_date(sym_id).await.unwrap();
+        assert!(date.is_some());
+        assert_eq!(date.unwrap(), "2024-01-15");
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_price_date_empty() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+        let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
+        let date = repo.get_latest_price_date(sym_id).await.unwrap();
+        assert!(date.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_plan() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let script = r#"{"name":"Growth Plan"}"#;
+        let plan_id = repo.create_plan("Growth Plan", script).await.unwrap();
+        assert!(plan_id > 0);
+
+        let plan = repo.get_plan(plan_id).await.unwrap();
+        assert!(plan.is_some());
+        let plan = plan.unwrap();
+        assert_eq!(plan.name, "Growth Plan");
+        assert_eq!(plan.script_json, script);
+    }
+
+    #[tokio::test]
+    async fn test_update_plan() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let plan_id = repo.create_plan("Plan A", r#"{"v":1}"#).await.unwrap();
+        repo.update_plan(plan_id, r#"{"v":2}"#, Some(r#"{"compiled":true}"#)).await.unwrap();
+
+        let plan = repo.get_plan(plan_id).await.unwrap().unwrap();
+        assert_eq!(plan.script_json, r#"{"v":2}"#);
+        assert_eq!(plan.compiled_json, Some(r#"{"compiled":true}"#.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_list_plans() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        repo.create_plan("Plan A", "{}").await.unwrap();
+        repo.create_plan("Plan B", "{}").await.unwrap();
+
+        let plans = repo.list_plans().await.unwrap();
+        assert_eq!(plans.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_journal_entry() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let plan_id = repo.create_plan("Plan", "{}").await.unwrap();
+        let entry_id = repo.create_journal_entry(plan_id, "TRADE", r#"{"symbol":"AAPL"}"#, "hash123").await.unwrap();
+        assert!(entry_id > 0);
+
+        let entries = repo.get_journal_entries(plan_id, 10).await.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].event_type, "TRADE");
+    }
+
+    #[tokio::test]
+    async fn test_upsert_and_get_fundamental() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
+        let raw = r#"{"pe_ratio":25.5}"#;
+        let fund_id = repo.upsert_fundamental(sym_id, raw).await.unwrap();
+        assert!(fund_id > 0);
+
+        let fund = repo.get_fundamental(sym_id).await.unwrap();
+        assert!(fund.is_some());
+        assert_eq!(fund.unwrap().raw_json, raw);
+    }
+
+    #[tokio::test]
+    async fn test_upsert_fundamental_replaces_existing() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
+        repo.upsert_fundamental(sym_id, r#"{"v":1}"#).await.unwrap();
+        repo.upsert_fundamental(sym_id, r#"{"v":2}"#).await.unwrap();
+
+        let fund = repo.get_fundamental(sym_id).await.unwrap().unwrap();
+        assert_eq!(fund.raw_json, r#"{"v":2}"#);
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_pending_jobs() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let job_id = repo.create_refresh_job("alphavantage", "/quote", Some("AAPL")).await.unwrap();
+        assert!(job_id > 0);
+
+        let jobs = repo.get_pending_jobs(10).await.unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].provider, "alphavantage");
+    }
+
+    #[tokio::test]
+    async fn test_update_job_status() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let job_id = repo.create_refresh_job("finnhub", "/quote", None).await.unwrap();
+        repo.update_job_status(job_id, "completed", None).await.unwrap();
+
+        let pending = repo.get_pending_jobs(10).await.unwrap();
+        assert!(pending.is_empty(), "Completed job should not be in pending");
+    }
+
+    #[tokio::test]
+    async fn test_update_job_status_with_error() {
+        let pool = setup_db().await;
+        let repo = Repository::new(pool);
+
+        let job_id = repo.create_refresh_job("polygon", "/aggs", Some("SPY")).await.unwrap();
+        repo.update_job_status(job_id, "failed", Some("Rate limit exceeded")).await.unwrap();
+
+        let pending = repo.get_pending_jobs(10).await.unwrap();
+        assert!(pending.is_empty());
+    }
+}

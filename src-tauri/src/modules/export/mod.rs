@@ -16,3 +16,18 @@ impl ExportManager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_export_bundle_ok() {
+        assert!(ExportManager::export_bundle("/tmp/test.bundle").is_ok());
+    }
+
+    #[test]
+    fn test_import_bundle_ok() {
+        assert!(ExportManager::import_bundle("/tmp/test.bundle").is_ok());
+    }
+}

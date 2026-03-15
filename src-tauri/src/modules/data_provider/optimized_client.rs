@@ -121,7 +121,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_behavior() {
         let client = OptimizedDataClient::new(60);
-        
+
         // First fetch should hit API
         let url = "https://httpbin.org/json".to_string();
         let result1 = client.fetch_cached(url.clone()).await;
@@ -132,5 +132,44 @@ mod tests {
         assert!(result2.is_ok());
 
         assert_eq!(client.cache_size(), 1);
+    }
+
+    #[test]
+    fn test_clear_cache() {
+        // Covers lines 99-101: clear_cache() function
+        let client = OptimizedDataClient::new(60);
+        // Manually insert into cache
+        client.cache.insert("key".to_string(), (serde_json::json!({}), SystemTime::now()));
+        assert_eq!(client.cache_size(), 1);
+        client.clear_cache();
+        assert_eq!(client.cache_size(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_cache_removes_expired() {
+        // Covers lines 109-114: cleanup_cache removes expired entries
+        let client = OptimizedDataClient::new(1); // 1 second TTL
+        // Insert an old entry by using UNIX_EPOCH (way in the past)
+        client.cache.insert(
+            "old_key".to_string(),
+            (serde_json::json!({"k": 1}), SystemTime::UNIX_EPOCH),
+        );
+        client.cache.insert(
+            "new_key".to_string(),
+            (serde_json::json!({"k": 2}), SystemTime::now()),
+        );
+        assert_eq!(client.cache_size(), 2);
+        client.cleanup_cache();
+        // Old entry should be removed, new one kept
+        assert_eq!(client.cache_size(), 1);
+        assert!(client.cache.contains_key("new_key"));
+    }
+
+    #[tokio::test]
+    async fn test_batch_fetch_empty() {
+        // Covers lines 88, 91-95: batch_fetch with empty URL list
+        let client = OptimizedDataClient::new(60);
+        let results = client.batch_fetch(vec![], 5).await;
+        assert!(results.is_empty());
     }
 }

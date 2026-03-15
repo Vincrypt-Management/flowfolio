@@ -450,4 +450,20 @@ mod tests {
             _ => panic!("Expected Progress"),
         }
     }
+
+    #[test]
+    fn test_progress_manager_default() {
+        // Covers Default impl (lines 184-185)
+        let manager = ProgressManager::default();
+        let _ = manager.subscribe();
+    }
+
+    #[test]
+    fn test_progress_manager_sender_returns_arc() {
+        // Covers sender() method (lines 178-179)
+        let manager = ProgressManager::new();
+        let sender = manager.sender();
+        // Verify it's an Arc by cloning it
+        let _sender2 = sender.clone();
+    }
 }

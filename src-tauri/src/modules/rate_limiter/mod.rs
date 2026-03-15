@@ -44,12 +44,20 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limiter() {
         let limiter = RateLimiter::new_daily(5);
-        
+
         for _ in 0..5 {
             assert!(limiter.check("test".to_string()).await.is_ok());
         }
-        
+
         // Next request should fail
         assert!(limiter.check("test".to_string()).await.is_err());
+    }
+
+    #[test]
+    fn test_remaining_capacity_returns_placeholder() {
+        let limiter = RateLimiter::new_daily(100);
+        let cap = limiter.remaining_capacity("any_key");
+        // The function always returns 25 as a placeholder
+        assert_eq!(cap, 25);
     }
 }

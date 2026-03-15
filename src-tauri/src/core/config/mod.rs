@@ -138,3 +138,74 @@ impl AppConfig {
 lazy_static::lazy_static! {
     pub static ref CONFIG: AppConfig = AppConfig::from_env();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_config_defaults() {
+        let cfg = CacheConfig::default();
+        assert_eq!(cfg.quote_ttl, Duration::from_secs(120));
+        assert_eq!(cfg.historical_ttl, Duration::from_secs(7200));
+        assert_eq!(cfg.fundamental_ttl, Duration::from_secs(172800));
+        assert_eq!(cfg.quant_ttl, Duration::from_secs(14400));
+        assert_eq!(cfg.quote_max_entries, 1000);
+        assert_eq!(cfg.historical_max_entries, 500);
+    }
+
+    #[test]
+    fn test_rate_limit_config_defaults() {
+        let cfg = RateLimitConfig::default();
+        assert_eq!(cfg.finnhub, 50);
+        assert_eq!(cfg.tiingo, 7);
+        assert_eq!(cfg.polygon, 4);
+        assert_eq!(cfg.alphavantage, 4);
+        assert_eq!(cfg.fmp, 4);
+    }
+
+    #[test]
+    fn test_circuit_breaker_config_defaults() {
+        let cfg = CircuitBreakerConfig::default();
+        assert_eq!(cfg.failure_threshold, 5);
+        assert_eq!(cfg.open_duration, Duration::from_secs(30));
+        assert_eq!(cfg.success_threshold, 3);
+        assert_eq!(cfg.failure_window, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_retry_config_defaults() {
+        let cfg = RetryConfig::default();
+        assert_eq!(cfg.max_retries, 3);
+        assert_eq!(cfg.initial_delay, Duration::from_millis(100));
+        assert_eq!(cfg.max_delay, Duration::from_secs(10));
+        assert!((cfg.backoff_multiplier - 2.0).abs() < f64::EPSILON);
+        assert!(cfg.jitter);
+    }
+
+    #[test]
+    fn test_app_config_default() {
+        let cfg = AppConfig::default();
+        assert_eq!(cfg.cache.quote_ttl, Duration::from_secs(120));
+        assert_eq!(cfg.rate_limits.finnhub, 50);
+        assert_eq!(cfg.circuit_breaker.failure_threshold, 5);
+        assert_eq!(cfg.retry.max_retries, 3);
+    }
+
+    #[test]
+    fn test_app_config_from_env() {
+        let cfg = AppConfig::from_env();
+        // from_env currently delegates to default
+        assert_eq!(cfg.cache.quote_ttl, Duration::from_secs(120));
+        assert_eq!(cfg.rate_limits.polygon, 4);
+    }
+
+    #[test]
+    fn test_cache_ttl_ordering() {
+        let cfg = CacheConfig::default();
+        // quote < historical < quant < fundamental
+        assert!(cfg.quote_ttl < cfg.historical_ttl);
+        assert!(cfg.historical_ttl < cfg.quant_ttl);
+        assert!(cfg.quant_ttl < cfg.fundamental_ttl);
+    }
+}

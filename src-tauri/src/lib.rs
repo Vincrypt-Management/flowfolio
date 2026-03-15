@@ -2404,3 +2404,470 @@ fn get_database_status() -> serde_json::Value {
         "cache_type": if initialized { "sqlite" } else { "memory" }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== Helper builders =====
+
+    fn make_quant_metrics(sharpe: f64, annual_return: f64, volatility: f64, max_dd: f64, rsi: f64, signal: &str) -> QuantMetrics {
+        QuantMetrics {
+            symbol: "TEST".to_string(),
+            sharpe_ratio: sharpe,
+            annualized_return: annual_return,
+            volatility,
+            max_drawdown: max_dd,
+            rsi,
+            signal: signal.to_string(),
+            confidence: 75.0,
+            sortino_ratio: None,
+            calmar_ratio: None,
+            beta: None,
+            alpha: None,
+            var_95: None,
+            omega_ratio: None,
+            tail_ratio: None,
+            skewness: None,
+            kurtosis: None,
+            ulcer_index: None,
+            gain_to_loss_ratio: None,
+            win_rate: None,
+            daily_returns: None,
+        }
+    }
+
+    fn make_fund(
+        profit_margin: Option<f64>,
+        roa: Option<f64>,
+        fcf: Option<f64>,
+        de: Option<f64>,
+        current_ratio: Option<f64>,
+        op_margin: Option<f64>,
+        rev_growth: Option<f64>,
+        eps: Option<f64>,
+        pb: Option<f64>,
+        pe: Option<f64>,
+        div_yield: Option<f64>,
+        payout: Option<f64>,
+    ) -> FundamentalMetrics {
+        FundamentalMetrics {
+            symbol: "TEST".to_string(),
+            company_name: "Test Co".to_string(),
+            sector: "Technology".to_string(),
+            industry: "Software".to_string(),
+            market_cap: 1_000_000_000.0,
+            pe_ratio: pe,
+            forward_pe: None,
+            peg_ratio: None,
+            price_to_book: pb,
+            price_to_sales: None,
+            ev_to_ebitda: None,
+            profit_margin,
+            operating_margin: op_margin,
+            return_on_assets: roa,
+            return_on_equity: None,
+            revenue_growth_yoy: rev_growth,
+            earnings_growth_yoy: None,
+            debt_to_equity: de,
+            current_ratio,
+            quick_ratio: None,
+            free_cash_flow: fcf,
+            dividend_yield: div_yield,
+            payout_ratio: payout,
+            eps,
+            beta: None,
+            fifty_two_week_high: None,
+            fifty_two_week_low: None,
+            source: "test".to_string(),
+            last_updated: "2024-01-01".to_string(),
+        }
+    }
+
+    // ===== momentum_score_from_rsi tests =====
+
+    #[test]
+    fn test_momentum_rsi_oversold() {
+        let score = momentum_score_from_rsi(20.0, "BUY");
+        // rsi < 30: 80 + (30 - 20) = 90, signal BUY +10 = 100, capped at 100
+        assert!((score - 100.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_momentum_rsi_overbought() {
+        let score = momentum_score_from_rsi(80.0, "SELL");
+        // rsi > 70: 50 - (80 - 70) = 40, signal SELL -10 = 30
+        assert!((score - 30.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_momentum_rsi_neutral_hold() {
+        let score = momentum_score_from_rsi(50.0, "HOLD");
+        // rsi in neutral: 50 + |50-50| * 0.5 = 50, signal HOLD +0
+        assert!((score - 50.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_momentum_strong_buy_signal() {
+        let score = momentum_score_from_rsi(50.0, "STRONG BUY");
+        // neutral rsi = 50, STRONG BUY +15 = 65
+        assert!((score - 65.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_momentum_strong_sell_clamps_to_zero() {
+        // RSI=75 (overbought): 50 - 5 = 45, STRONG SELL -15 = 30
+        let score = momentum_score_from_rsi(75.0, "STRONG SELL");
+        assert!(score >= 0.0);
+        assert!(score <= 100.0);
+    }
+
+    #[test]
+    fn test_momentum_unknown_signal() {
+        let score = momentum_score_from_rsi(50.0, "UNKNOWN");
+        // No adjustment for unknown signal
+        assert!((score - 50.0).abs() < 1.0);
+    }
+
+    // ===== quality_score_from_sharpe tests =====
+
+    #[test]
+    fn test_quality_high_sharpe_low_vol() {
+        let score = quality_score_from_sharpe(2.5, 10.0);
+        // sharpe > 2: 90, vol < 15: +10 = 100
+        assert!((score - 100.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_quality_negative_sharpe_high_vol() {
+        let score = quality_score_from_sharpe(-1.0, 50.0);
+        // sharpe < 0: (50 + (-1)*10).max(0) = 40, vol > 40: -10 = 30
+        assert!((score - 30.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_quality_clamped_to_0_100() {
+        let score = quality_score_from_sharpe(-10.0, 100.0);
+        assert!(score >= 0.0);
+        assert!(score <= 100.0);
+    }
+
+    #[test]
+    fn test_quality_moderate_sharpe() {
+        let score = quality_score_from_sharpe(1.2, 20.0);
+        // sharpe > 1: 70, vol 15-25: +5 = 75
+        assert!((score - 75.0).abs() < 1.0);
+    }
+
+    // ===== value_score_from_vol tests =====
+
+    #[test]
+    fn test_value_low_vol_low_dd() {
+        let score = value_score_from_vol(10.0, 5.0);
+        // vol < 15: 85, dd < 10: +10 = 95
+        assert!((score - 95.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_value_high_vol_high_dd() {
+        let score = value_score_from_vol(60.0, 40.0);
+        // vol > 50: 25, dd > 30: -20 = 5
+        assert!((score - 5.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_value_clamped() {
+        let score = value_score_from_vol(100.0, 100.0);
+        assert!(score >= 0.0);
+        assert!(score <= 100.0);
+    }
+
+    // ===== growth_score_from_return tests =====
+
+    #[test]
+    fn test_growth_high_return() {
+        assert!((growth_score_from_return(35.0) - 95.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_growth_moderate_return() {
+        assert!((growth_score_from_return(15.0) - 70.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_growth_negative_return() {
+        assert!((growth_score_from_return(-15.0) - 20.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_growth_zero_return() {
+        let score = growth_score_from_return(0.0);
+        // 0 is not > 0, not > -10, so 20
+        // Actually 0 fails `r > 0.0`, falls to `r > -10.0` → 35
+        assert!((score - 35.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_growth_small_positive() {
+        let score = growth_score_from_return(3.0);
+        // > 0.0 → 50
+        assert!((score - 50.0).abs() < 1.0);
+    }
+
+    // ===== calculate_quick_score tests =====
+
+    #[test]
+    fn test_quick_score_strong_buy_good_metrics() {
+        let m = make_quant_metrics(2.0, 25.0, 20.0, 15.0, 60.0, "STRONG BUY");
+        let score = calculate_quick_score(&m);
+        assert!(score > 50.0, "Expected score > 50, got {}", score);
+    }
+
+    #[test]
+    fn test_quick_score_bad_metrics() {
+        let m = make_quant_metrics(-1.0, 0.0, 80.0, 60.0, 50.0, "SELL");
+        let score = calculate_quick_score(&m);
+        assert!(score >= 0.0);
+    }
+
+    #[test]
+    fn test_quick_score_hold_signal() {
+        let m = make_quant_metrics(1.0, 10.0, 25.0, 20.0, 50.0, "HOLD");
+        let score = calculate_quick_score(&m);
+        // sharpe*15=15 capped at 30 → 15, return*0.5=5, (50-25)*0.3=7.5, (40-20)*0.375=7.5, HOLD=5 → 40
+        assert!(score > 0.0);
+    }
+
+    // ===== is_etf_symbol tests =====
+
+    #[test]
+    fn test_is_etf_spy() {
+        assert!(is_etf_symbol("SPY"));
+    }
+
+    #[test]
+    fn test_is_etf_qqq() {
+        assert!(is_etf_symbol("QQQ"));
+    }
+
+    #[test]
+    fn test_is_etf_not_stock() {
+        assert!(!is_etf_symbol("AAPL"));
+    }
+
+    #[test]
+    fn test_is_etf_suffix() {
+        assert!(is_etf_symbol("MYETF"));
+    }
+
+    #[test]
+    fn test_is_etf_treasury_keyword() {
+        assert!(is_etf_symbol("US_TREASURY_FUND"));
+    }
+
+    #[test]
+    fn test_is_etf_case_insensitive() {
+        assert!(is_etf_symbol("spy"));
+    }
+
+    // ===== is_bond_etf_symbol tests =====
+
+    #[test]
+    fn test_is_bond_etf_bnd() {
+        assert!(is_bond_etf_symbol("BND"));
+    }
+
+    #[test]
+    fn test_is_bond_etf_tlt() {
+        assert!(is_bond_etf_symbol("TLT"));
+    }
+
+    #[test]
+    fn test_is_bond_etf_not_equity() {
+        assert!(!is_bond_etf_symbol("SPY"));
+    }
+
+    #[test]
+    fn test_is_bond_etf_bond_keyword() {
+        assert!(is_bond_etf_symbol("MYBONDFUND"));
+    }
+
+    // ===== get_etf_info tests =====
+
+    #[test]
+    fn test_get_etf_info_spy() {
+        let (cat, strategy, index) = get_etf_info("SPY", false);
+        assert_eq!(cat, "U.S. Large Cap");
+        assert_eq!(strategy, "Passive Index");
+        assert_eq!(index.as_deref(), Some("S&P 500"));
+    }
+
+    #[test]
+    fn test_get_etf_info_tlt_bond() {
+        let (cat, strategy, _) = get_etf_info("TLT", true);
+        assert_eq!(cat, "Long-Term Treasury");
+        assert_eq!(strategy, "Passive Index");
+    }
+
+    #[test]
+    fn test_get_etf_info_qqq() {
+        let (cat, _, index) = get_etf_info("QQQ", false);
+        assert_eq!(cat, "U.S. Large Cap Growth");
+        assert_eq!(index.as_deref(), Some("NASDAQ-100"));
+    }
+
+    #[test]
+    fn test_get_etf_info_sector_xl() {
+        let (cat, _, _) = get_etf_info("XLK", false);
+        assert_eq!(cat, "U.S. Sector");
+    }
+
+    #[test]
+    fn test_get_etf_info_ark() {
+        let (cat, _, _) = get_etf_info("ARKK", false);
+        assert_eq!(cat, "Thematic Growth");
+    }
+
+    // ===== get_estimated_expense_ratio tests =====
+
+    #[test]
+    fn test_expense_ratio_vanguard() {
+        let er = get_estimated_expense_ratio("VOO");
+        assert_eq!(er, Some(0.03));
+    }
+
+    #[test]
+    fn test_expense_ratio_spy() {
+        let er = get_estimated_expense_ratio("SPY");
+        assert_eq!(er, Some(0.09));
+    }
+
+    #[test]
+    fn test_expense_ratio_ark() {
+        let er = get_estimated_expense_ratio("ARKK");
+        assert_eq!(er, Some(0.75));
+    }
+
+    #[test]
+    fn test_expense_ratio_sector() {
+        let er = get_estimated_expense_ratio("XLK");
+        assert_eq!(er, Some(0.09));
+    }
+
+    #[test]
+    fn test_expense_ratio_default() {
+        let er = get_estimated_expense_ratio("SOMEUNKNOWN");
+        assert_eq!(er, Some(0.20));
+    }
+
+    // ===== calculate_altman_z_estimate tests =====
+
+    #[test]
+    fn test_altman_z_insufficient_components() {
+        // Only 1 field provided → None
+        let fund = make_fund(None, Some(0.1), None, None, None, None, None, None, None, None, None, None);
+        assert!(calculate_altman_z_estimate(&fund).is_none());
+    }
+
+    #[test]
+    fn test_altman_z_enough_components() {
+        let fund = make_fund(Some(0.15), Some(0.10), None, Some(0.5), Some(2.0), Some(0.20), None, None, None, None, None, None);
+        let z = calculate_altman_z_estimate(&fund);
+        assert!(z.is_some());
+        let val = z.unwrap();
+        assert!(val >= 0.0 && val <= 5.0);
+    }
+
+    #[test]
+    fn test_altman_z_safe_zone() {
+        // Strong financials
+        let fund = make_fund(Some(0.20), Some(0.15), None, Some(0.3), Some(2.5), Some(0.25), None, None, None, None, None, None);
+        let z = calculate_altman_z_estimate(&fund);
+        assert!(z.is_some());
+    }
+
+    // ===== calculate_piotroski_estimate tests =====
+
+    #[test]
+    fn test_piotroski_insufficient_criteria() {
+        // Only 2 criteria — None
+        let fund = make_fund(Some(0.1), None, None, None, None, None, None, None, None, None, None, None);
+        assert!(calculate_piotroski_estimate(&fund).is_none());
+    }
+
+    #[test]
+    fn test_piotroski_strong_company() {
+        let fund = make_fund(Some(0.15), Some(0.10), Some(1_000_000.0), Some(0.5), Some(2.0), Some(0.15), Some(0.10), None, None, None, None, None);
+        let score = calculate_piotroski_estimate(&fund);
+        assert!(score.is_some());
+        let val = score.unwrap();
+        assert!(val >= 0 && val <= 9);
+    }
+
+    #[test]
+    fn test_piotroski_weak_company() {
+        let fund = make_fund(Some(-0.10), Some(-0.05), Some(-500_000.0), Some(3.0), Some(0.8), Some(-0.05), Some(-0.10), None, None, None, None, None);
+        let score = calculate_piotroski_estimate(&fund);
+        assert!(score.is_some());
+        let val = score.unwrap();
+        assert!(val >= 0 && val <= 9);
+    }
+
+    // ===== calculate_graham_number tests =====
+
+    #[test]
+    fn test_graham_number_no_eps() {
+        let fund = make_fund(None, None, None, None, None, None, None, None, Some(2.0), Some(20.0), None, None);
+        assert!(calculate_graham_number(&fund).is_none());
+    }
+
+    #[test]
+    fn test_graham_number_negative_eps() {
+        let fund = make_fund(None, None, None, None, None, None, None, Some(-1.0), Some(2.0), Some(20.0), None, None);
+        assert!(calculate_graham_number(&fund).is_none());
+    }
+
+    #[test]
+    fn test_graham_number_valid() {
+        // EPS=5, P/B=2, P/E=20 → price=100, book=50, graham = sqrt(22.5*5*50) = sqrt(5625) = 75
+        let fund = make_fund(None, None, None, None, None, None, None, Some(5.0), Some(2.0), Some(20.0), None, None);
+        let g = calculate_graham_number(&fund);
+        assert!(g.is_some());
+        assert!((g.unwrap() - 75.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_graham_number_no_pe() {
+        let fund = make_fund(None, None, None, None, None, None, None, Some(5.0), Some(2.0), None, None, None);
+        assert!(calculate_graham_number(&fund).is_none());
+    }
+
+    // ===== assess_dividend_safety tests =====
+
+    #[test]
+    fn test_dividend_safety_no_yield() {
+        let fund = make_fund(None, None, None, None, None, None, None, None, None, None, Some(0.0), None);
+        assert!(assess_dividend_safety(&fund).is_none());
+    }
+
+    #[test]
+    fn test_dividend_safety_very_safe() {
+        let fund = make_fund(Some(0.15), None, Some(1_000_000.0), Some(0.5), None, None, None, None, None, None, Some(0.03), Some(0.30));
+        let safety = assess_dividend_safety(&fund);
+        assert_eq!(safety.as_deref(), Some("very_safe"));
+    }
+
+    #[test]
+    fn test_dividend_safety_at_risk() {
+        let fund = make_fund(Some(-0.05), None, Some(-1.0), Some(2.0), None, None, None, None, None, None, Some(0.05), Some(0.90));
+        let safety = assess_dividend_safety(&fund);
+        assert_eq!(safety.as_deref(), Some("at_risk"));
+    }
+
+    #[test]
+    fn test_dividend_safety_cutting() {
+        let fund = make_fund(Some(-0.10), None, Some(-1.0), Some(3.0), None, None, None, None, None, None, Some(0.08), Some(1.20));
+        let safety = assess_dividend_safety(&fund);
+        assert_eq!(safety.as_deref(), Some("cutting"));
+    }
+}

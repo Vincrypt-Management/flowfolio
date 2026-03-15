@@ -587,4 +587,122 @@ mod tests {
         assert_ne!(CircuitState::Closed, CircuitState::Open);
         assert_ne!(CircuitState::Open, CircuitState::HalfOpen);
     }
+
+    #[test]
+    fn test_circuit_breaker_manager_default() {
+        // Covers Default impl (lines 268-269)
+        let manager = CircuitBreakerManager::default();
+        let b = manager.get_or_create("svc");
+        assert_eq!(b.state(), CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_manager_execute_success() {
+        // Covers manager execute() success path (lines 239-242)
+        let manager = CircuitBreakerManager::new();
+        let result = manager.execute("svc", async { Ok::<i32, &str>(42) }).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_manager_execute_service_error() {
+        // Covers manager execute() error path (lines 244-246)
+        let manager = CircuitBreakerManager::new();
+        let result = manager.execute("svc", async { Err::<i32, &str>("fail") }).await;
+        assert!(result.is_err());
+        match result {
+            Err(CircuitBreakerError::ServiceError(e)) => assert_eq!(e, "fail"),
+            _ => panic!("Expected ServiceError"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_manager_execute_open_rejects() {
+        // Covers manager execute() when circuit is open (lines 233-237)
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_secs(3600),
+            ..Default::default()
+        };
+        let manager = CircuitBreakerManager::with_config(config);
+        // Open the circuit
+        let _ = manager.execute("svc", async { Err::<i32, &str>("fail") }).await;
+        // Now it should be rejected
+        let result = manager.execute("svc", async { Ok::<i32, &str>(1) }).await;
+        assert!(result.is_err());
+        match result {
+            Err(CircuitBreakerError::Open { name }) => assert_eq!(name, "svc"),
+            _ => panic!("Expected Open error"),
+        }
+    }
+
+    #[test]
+    fn test_circuit_breaker_record_success_in_open_state() {
+        // Covers record_success() in Open state (lines 114-116 - graceful handling)
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_secs(3600),
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+        breaker.record_failure(); // opens circuit
+        assert_eq!(breaker.state(), CircuitState::Open);
+        // Calling record_success while Open - shouldn't panic
+        breaker.record_success();
+        // State remains Open (no transition)
+        assert_eq!(breaker.state(), CircuitState::Open);
+    }
+
+    #[test]
+    fn test_circuit_breaker_record_failure_while_open() {
+        // Covers record_failure() in Open state (lines 144-147)
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_secs(3600),
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+        breaker.record_failure(); // opens circuit
+        assert_eq!(breaker.state(), CircuitState::Open);
+        // Record another failure while Open - should update timestamp but stay Open
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+    }
+
+    #[test]
+    fn test_circuit_breaker_can_execute_half_open() {
+        // Covers can_execute() HalfOpen branch (line 91)
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            open_duration: Duration::from_millis(1),
+            success_threshold: 10,
+            ..Default::default()
+        };
+        let breaker = CircuitBreaker::new("test", config);
+        breaker.record_failure();
+        std::thread::sleep(Duration::from_millis(10));
+        // First can_execute transitions Open -> HalfOpen
+        assert!(breaker.can_execute());
+        assert_eq!(breaker.state(), CircuitState::HalfOpen);
+        // Second can_execute with HalfOpen state (line 91)
+        assert!(breaker.can_execute());
+    }
+
+    #[test]
+    fn test_circuit_breaker_error_source_open() {
+        // Covers std::error::Error source() for Open variant (line 298 - returns None)
+        use std::error::Error;
+        let err: CircuitBreakerError<std::io::Error> = CircuitBreakerError::Open { name: "x".to_string() };
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_circuit_breaker_error_source_service_error() {
+        // Covers std::error::Error source() for ServiceError variant (line 299 - returns Some)
+        use std::error::Error;
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let err: CircuitBreakerError<std::io::Error> = CircuitBreakerError::ServiceError(io_err);
+        assert!(err.source().is_some());
+    }
 }

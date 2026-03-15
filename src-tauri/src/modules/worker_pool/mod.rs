@@ -234,4 +234,40 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|r| r.is_ok()));
     }
+
+    #[tokio::test]
+    async fn test_execute_with_rate_limit_basic() {
+        // Covers execute_with_rate_limit (lines 45-75)
+        let pool = WorkerPool::new(2);
+        let tasks: Vec<BoxFut> = vec![
+            Box::pin(async { Ok::<_, String>(1) }),
+            Box::pin(async { Ok::<_, String>(2) }),
+            Box::pin(async { Ok::<_, String>(3) }),
+        ];
+        // Use 1ms delay to keep test fast
+        let results = pool.execute_with_rate_limit(tasks, 1).await;
+        assert_eq!(results.len(), 3);
+        assert!(results.iter().all(|r| r.is_ok()));
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_rate_limit_empty() {
+        let pool = WorkerPool::new(2);
+        let tasks: Vec<BoxFut> = vec![];
+        let results = pool.execute_with_rate_limit(tasks, 1).await;
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_rate_limit_error() {
+        let pool = WorkerPool::new(2);
+        let tasks: Vec<BoxFut> = vec![
+            Box::pin(async { Ok::<_, String>(1) }),
+            Box::pin(async { Err::<i32, String>("oops".to_string()) }),
+        ];
+        let results = pool.execute_with_rate_limit(tasks, 1).await;
+        assert_eq!(results.len(), 2);
+        assert!(results[0].is_ok());
+        assert!(results[1].is_err());
+    }
 }
