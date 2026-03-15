@@ -46,6 +46,7 @@ use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_store::StoreExt;
 
 // Global service instances
 lazy_static::lazy_static! {
@@ -2190,6 +2191,43 @@ async fn auth_is_configured() -> bool {
     AUTH_SERVICE.lock().await.is_some()
 }
 
+const API_KEYS_STORE: &str = "api-keys.json";
+const API_KEY_NAMES: &[&str] = &[
+    "alpaca_key", "alpaca_secret", "finnhub_key", "fmp_key",
+    "tiingo_key", "twelve_data_key", "polygon_key", "alpha_vantage_key", "openrouter_key",
+];
+
+#[tauri::command]
+async fn get_api_key_statuses(app: tauri::AppHandle) -> Result<std::collections::HashMap<String, bool>, String> {
+    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
+    let statuses = API_KEY_NAMES
+        .iter()
+        .map(|&key| {
+            let is_set = store
+                .get(key)
+                .map(|v| matches!(v, serde_json::Value::String(s) if !s.is_empty()))
+                .unwrap_or(false);
+            (key.to_string(), is_set)
+        })
+        .collect();
+    Ok(statuses)
+}
+
+#[tauri::command]
+async fn save_api_keys(
+    app: tauri::AppHandle,
+    keys: std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
+    for (key, value) in &keys {
+        if !value.is_empty() {
+            store.set(key.clone(), serde_json::Value::String(value.clone()));
+        }
+    }
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging for observability
@@ -2208,6 +2246,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_default_plan,
@@ -2291,6 +2330,8 @@ pub fn run() {
             auth_deduct_credits,
             auth_get_credits,
             auth_is_configured,
+            get_api_key_statuses,
+            save_api_keys,
         ])
         .setup(|app| {
             // Initialize local database for caching

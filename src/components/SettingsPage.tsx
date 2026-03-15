@@ -1,12 +1,36 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useUserProfile, AccountType } from '../contexts/UserProfileContext';
-import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle } from 'lucide-react';
+import { invoke } from '../services/tauri';
+import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+
+const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }> = [
+  { key: 'alpaca_key',        label: 'Alpaca API Key',    placeholder: 'Enter key…' },
+  { key: 'alpaca_secret',     label: 'Alpaca Secret',     placeholder: 'Enter secret…' },
+  { key: 'finnhub_key',       label: 'Finnhub Key',       placeholder: 'Enter key…' },
+  { key: 'fmp_key',           label: 'FMP Key',           placeholder: 'Enter key…' },
+  { key: 'tiingo_key',        label: 'Tiingo Key',        placeholder: 'Enter key…' },
+  { key: 'twelve_data_key',   label: 'Twelve Data Key',   placeholder: 'Enter key…' },
+  { key: 'polygon_key',       label: 'Polygon Key',       placeholder: 'Enter key…' },
+  { key: 'alpha_vantage_key', label: 'Alpha Vantage Key', placeholder: 'Enter key…' },
+  { key: 'openrouter_key',    label: 'OpenRouter Key',    placeholder: 'Enter key…' },
+];
 import './SettingsPage.css';
 
 export function SettingsPage() {
   const { profile, updateProfile, resetProfile } = useUserProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
+
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [apiKeyStatuses, setApiKeyStatuses] = useState<Record<string, boolean>>({});
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [apiKeysSaved, setApiKeysSaved] = useState(false);
+
+  useEffect(() => {
+    invoke<Record<string, boolean>>('get_api_key_statuses')
+      .then(setApiKeyStatuses)
+      .catch(() => {});
+  }, []);
 
   const [form, setForm] = useState({ ...profile });
 
@@ -43,6 +67,19 @@ export function SettingsPage() {
   const handleRemoveAvatar = useCallback(() => {
     setForm(prev => ({ ...prev, avatarUrl: '' }));
   }, []);
+
+  const handleSaveApiKeys = useCallback(async () => {
+    try {
+      await invoke('save_api_keys', { keys: apiKeys });
+      const updated = await invoke<Record<string, boolean>>('get_api_key_statuses');
+      setApiKeyStatuses(updated);
+      setApiKeys({});
+      setApiKeysSaved(true);
+      setTimeout(() => setApiKeysSaved(false), 2000);
+    } catch {
+      // silent
+    }
+  }, [apiKeys]);
 
   const handleReset = useCallback(() => {
     resetProfile();
@@ -220,6 +257,45 @@ export function SettingsPage() {
               <span className="pro-tag">PRO</span>
             </button>
           </div>
+        </div>
+
+        {/* API Keys Section */}
+        <div className="card settings-card" style={{ marginTop: '2rem' }}>
+          <h3>API Keys</h3>
+          <p className="text-muted" style={{ fontSize: '13px', marginBottom: '16px' }}>
+            Configure market data providers. Values are stored locally and never sent to any server.
+            Leave a field blank to keep the existing key.
+          </p>
+          {API_KEY_FIELDS.map(({ key, label, placeholder }) => (
+            <div key={key} className="form-group" style={{ position: 'relative' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {label}
+                {apiKeyStatuses[key] && (
+                  <CheckCircle2 size={14} style={{ color: 'var(--color-success, #22c55e)' }} />
+                )}
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type={showKeys[key] ? 'text' : 'password'}
+                  value={apiKeys[key] ?? ''}
+                  onChange={e => setApiKeys(prev => ({ ...prev, [key]: e.target.value }))}
+                  placeholder={apiKeyStatuses[key] ? '●●●●●●●● (configured)' : placeholder}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn-small"
+                  onClick={() => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }))}
+                  aria-label={showKeys[key] ? 'Hide' : 'Show'}
+                >
+                  {showKeys[key] ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+          ))}
+          <button className="btn-primary" onClick={handleSaveApiKeys} style={{ marginTop: '8px' }}>
+            {apiKeysSaved ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save API Keys</>}
+          </button>
         </div>
 
         {/* Actions */}
