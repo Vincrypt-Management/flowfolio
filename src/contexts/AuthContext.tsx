@@ -9,12 +9,14 @@ interface LocalUser {
   email: string;
 }
 
+// Compatibility shim — all auth operations are no-ops in offline mode.
+// User profile data comes from UserProfileContext (localStorage).
 interface AuthContextType {
   user: LocalUser | null;
   subscription: null;
   session: null;
-  loading: false;
-  isAuthenticated: true;
+  loading: boolean;
+  isAuthenticated: boolean;
   login: () => Promise<void>;
   register: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
