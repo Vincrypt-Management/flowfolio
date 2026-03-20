@@ -11,6 +11,7 @@ import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
 import { DEFAULT_SYMBOLS } from "./shared/constants";
 import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
+import { useSidebarTooltips, SidebarTooltip } from './features/onboarding/SidebarTooltips';
 import { TemplatesTab } from './features/templates/TemplatesTab';
 import { RankingsTab } from './features/rankings/RankingsTab';
 import { UniverseTab } from './features/universe/UniverseTab';
@@ -153,6 +154,9 @@ function App() {
 
   // Onboarding state
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+
+  const { isShown: isTooltipShown, dismiss: dismissTooltip, getContent: getTooltipContent } =
+    useSidebarTooltips(!!onboardingComplete);
 
   useEffect(() => {
     invokeWithResilience<string | null>('load_setting', { key: 'onboarding_complete' })
@@ -466,26 +470,42 @@ function App() {
       </div>
       
       <nav className="nav-menu" role="menubar" aria-label="Application sections">
-        <button 
-          className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
-          onClick={() => handleNavClick("dashboard")}
-          title={isSidebarCollapsed ? "Dashboard" : ""}
-          role="menuitem"
-          aria-current={activeTab === "dashboard" ? "page" : undefined}
-        >
-          <LayoutDashboard className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Dashboard</span>}
-        </button>
-        <button 
-          className={`nav-item ${activeTab === "vibe-studio" ? "active" : ""}`}
-          onClick={() => handleNavClick("vibe-studio")}
-          title={isSidebarCollapsed ? "Vibe Studio" : ""}
-          role="menuitem"
-          aria-current={activeTab === "vibe-studio" ? "page" : undefined}
-        >
-          <Sparkles className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Vibe Studio</span>}
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
+            onClick={() => handleNavClick("dashboard")}
+            title={isSidebarCollapsed ? "Dashboard" : ""}
+            role="menuitem"
+            aria-current={activeTab === "dashboard" ? "page" : undefined}
+          >
+            <LayoutDashboard className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Dashboard</span>}
+          </button>
+          <SidebarTooltip
+            tab="dashboard"
+            isShown={isTooltipShown('dashboard')}
+            content={getTooltipContent('dashboard')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "vibe-studio" ? "active" : ""}`}
+            onClick={() => handleNavClick("vibe-studio")}
+            title={isSidebarCollapsed ? "Vibe Studio" : ""}
+            role="menuitem"
+            aria-current={activeTab === "vibe-studio" ? "page" : undefined}
+          >
+            <Sparkles className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Vibe Studio</span>}
+          </button>
+          <SidebarTooltip
+            tab="vibe_studio"
+            isShown={isTooltipShown('vibe_studio')}
+            content={getTooltipContent('vibe_studio')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
         <button 
           className={`nav-item ${activeTab === "saved-portfolios" ? "active" : ""}`}
           onClick={() => handleNavClick("saved-portfolios")}
@@ -497,69 +517,117 @@ function App() {
           {!isSidebarCollapsed && <span>Saved Portfolios</span>}
         </button>
         {isAdvanced && (
-        <button 
-          className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
-          onClick={() => handleNavClick("templates")}
-          title={isSidebarCollapsed ? "Templates" : ""}
-          role="menuitem"
-          aria-current={activeTab === "templates" ? "page" : undefined}
-        >
-          <FileText className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Templates</span>}
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
+            onClick={() => handleNavClick("templates")}
+            title={isSidebarCollapsed ? "Templates" : ""}
+            role="menuitem"
+            aria-current={activeTab === "templates" ? "page" : undefined}
+          >
+            <FileText className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Templates</span>}
+          </button>
+          <SidebarTooltip
+            tab="templates"
+            isShown={isTooltipShown('templates')}
+            content={getTooltipContent('templates')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
         )}
         {isAdvanced && (
-        <button 
-          className={`nav-item ${activeTab === "rankings" ? "active" : ""}`}
-          onClick={() => handleNavClick("rankings")}
-          title={isSidebarCollapsed ? "Rankings" : ""}
-          role="menuitem"
-          aria-current={activeTab === "rankings" ? "page" : undefined}
-        >
-          <TrendingUp className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Rankings</span>}
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "rankings" ? "active" : ""}`}
+            onClick={() => handleNavClick("rankings")}
+            title={isSidebarCollapsed ? "Rankings" : ""}
+            role="menuitem"
+            aria-current={activeTab === "rankings" ? "page" : undefined}
+          >
+            <TrendingUp className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Rankings</span>}
+          </button>
+          <SidebarTooltip
+            tab="rankings"
+            isShown={isTooltipShown('rankings')}
+            content={getTooltipContent('rankings')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
         )}
-        <button 
-          className={`nav-item ${activeTab === "portfolio" ? "active" : ""}`}
-          onClick={() => handleNavClick("portfolio")}
-          title={isSidebarCollapsed ? "Portfolio" : ""}
-          role="menuitem"
-          aria-current={activeTab === "portfolio" ? "page" : undefined}
-        >
-          <PieChart className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Portfolio</span>}
-        </button>
-        <button 
-          className={`nav-item ${activeTab === "backtest" ? "active" : ""}`}
-          onClick={() => handleNavClick("backtest")}
-          title={isSidebarCollapsed ? "Backtest" : ""}
-          role="menuitem"
-          aria-current={activeTab === "backtest" ? "page" : undefined}
-        >
-          <FlaskConical className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Backtest</span>}
-        </button>
-        <button
-          className={`nav-item ${activeTab === "journal" ? "active" : ""}`}
-          onClick={() => handleNavClick("journal")}
-          title={isSidebarCollapsed ? "Journal" : ""}
-          role="menuitem"
-          aria-current={activeTab === "journal" ? "page" : undefined}
-        >
-          <BookOpen className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Journal</span>}
-        </button>
-        <button
-          className={`nav-item ${activeTab === "watchlist" ? "active" : ""}`}
-          onClick={() => handleNavClick("watchlist")}
-          title={isSidebarCollapsed ? "Watchlist" : ""}
-          role="menuitem"
-          aria-current={activeTab === "watchlist" ? "page" : undefined}
-        >
-          <Eye className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Watchlist</span>}
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "portfolio" ? "active" : ""}`}
+            onClick={() => handleNavClick("portfolio")}
+            title={isSidebarCollapsed ? "Portfolio" : ""}
+            role="menuitem"
+            aria-current={activeTab === "portfolio" ? "page" : undefined}
+          >
+            <PieChart className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Portfolio</span>}
+          </button>
+          <SidebarTooltip
+            tab="portfolio"
+            isShown={isTooltipShown('portfolio')}
+            content={getTooltipContent('portfolio')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "backtest" ? "active" : ""}`}
+            onClick={() => handleNavClick("backtest")}
+            title={isSidebarCollapsed ? "Backtest" : ""}
+            role="menuitem"
+            aria-current={activeTab === "backtest" ? "page" : undefined}
+          >
+            <FlaskConical className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Backtest</span>}
+          </button>
+          <SidebarTooltip
+            tab="backtest"
+            isShown={isTooltipShown('backtest')}
+            content={getTooltipContent('backtest')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "journal" ? "active" : ""}`}
+            onClick={() => handleNavClick("journal")}
+            title={isSidebarCollapsed ? "Journal" : ""}
+            role="menuitem"
+            aria-current={activeTab === "journal" ? "page" : undefined}
+          >
+            <BookOpen className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Journal</span>}
+          </button>
+          <SidebarTooltip
+            tab="journal"
+            isShown={isTooltipShown('journal')}
+            content={getTooltipContent('journal')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "watchlist" ? "active" : ""}`}
+            onClick={() => handleNavClick("watchlist")}
+            title={isSidebarCollapsed ? "Watchlist" : ""}
+            role="menuitem"
+            aria-current={activeTab === "watchlist" ? "page" : undefined}
+          >
+            <Eye className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Watchlist</span>}
+          </button>
+          <SidebarTooltip
+            tab="watchlist"
+            isShown={isTooltipShown('watchlist')}
+            content={getTooltipContent('watchlist')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
         <button
           className={`nav-item ${activeTab === "analysis" ? "active" : ""}`}
           onClick={() => handleNavClick("analysis")}
@@ -570,16 +638,24 @@ function App() {
           <TrendingUp className="nav-icon" size={20} />
           {!isSidebarCollapsed && <span>Analysis</span>}
         </button>
-        <button
-          className={`nav-item ${activeTab === "alerts" ? "active" : ""}`}
-          onClick={() => handleNavClick("alerts")}
-          title={isSidebarCollapsed ? "Alerts" : ""}
-          role="menuitem"
-          aria-current={activeTab === "alerts" ? "page" : undefined}
-        >
-          <Bell className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Alerts</span>}
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className={`nav-item ${activeTab === "alerts" ? "active" : ""}`}
+            onClick={() => handleNavClick("alerts")}
+            title={isSidebarCollapsed ? "Alerts" : ""}
+            role="menuitem"
+            aria-current={activeTab === "alerts" ? "page" : undefined}
+          >
+            <Bell className="nav-icon" size={20} />
+            {!isSidebarCollapsed && <span>Alerts</span>}
+          </button>
+          <SidebarTooltip
+            tab="alerts"
+            isShown={isTooltipShown('alerts')}
+            content={getTooltipContent('alerts')}
+            onDismiss={dismissTooltip}
+          />
+        </div>
         {isAdvanced && (
         <button
           className={`nav-item ${activeTab === "comparison" ? "active" : ""}`}
