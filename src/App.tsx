@@ -10,6 +10,7 @@ import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
 import { DEFAULT_SYMBOLS } from "./shared/constants";
+import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
 import { TemplatesTab } from './features/templates/TemplatesTab';
 import { RankingsTab } from './features/rankings/RankingsTab';
 import { UniverseTab } from './features/universe/UniverseTab';
@@ -149,6 +150,15 @@ function App() {
     value: number; weight: number;
   }>>([]);
   const [portfolioValue, setPortfolioValue] = useState<number>(0);
+
+  // Onboarding state
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    invokeWithResilience<string | null>('load_setting', { key: 'onboarding_complete' })
+      .then(val => setOnboardingComplete(val === 'true'))
+      .catch(() => setOnboardingComplete(true));
+  }, []);
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -697,6 +707,16 @@ function App() {
     setPortfolioHoldings(h);
     setPortfolioValue(v);
   }, []);
+
+  if (onboardingComplete === null) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+      <div className="tab-loading-spinner" />
+    </div>;
+  }
+
+  if (!onboardingComplete) {
+    return <OnboardingWizard onComplete={() => setOnboardingComplete(true)} />;
+  }
 
   return (
     <div className="app-container">
