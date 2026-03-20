@@ -166,8 +166,10 @@ describe('sharpeRatio', () => {
   });
 
   it('computes negative Sharpe for negative returns', () => {
-    const returns = Array.from({ length: 100 }, () => -0.005 + Math.random() * 0.002);
-    expect(sharpeRatio(returns)).toBeLessThan(0);
+    // Deterministic: alternating -0.005 and -0.003, mean ≈ -0.004, stdDev > 0
+    // annualizedReturn = -0.004 * 252 = -1.008; after subtracting riskFree 0.045 → very negative numerator
+    const negativeReturns = Array.from({ length: 100 }, (_, i) => (i % 2 === 0 ? -0.005 : -0.003));
+    expect(sharpeRatio(negativeReturns)).toBeLessThan(0);
   });
 
   it('accepts a custom risk-free rate', () => {
@@ -243,13 +245,15 @@ describe('valueAtRisk', () => {
     expect(valueAtRisk(returns, 0.99)).toBeGreaterThanOrEqual(valueAtRisk(returns, 0.95));
   });
 
-  it('VaR is 0 or very small for all positive returns', () => {
+  it('VaR is negative for all-positive returns (no downside risk)', () => {
+    // All returns are +1%; sorted[index] = 0.01; VaR = -0.01 * sqrt(252) < 0
+    // A negative VaR indicates the "worst" return is still a gain — no downside risk.
     const returns = Array.from({ length: 100 }, () => 0.01);
-    const v = valueAtRisk(returns, 0.95);
-    // All returns positive; sorted[floor(n*0.05)] is still positive → negated = negative, but implementation uses -sorted[index]*sqrt252
-    // Since sorted values are all 0.01, result = -0.01 * sqrt(252) which is negative → actually the fn returns negative * SQRT252
-    // Let's just check it's a number
-    expect(typeof v).toBe('number');
+    const result = valueAtRisk(returns, 0.95);
+    expect(typeof result).toBe('number');
+    expect(isFinite(result)).toBe(true);
+    expect(result).toBeCloseTo(-0.01 * Math.sqrt(252), 10);
+    expect(result).toBeLessThan(0);
   });
 });
 
