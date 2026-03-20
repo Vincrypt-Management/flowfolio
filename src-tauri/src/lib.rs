@@ -490,6 +490,47 @@ async fn load_setting(key: String) -> Result<Option<String>, String> {
     Ok(row.map(|r| r.get("value")))
 }
 
+// ==================== REBALANCE TRANSACTIONS ====================
+
+#[tauri::command]
+async fn record_rebalance(portfolio_name: String, report_json: String) -> Result<String, String> {
+    let pool = get_pool().await?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO rebalance_transactions (id, plan_name, method, symbols, allocations, executed_at, notes)
+         VALUES (?, ?, 'rebalance', '[]', ?, ?, ?)"
+    )
+    .bind(&id)
+    .bind(&portfolio_name)
+    .bind(&report_json)
+    .bind(&now)
+    .bind("")
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to record rebalance: {}", e))?;
+    Ok(id)
+}
+
+#[tauri::command]
+async fn list_rebalance_history(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
+    let pool = get_pool().await?;
+    let rows = sqlx::query(
+        "SELECT id, executed_at, allocations FROM rebalance_transactions WHERE plan_name = ? ORDER BY executed_at DESC LIMIT 20"
+    )
+    .bind(&portfolio_name)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to list rebalance history: {}", e))?;
+
+    use sqlx::Row;
+    Ok(rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<String, _>("id"),
+        "recorded_at": r.get::<String, _>("executed_at"),
+        "report": serde_json::from_str::<serde_json::Value>(r.get::<&str, _>("allocations")).unwrap_or_default(),
+    })).collect())
+}
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct TemplateInfo {
@@ -2683,6 +2724,9 @@ pub fn run() {
             // User settings SQLite
             save_setting,
             load_setting,
+            // Rebalance transactions SQLite
+            record_rebalance,
+            list_rebalance_history,
         ])
         .setup(|app| {
             // Initialize local database for caching

@@ -96,8 +96,11 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     last_updated: new Date().toISOString(),
   });
   const [allocationPlan, setAllocationPlan] = useState<AllocationPlan | null>(null);
+  const [allocationMethod, setAllocationMethod] = useState<'equal_weight' | 'score_weighted'>('equal_weight');
   const [buyList, setBuyList] = useState<BuyList | null>(null);
   const [rebalanceReport, setRebalanceReport] = useState<RebalanceReport | null>(null);
+  const [rebalanceHistory, setRebalanceHistory] = useState<Array<{id: string; recorded_at: string; report: unknown}>>([]);
+  const [showRebalanceHistory, setShowRebalanceHistory] = useState(false);
   const [contribution, setContribution] = useState<string>("1000");
   const [isLoading, setIsLoading] = useState(false);
   
@@ -341,6 +344,18 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
       if (isMountedRef.current) {
         setRebalanceReport(report);
       }
+
+      if (report) {
+        await invoke('record_rebalance', {
+          portfolioName: portfolio?.name ?? 'My Portfolio',
+          reportJson: JSON.stringify(report),
+        });
+        invoke<Array<{id: string; recorded_at: string; report: unknown}>>('list_rebalance_history', {
+          portfolioName: portfolio?.name ?? 'My Portfolio',
+        }).then(history => {
+          if (isMountedRef.current) setRebalanceHistory(history);
+        }).catch(() => {/* non-critical */});
+      }
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error checking rebalance: " + (error instanceof Error ? error.message : String(error)), "error");
@@ -358,10 +373,15 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
       return;
     }
 
+    if (allocationMethod === 'score_weighted') {
+      addToast("Score Weighted allocation requires running Rankings first. Scores are not available in this view — switching to Equal Weight.", "warning");
+      setAllocationMethod('equal_weight');
+    }
+
     setIsLoading(true);
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
-      
+
       const plan = await invoke<AllocationPlan>("create_equal_weight_allocation", {
         symbols,
         maxPositionPct: maxPosition,
@@ -678,6 +698,18 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
 
                 {isAdvanced && (
                   <div className="actions">
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: '13px', marginBottom: '4px', display: 'block' }}>Allocation Method</label>
+                      <select
+                        value={allocationMethod}
+                        onChange={e => setAllocationMethod(e.target.value as 'equal_weight' | 'score_weighted')}
+                        className="form-select"
+                        style={{ fontSize: '13px' }}
+                      >
+                        <option value="equal_weight">Equal Weight</option>
+                        <option value="score_weighted">Score Weighted (requires Rankings)</option>
+                      </select>
+                    </div>
                     <button className="btn-secondary" onClick={createAllocation} disabled={isLoading}>
                       Create Allocation Plan
                     </button>
@@ -810,8 +842,28 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
             </div>
           )}
 
+          {isAdvanced && rebalanceHistory.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0 }}>Rebalance History</h3>
+                <button className="btn-small" onClick={() => setShowRebalanceHistory(s => !s)}>
+                  {showRebalanceHistory ? 'Hide ▲' : `Show (${rebalanceHistory.length}) ▼`}
+                </button>
+              </div>
+              {showRebalanceHistory && (
+                <div style={{ marginTop: '12px' }}>
+                  {rebalanceHistory.map(entry => (
+                    <div key={entry.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: '13px' }}>
+                      <span className="text-muted">{new Date(entry.recorded_at).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Portfolio Optimizer Section */}
-          <PortfolioOptimizerComponent 
+          <PortfolioOptimizerComponent
             holdings={portfolio.holdings.map(h => ({
               symbol: h.symbol,
               shares: h.shares,
