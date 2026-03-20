@@ -19,7 +19,7 @@ vi.mock('../../services/auth', () => ({
 
 // Mock @tauri-apps/plugin-opener
 vi.mock('@tauri-apps/plugin-opener', () => ({
-  open: vi.fn().mockResolvedValue(undefined),
+  openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock UserProfileContext (used by old shim — new impl doesn't need it but provider tree might)
