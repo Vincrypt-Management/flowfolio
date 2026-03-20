@@ -40,6 +40,8 @@ function parseCSVLine(line: string): string[] {
 
 function detectBroker(headers: string[]): string {
   const h = headers.map(x => x.toLowerCase());
+  // IBKR Flex Query format: first column is a row-type literal ("Header" or "Data")
+  if (h[0] === 'header' || h[0] === 'data') return 'IBKR';
   if (h.includes('last price') && h.includes('average cost basis')) return 'Fidelity';
   if (h.includes('price') && h.includes('cost basis') && h.includes('quantity')) return 'Schwab';
   if (h.includes('share price') && h.includes('shares')) return 'Vanguard';
@@ -63,6 +65,39 @@ export function parseBrokerCSV(text: string): ParseResult {
 
   const idx = (name: string): number =>
     headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+  // IBKR Flex Query: find the "Header" row that contains Symbol + Quantity columns
+  if (broker === 'IBKR') {
+    const ibkrHeaderIdx = rawLines.findIndex((l: string) =>
+      l.startsWith('Header') &&
+      l.toLowerCase().includes('symbol') &&
+      l.toLowerCase().includes('quantity')
+    );
+    if (ibkrHeaderIdx === -1) {
+      return { holdings, broker: 'IBKR', errors: ['No IBKR Header row found'] };
+    }
+
+    const ibkrHeaders = parseCSVLine(rawLines[ibkrHeaderIdx]).map((h: string) => h.trim().toLowerCase());
+    const ibkrSymbolCol = ibkrHeaders.indexOf('symbol');
+    const ibkrQtyCol    = ibkrHeaders.indexOf('quantity');
+
+    for (let i = ibkrHeaderIdx + 1; i < rawLines.length; i++) {
+      const line = rawLines[i].trim();
+      if (!line.startsWith('Data')) continue;
+      const cells = parseCSVLine(line).map((c: string) => c.replace(/^"|"$/g, '').trim());
+      const symbol = (cells[ibkrSymbolCol] ?? '').toUpperCase();
+      if (!symbol || symbol === 'TOTAL' || symbol === '--') continue;
+      const sharesRaw = cells[ibkrQtyCol] ?? '';
+      const shares = parseNumber(sharesRaw);
+      if (shares === null || shares <= 0) {
+        errors.push(`Row ${i + 1}: invalid quantity for ${symbol}`);
+        continue;
+      }
+      holdings.push({ symbol, shares, costBasis: null });
+    }
+
+    return { holdings, broker: 'IBKR', errors };
+  }
 
   let symbolCol: number, sharesCol: number, costBasisCol: number;
 

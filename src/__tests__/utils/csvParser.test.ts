@@ -69,6 +69,70 @@ describe('parseBrokerCSV', () => {
     });
   });
 
+  describe('IBKR format', () => {
+    const IBKR_CSV = `Financial Instrument Information,,,,
+Header,Symbol,Quantity,Multiplier,Proceeds
+Data,AAPL,15,1,0
+Data,NVDA,3,1,0`;
+
+    it('detects IBKR broker', () => {
+      const result = parseBrokerCSV(IBKR_CSV);
+      expect(result.broker).toBe('IBKR');
+    });
+
+    it('parses symbol and shares from IBKR Data rows', () => {
+      const result = parseBrokerCSV(IBKR_CSV);
+      expect(result.holdings).toHaveLength(2);
+      expect(result.holdings[0].symbol).toBe('AAPL');
+      expect(result.holdings[0].shares).toBe(15);
+    });
+
+    it('parses second IBKR holding correctly', () => {
+      const result = parseBrokerCSV(IBKR_CSV);
+      expect(result.holdings[1].symbol).toBe('NVDA');
+      expect(result.holdings[1].shares).toBe(3);
+    });
+
+    it('sets costBasis to null for IBKR holdings', () => {
+      const result = parseBrokerCSV(IBKR_CSV);
+      expect(result.holdings[0].costBasis).toBeNull();
+    });
+
+    it('skips non-Data rows in IBKR format', () => {
+      const result = parseBrokerCSV(IBKR_CSV);
+      // Only 2 Data rows should yield 2 holdings (Financial Instrument Information row is skipped)
+      expect(result.holdings).toHaveLength(2);
+    });
+
+    it('reports error for invalid quantity in IBKR format', () => {
+      const badIBKR = `Header,Symbol,Quantity,Multiplier
+Data,AAPL,not-a-number,1`;
+      const result = parseBrokerCSV(badIBKR);
+      expect(result.broker).toBe('IBKR');
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.holdings).toHaveLength(0);
+    });
+
+    it('returns error when IBKR Header row has Symbol but no Quantity column', () => {
+      // First "Header" row has "symbol" (passes headerIdx scan and IBKR detection)
+      // but no "quantity" column, so ibkrHeaderIdx search returns -1
+      const noQtyHeader = `Header,Symbol,ReportDate
+Data,AAPL,10,1,0`;
+      const result = parseBrokerCSV(noQtyHeader);
+      expect(result.broker).toBe('IBKR');
+      expect(result.errors).toContain('No IBKR Header row found');
+    });
+
+    it('skips TOTAL rows in IBKR format', () => {
+      const withTotal = `Header,Symbol,Quantity,Multiplier
+Data,AAPL,10,1
+Data,TOTAL,0,0`;
+      const result = parseBrokerCSV(withTotal);
+      expect(result.holdings).toHaveLength(1);
+      expect(result.holdings[0].symbol).toBe('AAPL');
+    });
+  });
+
   describe('error handling', () => {
     it('returns empty holdings for empty CSV', () => {
       expect(parseBrokerCSV('').holdings).toEqual([]);
