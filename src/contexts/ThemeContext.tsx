@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 type Theme = 'dark' | 'light' | 'system';
 
@@ -10,7 +11,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'flowfolio-theme';
+const LEGACY_STORAGE_KEY = 'flowfolio-theme';
 
 function getSystemTheme(): 'dark' | 'light' {
   if (typeof window !== 'undefined' && window.matchMedia) {
@@ -20,20 +21,32 @@ function getSystemTheme(): 'dark' | 'light' {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-      return stored || 'system';
-    }
-    return 'system';
-  });
+  const [theme, setThemeState] = useState<Theme>('system');
 
   const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>(() => {
-    if (theme === 'system') {
-      return getSystemTheme();
-    }
-    return theme;
+    return getSystemTheme();
   });
+
+  // Load theme from SQLite on mount
+  useEffect(() => {
+    invoke<string | null>('load_setting', { key: 'theme' })
+      .then(value => {
+        if (value === 'dark' || value === 'light' || value === 'system') {
+          setThemeState(value);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // One-time migration from localStorage to SQLite
+  useEffect(() => {
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      invoke('save_setting', { key: 'theme', value: legacy })
+        .then(() => localStorage.removeItem(LEGACY_STORAGE_KEY))
+        .catch(console.error);
+    }
+  }, []);
 
   // Listen for system theme changes
   useEffect(() => {
@@ -70,7 +83,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem(STORAGE_KEY, newTheme);
+    invoke('save_setting', { key: 'theme', value: newTheme })
+      .catch(console.error);
   };
 
   return (

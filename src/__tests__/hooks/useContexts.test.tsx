@@ -23,11 +23,11 @@ describe('ThemeContext', () => {
     expect(['dark', 'light']).toContain(result.current.resolvedTheme);
   });
 
-  it('setTheme dark persists to localStorage', () => {
+  it('setTheme dark persists state update', () => {
+    // Theme is now persisted to SQLite via invoke; verify in-memory state is updated
     const { result } = renderHook(() => useTheme(), { wrapper: themeWrapper });
     act(() => { result.current.setTheme('dark'); });
     expect(result.current.theme).toBe('dark');
-    expect(localStorage.getItem('flowfolio-theme')).toBe('dark');
   });
 
   it('setTheme light updates resolvedTheme', () => {
