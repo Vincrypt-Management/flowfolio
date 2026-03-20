@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { useAuth } from './contexts/AuthContext';
 import { invoke } from "./services/tauri";
 import { invokeWithResilience } from './services/apiClient';
 import VibeStudio from "./components/VibeStudio";
@@ -106,7 +108,8 @@ interface Universe {
 
 function App() {
   const { addToast } = useToast();
-const { isAdvanced, toggleMode } = useUserMode();
+  const { isAdvanced, toggleMode } = useUserMode();
+  const { handleOAuthCallback } = useAuth();
   const [status, setStatus] = useState("Initializing...");
   const [plan, setPlan] = useState<VibePlan | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
@@ -415,6 +418,20 @@ const { isAdvanced, toggleMode } = useUserMode();
     setActiveTab(resolvedTab);
     setIsMobileMenuOpen(false);
   }, []);
+
+  // Handle deep-link OAuth callback (flowfolio://auth/callback?access_token=...&refresh_token=...)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onOpenUrl(async (urls) => {
+      for (const url of urls) {
+        if (url.startsWith('flowfolio://auth/callback')) {
+          await handleOAuthCallback(url);
+          addToast('Logged in successfully!', 'success');
+        }
+      }
+    }).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [handleOAuthCallback, addToast]);
 
   const renderSidebar = () => (
     <aside 

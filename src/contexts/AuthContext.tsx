@@ -1,70 +1,111 @@
-import { createContext, useContext, ReactNode } from 'react';
-import { useUserProfile } from './UserProfileContext';
+import { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
+import { auth, type User } from '../services/auth';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
-interface LocalUser {
-  id: 'local';
-  name: string;
-  username: string;
-  avatar_url: string;
-  email: string;
-}
+export type Tier = 'free' | 'ai' | 'sync' | 'pro';
 
-// Compatibility shim — all auth operations are no-ops in offline mode.
-// User profile data comes from UserProfileContext (localStorage).
 interface AuthContextType {
-  user: LocalUser | null;
-  subscription: null;
-  session: null;
+  user: User | null;
+  tier: Tier;
   loading: boolean;
   isAuthenticated: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  handleOAuthCallback: (url: string) => Promise<void>;
+  // Legacy compatibility
   login: () => Promise<void>;
   register: () => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  logout: () => void;
-  refreshUser: () => Promise<void>;
+  subscription: null;
+  session: null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Parse tier from a JWT access token payload (base64 decode middle segment). */
+function parseTierFromToken(token: string): Tier {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, unknown>;
+    const tier = payload?.tier as string;
+    if (tier === 'ai' || tier === 'sync' || tier === 'pro') return tier;
+  } catch { /* ignore */ }
+  return 'free';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { profile } = useUserProfile();
+  const [user, setUser] = useState<User | null>(null);
+  const [tier, setTier] = useState<Tier>('free');
+  const [loading, setLoading] = useState(true);
 
-  const name = profile.displayName || 'Investor';
+  const loadAuth = useCallback(async () => {
+    await auth.init();
+    const loggedIn = await auth.isLoggedIn();
+    if (!loggedIn) { setLoading(false); return; }
 
-  const user: LocalUser = {
-    id: 'local',
-    name,
-    username: name,
-    avatar_url: profile.avatarUrl || '',
-    email: profile.email || '',
-  };
+    // Silently refresh if needed
+    await auth.refreshIfNeeded();
+
+    const token = await auth.getAccessToken();
+    if (token) setTier(parseTierFromToken(token));
+
+    const fetchedUser = await auth.getUser();
+    setUser(fetchedUser);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadAuth(); }, [loadAuth]);
+
+  const loginWithGoogle = useCallback(async () => {
+    const url = auth.getLoginUrl();
+    await openUrl(url);
+  }, []);
+
+  const handleOAuthCallback = useCallback(async (deepLinkUrl: string) => {
+    const url = new URL(deepLinkUrl);
+    await auth.handleCallback(url.searchParams);
+    const token = await auth.getAccessToken();
+    if (token) setTier(parseTierFromToken(token));
+    const fetchedUser = await auth.getUser();
+    setUser(fetchedUser);
+  }, []);
+
+  const logout = useCallback(async () => {
+    await auth.logout();
+    setUser(null);
+    setTier('free');
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    const fetchedUser = await auth.getUser();
+    setUser(fetchedUser);
+    const token = await auth.getAccessToken();
+    if (token) setTier(parseTierFromToken(token));
+  }, []);
 
   const noop = () => Promise.resolve();
 
-  const value: AuthContextType = {
-    user,
-    subscription: null,
-    session: null,
-    loading: false,
-    isAuthenticated: true,
-    login: noop,
-    register: noop,
-    loginWithGoogle: noop,
-    logout: () => {},
-    refreshUser: noop,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{
+      user,
+      tier,
+      loading,
+      isAuthenticated: !!user,
+      loginWithGoogle,
+      logout,
+      refreshUser,
+      handleOAuthCallback,
+      login: noop,
+      register: noop,
+      subscription: null,
+      session: null,
+    }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth(): AuthContextType {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }

@@ -27,8 +27,8 @@ export function UserProfileCard({ collapsed, onSettingsClick }: UserProfileCardP
         aria-label="Open account settings"
       >
         <div className="user-avatar">
-          {user?.avatar_url ? (
-            <img src={user.avatar_url} alt={displayName} className="user-avatar-img" />
+          {user?.avatarUrl ? (
+            <img src={user.avatarUrl} alt={displayName} className="user-avatar-img" />
           ) : (
             <span className="user-avatar-initials">{initials || <User size={16} />}</span>
           )}
