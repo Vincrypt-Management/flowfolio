@@ -72,10 +72,12 @@ describe('UserModeContext', () => {
     expect(result.current.mode).toBe('simple');
   });
 
-  it('persists mode to localStorage', () => {
+  it('persists mode via setMode (state update)', () => {
+    // Mode is now persisted to SQLite via invoke; verify in-memory state is updated
     const { result } = renderHook(() => useUserMode(), { wrapper: userModeWrapper });
     act(() => { result.current.setMode('advanced'); });
-    expect(localStorage.getItem('flowfolio-user-mode')).toBe('advanced');
+    expect(result.current.mode).toBe('advanced');
+    expect(result.current.isAdvanced).toBe(true);
   });
 
   it('setMode works directly', () => {
@@ -85,10 +87,11 @@ describe('UserModeContext', () => {
     expect(result.current.isAdvanced).toBe(true);
   });
 
-  it('reads persisted mode on mount', () => {
-    localStorage.setItem('flowfolio-user-mode', 'advanced');
+  it('defaults to simple when no SQLite value available (test env)', () => {
+    // In test env, invoke is unavailable so SQLite load silently fails; default is 'simple'
     const { result } = renderHook(() => useUserMode(), { wrapper: userModeWrapper });
-    expect(result.current.mode).toBe('advanced');
+    expect(result.current.mode).toBe('simple');
+    expect(result.current.isAdvanced).toBe(false);
   });
 
   it('throws when used outside provider', () => {

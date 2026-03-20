@@ -459,6 +459,37 @@ async fn delete_schedule(id: String) -> Result<(), String> {
     Ok(())
 }
 
+// ==================== USER SETTINGS ====================
+
+#[tauri::command]
+async fn save_setting(key: String, value: String) -> Result<(), String> {
+    let pool = get_pool().await?;
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)"
+    )
+    .bind(&key)
+    .bind(&value)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to save setting: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_setting(key: String) -> Result<Option<String>, String> {
+    let pool = get_pool().await?;
+    let row = sqlx::query("SELECT value FROM user_settings WHERE key = ?")
+        .bind(&key)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| format!("Failed to load setting: {}", e))?;
+
+    use sqlx::Row;
+    Ok(row.map(|r| r.get("value")))
+}
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct TemplateInfo {
@@ -2551,6 +2582,9 @@ pub fn run() {
             save_schedule,
             list_schedules,
             delete_schedule,
+            // User settings SQLite
+            save_setting,
+            load_setting,
         ])
         .setup(|app| {
             // Initialize local database for caching

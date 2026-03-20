@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 
 export type AccountType = 'personal' | 'professional';
 
@@ -19,7 +20,7 @@ interface UserProfileContextType {
   resetProfile: () => void;
 }
 
-const STORAGE_KEY = 'flowfolio-user-profile';
+const LEGACY_STORAGE_KEY = 'flowfolio-user-profile';
 
 const DEFAULT_PROFILE: UserProfile = {
   displayName: 'Investor',
@@ -32,36 +33,47 @@ const DEFAULT_PROFILE: UserProfile = {
   website: '',
 };
 
-function loadProfile(): UserProfile {
-  if (typeof window !== 'undefined') {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return { ...DEFAULT_PROFILE, ...JSON.parse(stored) };
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }
-  return DEFAULT_PROFILE;
-}
-
 const UserProfileContext = createContext<UserProfileContextType | undefined>(undefined);
 
 export function UserProfileProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<UserProfile>(loadProfile);
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+
+  // Load profile from SQLite on mount
+  useEffect(() => {
+    invoke<string | null>('load_setting', { key: 'user_profile' })
+      .then(value => {
+        if (value) {
+          try {
+            setProfile(prev => ({ ...prev, ...JSON.parse(value) }));
+          } catch { /* keep default */ }
+        }
+      })
+      .catch(() => { /* keep default */ });
+  }, []);
+
+  // One-time migration from localStorage to SQLite
+  useEffect(() => {
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      invoke('save_setting', { key: 'user_profile', value: legacy })
+        .then(() => localStorage.removeItem(LEGACY_STORAGE_KEY))
+        .catch(console.error);
+    }
+  }, []);
 
   const updateProfile = useCallback((updates: Partial<UserProfile>) => {
     setProfile(prev => {
       const updated = { ...prev, ...updates };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      invoke('save_setting', { key: 'user_profile', value: JSON.stringify(updated) })
+        .catch(console.error);
       return updated;
     });
   }, []);
 
   const resetProfile = useCallback(() => {
     setProfile(DEFAULT_PROFILE);
-    localStorage.removeItem(STORAGE_KEY);
+    invoke('save_setting', { key: 'user_profile', value: JSON.stringify(DEFAULT_PROFILE) })
+      .catch(console.error);
   }, []);
 
   return (
