@@ -2,7 +2,10 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useUserProfile, AccountType } from '../contexts/UserProfileContext';
 import { useAuth } from '../contexts/AuthContext';
 import { invoke } from '../services/tauri';
+import { createLogger } from '../core/logger';
 import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown } from 'lucide-react';
+
+const log = createLogger('SettingsPage');
 
 const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }> = [
   { key: 'alpaca_key',        label: 'Alpaca API Key',    placeholder: 'Enter key…' },
@@ -283,7 +286,7 @@ export function SettingsPage() {
               </div>
               <button
                 className="btn-secondary"
-                onClick={() => logout().catch(console.error)}
+                onClick={() => logout().catch((e) => log.error('Logout failed', e))}
               >
                 <LogOut size={14} /> Sign out
               </button>
@@ -293,7 +296,7 @@ export function SettingsPage() {
               <p className="text-muted">Sign in to unlock AI Suite and Cloud Sync premium features.</p>
               <button
                 className="btn-primary"
-                onClick={() => loginWithGoogle().catch(console.error)}
+                onClick={() => loginWithGoogle().catch((e) => log.error('Login failed', e))}
               >
                 <LogIn size={14} /> Sign in with Google
               </button>
