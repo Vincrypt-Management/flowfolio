@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { createLogger } from '../core/logger';
+import { invokeWithResilience } from '../services/apiClient';
+
+const log = createLogger('UserModeContext');
 
 export type UserMode = 'simple' | 'advanced';
 
@@ -19,7 +22,7 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
 
   // Load mode from SQLite on mount
   useEffect(() => {
-    invoke<string | null>('load_setting', { key: 'user_mode' })
+    invokeWithResilience<string | null>('load_setting', { key: 'user_mode' })
       .then(value => {
         if (value === 'simple' || value === 'advanced') setModeState(value);
       })
@@ -30,23 +33,23 @@ export function UserModeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
-      invoke('save_setting', { key: 'user_mode', value: legacy })
+      invokeWithResilience('save_setting', { key: 'user_mode', value: legacy })
         .then(() => localStorage.removeItem(LEGACY_STORAGE_KEY))
-        .catch(console.error);
+        .catch(err => log.error('Failed to save user mode', err));
     }
   }, []);
 
   const setMode = useCallback((newMode: UserMode) => {
     setModeState(newMode);
-    invoke('save_setting', { key: 'user_mode', value: newMode })
-      .catch(console.error);
+    invokeWithResilience('save_setting', { key: 'user_mode', value: newMode })
+      .catch(err => log.error('Failed to save user mode', err));
   }, []);
 
   const toggleMode = useCallback(() => {
     setModeState(prev => {
       const newMode: UserMode = prev === 'simple' ? 'advanced' : 'simple';
-      invoke('save_setting', { key: 'user_mode', value: newMode })
-        .catch(console.error);
+      invokeWithResilience('save_setting', { key: 'user_mode', value: newMode })
+        .catch(err => log.error('Failed to save user mode', err));
       return newMode;
     });
   }, []);

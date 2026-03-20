@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { createLogger } from '../core/logger';
+import { invokeWithResilience } from '../services/apiClient';
+
+const log = createLogger('UserProfileContext');
 
 export type AccountType = 'personal' | 'professional';
 
@@ -40,7 +43,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
   // Load profile from SQLite on mount
   useEffect(() => {
-    invoke<string | null>('load_setting', { key: 'user_profile' })
+    invokeWithResilience<string | null>('load_setting', { key: 'user_profile' })
       .then(value => {
         if (value) {
           try {
@@ -55,25 +58,25 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
-      invoke('save_setting', { key: 'user_profile', value: legacy })
+      invokeWithResilience('save_setting', { key: 'user_profile', value: legacy })
         .then(() => localStorage.removeItem(LEGACY_STORAGE_KEY))
-        .catch(console.error);
+        .catch(err => log.error('Failed to save user profile', err));
     }
   }, []);
 
   const updateProfile = useCallback((updates: Partial<UserProfile>) => {
     setProfile(prev => {
       const updated = { ...prev, ...updates };
-      invoke('save_setting', { key: 'user_profile', value: JSON.stringify(updated) })
-        .catch(console.error);
+      invokeWithResilience('save_setting', { key: 'user_profile', value: JSON.stringify(updated) })
+        .catch(err => log.error('Failed to save user profile', err));
       return updated;
     });
   }, []);
 
   const resetProfile = useCallback(() => {
     setProfile(DEFAULT_PROFILE);
-    invoke('save_setting', { key: 'user_profile', value: JSON.stringify(DEFAULT_PROFILE) })
-      .catch(console.error);
+    invokeWithResilience('save_setting', { key: 'user_profile', value: JSON.stringify(DEFAULT_PROFILE) })
+      .catch(err => log.error('Failed to save user profile', err));
   }, []);
 
   return (

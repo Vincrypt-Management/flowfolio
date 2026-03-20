@@ -54,7 +54,7 @@ export async function saveFile(
           
           // Fallback to Downloads folder
           await writeTextFile(filename, content, { baseDir: BaseDirectory.Download });
-          alert(`File saved to Downloads: ${filename}`);
+          log.info(`File saved to Downloads: ${filename}`);
           return;
         }
       } else {
@@ -75,7 +75,7 @@ export async function saveFile(
         } catch (dialogError) {
           log.warn('Save dialog failed, trying direct write', dialogError);
           await writeFile(filename, content, { baseDir: BaseDirectory.Download });
-          alert(`File saved to Downloads: ${filename}`);
+          log.info(`File saved to Downloads: ${filename}`);
           return;
         }
       }

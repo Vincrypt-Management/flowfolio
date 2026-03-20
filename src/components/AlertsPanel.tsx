@@ -5,7 +5,10 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createLogger } from '../core/logger';
 import { invoke } from '../services/tauri';
+
+const log = createLogger('AlertsPanel');
 import {
   Bell,
   BellOff,
@@ -161,7 +164,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
             return invoke<PriceAlert[]>('list_alerts');
           })
           .then(setAlerts)
-          .catch(err => console.error('Migration failed', err));
+          .catch(err => log.error('Migration failed', err));
       } catch { /* ignore */ }
     }
   }, []);

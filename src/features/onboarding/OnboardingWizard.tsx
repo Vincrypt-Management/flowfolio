@@ -13,8 +13,7 @@ interface Props { onComplete: () => void; }
 export function OnboardingWizard({ onComplete }: Props) {
   const [step, setStep] = useState(0);
 
-  const next = useCallback(() => setStep(s => Math.min(s + 1, 3)), []);
-  const skip = useCallback(() => setStep(s => Math.min(s + 1, 3)), []);
+  const advance = useCallback(() => setStep(s => Math.min(s + 1, 3)), []);
 
   const finish = useCallback(async () => {
     await invokeWithResilience('save_setting', { key: 'onboarding_complete', value: 'true' }).catch(() => {});
@@ -34,9 +33,9 @@ export function OnboardingWizard({ onComplete }: Props) {
         </div>
 
         {/* Step content */}
-        {step === 0 && <StepWelcome onNext={next} />}
-        {step === 1 && <StepUniverse onNext={next} onSkip={skip} />}
-        {step === 2 && <StepStrategy onNext={next} onSkip={skip} />}
+        {step === 0 && <StepWelcome onNext={advance} />}
+        {step === 1 && <StepUniverse onNext={advance} onSkip={advance} />}
+        {step === 2 && <StepStrategy onNext={advance} onSkip={advance} />}
         {step === 3 && <StepApiKeys onFinish={finish} />}
       </div>
     </div>

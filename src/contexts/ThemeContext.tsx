@@ -1,5 +1,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { createLogger } from '../core/logger';
+import { invokeWithResilience } from '../services/apiClient';
+
+const log = createLogger('ThemeContext');
 
 type Theme = 'dark' | 'light' | 'system';
 
@@ -29,7 +32,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Load theme from SQLite on mount
   useEffect(() => {
-    invoke<string | null>('load_setting', { key: 'theme' })
+    invokeWithResilience<string | null>('load_setting', { key: 'theme' })
       .then(value => {
         if (value === 'dark' || value === 'light' || value === 'system') {
           setThemeState(value);
@@ -42,9 +45,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
-      invoke('save_setting', { key: 'theme', value: legacy })
+      invokeWithResilience('save_setting', { key: 'theme', value: legacy })
         .then(() => localStorage.removeItem(LEGACY_STORAGE_KEY))
-        .catch(console.error);
+        .catch(err => log.error('Failed to save theme', err));
     }
   }, []);
 
@@ -83,8 +86,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    invoke('save_setting', { key: 'theme', value: newTheme })
-      .catch(console.error);
+    invokeWithResilience('save_setting', { key: 'theme', value: newTheme })
+      .catch(err => log.error('Failed to save theme', err));
   };
 
   return (
