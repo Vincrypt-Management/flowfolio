@@ -23,12 +23,20 @@ export async function signAccessToken(claims: TokenClaims, secret: string): Prom
     .sign(secretKey(secret));
 }
 
+const VALID_TIERS: Tier[] = ['free', 'ai', 'sync', 'pro'];
+
 export async function verifyAccessToken(token: string, secret: string): Promise<TokenClaims> {
   const { payload } = await jwtVerify(token, secretKey(secret));
+  const userId = payload['userId'];
+  const email = payload['email'];
+  const tier = payload['tier'];
+  if (typeof userId !== 'string' || typeof email !== 'string') {
+    throw new Error('Invalid token: missing required claims');
+  }
   return {
-    userId: payload['userId'] as string,
-    email: payload['email'] as string,
-    tier: (payload['tier'] as Tier) ?? 'free',
+    userId,
+    email,
+    tier: VALID_TIERS.includes(tier as Tier) ? (tier as Tier) : 'free',
   };
 }
 
@@ -43,7 +51,11 @@ export async function signRefreshToken(userId: string, secret: string): Promise<
 
 export async function verifyRefreshToken(token: string, secret: string): Promise<{ userId: string }> {
   const { payload } = await jwtVerify(token, secretKey(secret));
-  return { userId: payload['userId'] as string };
+  const userId = payload['userId'];
+  if (typeof userId !== 'string') {
+    throw new Error('Invalid refresh token: missing userId');
+  }
+  return { userId };
 }
 
 export function hashToken(token: string): string {

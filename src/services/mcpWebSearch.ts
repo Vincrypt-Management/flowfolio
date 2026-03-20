@@ -29,24 +29,10 @@ export interface NewsSearchResult extends SearchResult {
   sentiment?: 'positive' | 'negative' | 'neutral';
 }
 
-// Search provider configuration
-const SEARCH_CONFIG = {
-  // Brave Search API (primary)
-  brave: {
-    baseUrl: 'https://api.search.brave.com/res/v1',
-    apiKeyEnv: 'VITE_BRAVE_SEARCH_API_KEY'
-  },
-  // SerpAPI (fallback)
-  serp: {
-    baseUrl: 'https://serpapi.com/search',
-    apiKeyEnv: 'VITE_SERP_API_KEY'
-  },
-  // Tavily (AI-optimized search)
-  tavily: {
-    baseUrl: 'https://api.tavily.com/search',
-    apiKeyEnv: 'VITE_TAVILY_API_KEY'
-  }
-};
+// NOTE: Brave and Tavily API keys must NOT use VITE_ prefix — they must be routed through the
+// Tauri backend (Rust) to keep keys out of the frontend bundle. Until a backend web_search
+// Tauri command is implemented, DuckDuckGo (free, no key required) is the sole provider.
+// TODO: invoke('web_search', { query, type, count, provider: 'tavily' | 'brave' })
 
 // Financial news sources to prioritize
 const FINANCIAL_SOURCES = [
@@ -84,19 +70,9 @@ class MCPWebSearchService {
     // Try providers in order of preference
     let response: WebSearchResponse | null = null;
 
-    // Try Tavily first (AI-optimized)
-    const tavilyKey = import.meta.env.VITE_TAVILY_API_KEY;
-    if (tavilyKey) {
-      response = await this.searchWithTavily(query, type, count, tavilyKey);
-    }
-
-    // Try Brave Search
-    if (!response) {
-      const braveKey = import.meta.env.VITE_BRAVE_SEARCH_API_KEY;
-      if (braveKey) {
-        response = await this.searchWithBrave(query, type, count, braveKey);
-      }
-    }
+    // Tavily and Brave Search require backend routing (keys must not be in frontend bundle).
+    // These providers are disabled until a Tauri backend command is implemented.
+    // TODO: invoke('web_search', { query, type, count, provider: 'tavily' })
 
     // Fallback to DuckDuckGo (no API key needed)
     if (!response) {
@@ -118,118 +94,6 @@ class MCPWebSearchService {
     this.cache.set(cacheKey, { data: response, timestamp: Date.now() });
     
     return response;
-  }
-
-  /**
-   * Search using Tavily API (AI-optimized search)
-   */
-  private async searchWithTavily(
-    query: string, 
-    type: string, 
-    count: number, 
-    apiKey: string
-  ): Promise<WebSearchResponse | null> {
-    try {
-      const searchDepth = type === 'news' ? 'basic' : 'advanced';
-      const includeImages = false;
-      
-      const response = await fetch('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          api_key: apiKey,
-          query: type === 'finance' ? `${query} stock market finance` : query,
-          search_depth: searchDepth,
-          include_images: includeImages,
-          include_answer: true,
-          max_results: count
-        })
-      });
-
-      if (!response.ok) {
-        log.warn(`Tavily error: ${response.status}`);
-        return null;
-      }
-
-      const data = await response.json();
-      
-      const results: SearchResult[] = (data.results || []).map((r: Record<string, unknown>) => ({
-        title: (r.title as string) || '',
-        url: (r.url as string) || '',
-        snippet: (r.content as string) || (r.snippet as string) || '',
-        source: this.extractDomain(r.url as string),
-        publishedDate: r.published_date as string | undefined,
-        relevanceScore: r.score as number | undefined
-      }));
-
-      return {
-        query,
-        results,
-        totalResults: results.length,
-        searchTime: 0,
-        provider: 'tavily'
-      };
-    } catch (error) {
-      log.error('Tavily search failed', error);
-      return null;
-    }
-  }
-
-  /**
-   * Search using Brave Search API
-   */
-  private async searchWithBrave(
-    query: string, 
-    type: string, 
-    count: number, 
-    apiKey: string
-  ): Promise<WebSearchResponse | null> {
-    try {
-      const endpoint = type === 'news' ? 'news/search' : 'web/search';
-      const url = new URL(`${SEARCH_CONFIG.brave.baseUrl}/${endpoint}`);
-      url.searchParams.set('q', type === 'finance' ? `${query} stock finance` : query);
-      url.searchParams.set('count', String(Math.min(count, 20)));
-      
-      if (type === 'news') {
-        url.searchParams.set('freshness', 'pw'); // Past week
-      }
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          'Accept': 'application/json',
-          'X-Subscription-Token': apiKey
-        }
-      });
-
-      if (!response.ok) {
-        log.warn(`Brave error: ${response.status}`);
-        return null;
-      }
-
-      const data = await response.json();
-      const rawResults = type === 'news' ? data.results : data.web?.results || [];
-      
-      const results: SearchResult[] = rawResults.map((r: Record<string, unknown>) => ({
-        title: (r.title as string) || '',
-        url: (r.url as string) || '',
-        snippet: (r.description as string) || (r.snippet as string) || '',
-        source: this.extractDomain(r.url as string),
-        publishedDate: (r.age as string) || (r.published_time as string)
-      }));
-
-      return {
-        query,
-        results,
-        totalResults: data.query?.total || results.length,
-        searchTime: 0,
-        provider: 'brave'
-      };
-    } catch (error) {
-      log.error('Brave search failed', error);
-      return null;
-    }
   }
 
   /**

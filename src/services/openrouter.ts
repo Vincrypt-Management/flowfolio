@@ -65,7 +65,7 @@ class OpenRouterService {
         throw new Error('AI service not configured. Please set up your OpenRouter API key in the .env file.');
       }
       if (errorMsg.includes('Invalid API key')) {
-        throw new Error('Invalid OpenRouter API key. Please check your VITE_OPENROUTER_API_KEY.');
+        throw new Error('Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY in .env.');
       }
       if (errorMsg.includes('Rate limited')) {
         throw new Error('AI service rate limited. Please wait a moment and try again.');
