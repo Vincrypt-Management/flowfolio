@@ -26,7 +26,7 @@ import './RebalanceScheduler.css';
 
 const log = createLogger('RebalanceScheduler');
 
-const STORAGE_KEY = 'flowfolio_rebalance_schedules';
+const LEGACY_STORAGE_KEY = 'flowfolio_rebalance_schedules';
 const HISTORY_KEY = 'flowfolio_rebalance_history';
 
 interface RebalanceSchedule {
@@ -69,19 +69,6 @@ const DAYS_OF_WEEK = [
 
 function generateId(): string {
   return `sched_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function loadSchedules(): RebalanceSchedule[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSchedules(schedules: RebalanceSchedule[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(schedules));
 }
 
 function loadHistory(): RebalanceHistoryEntry[] {
@@ -178,10 +165,37 @@ export function RebalanceScheduler({
   const [formDayOfWeek, setFormDayOfWeek] = useState(1);
   const [formDayOfMonth, setFormDayOfMonth] = useState(1);
 
-  // Load persisted data on mount
+  // Load schedules from SQLite on mount
   useEffect(() => {
-    setSchedules(loadSchedules());
+    invoke<RebalanceSchedule[]>('list_schedules')
+      .then(setSchedules)
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn('Failed to load schedules from SQLite', msg);
+        setSchedules([]);
+      });
     setHistory(loadHistory());
+  }, []);
+
+  // Migrate legacy localStorage schedules to SQLite (one-time)
+  useEffect(() => {
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      try {
+        const items: RebalanceSchedule[] = JSON.parse(legacy);
+        Promise.all(items.map((s) => invoke('save_schedule', { schedule: s })))
+          .then(() => {
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+            return invoke<RebalanceSchedule[]>('list_schedules');
+          })
+          .then(setSchedules)
+          .catch((err: unknown) => {
+            log.warn('Legacy schedule migration failed', String(err));
+          });
+      } catch {
+        // ignore malformed legacy data
+      }
+    }
   }, []);
 
   // Fetch available plans when form is shown
@@ -255,15 +269,24 @@ export function RebalanceScheduler({
     return events.sort((a, b) => a.date.localeCompare(b.date));
   }, [schedules]);
 
+  const refreshSchedules = useCallback(() => {
+    invoke<RebalanceSchedule[]>('list_schedules')
+      .then(setSchedules)
+      .catch((err: unknown) => log.warn('Failed to refresh schedules', String(err)));
+  }, []);
+
   const updateSchedules = useCallback(
     (updater: (prev: RebalanceSchedule[]) => RebalanceSchedule[]) => {
       setSchedules((prev) => {
         const next = updater(prev);
-        saveSchedules(next);
+        // Persist each changed schedule to SQLite
+        Promise.all(next.map((s) => invoke('save_schedule', { schedule: s })))
+          .then(refreshSchedules)
+          .catch((err: unknown) => log.warn('Failed to persist schedules', String(err)));
         return next;
       });
     },
-    []
+    [refreshSchedules]
   );
 
   const addHistoryEntry = useCallback(
@@ -297,7 +320,10 @@ export function RebalanceScheduler({
       createdAt: new Date().toISOString(),
     };
 
-    updateSchedules((prev) => [...prev, schedule]);
+    invoke('save_schedule', { schedule })
+      .then(refreshSchedules)
+      .catch((err: unknown) => log.warn('Failed to save new schedule', String(err)));
+    setSchedules((prev) => [...prev, schedule]);
     setShowCreateForm(false);
     setFormPlanName('');
     addToast(`Schedule created for "${schedule.planName}"`, 'success');
@@ -308,7 +334,7 @@ export function RebalanceScheduler({
     formDayOfWeek,
     formDayOfMonth,
     nextRunPreview,
-    updateSchedules,
+    refreshSchedules,
     addToast,
   ]);
 
@@ -323,10 +349,12 @@ export function RebalanceScheduler({
 
   const handleDelete = useCallback(
     (id: string) => {
-      updateSchedules((prev) => prev.filter((s) => s.id !== id));
+      invoke('delete_schedule', { id })
+        .then(refreshSchedules)
+        .catch((err: unknown) => log.warn('Failed to delete schedule', String(err)));
       addToast('Schedule deleted', 'info');
     },
-    [updateSchedules, addToast]
+    [refreshSchedules, addToast]
   );
 
   const handleRunNow = useCallback(

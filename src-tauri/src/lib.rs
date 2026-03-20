@@ -215,6 +215,12 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create rebalance_schedules: {}", e))?;
 
+    // Add optional columns for day granularity (ignore error if columns already exist)
+    let _ = sqlx::query("ALTER TABLE rebalance_schedules ADD COLUMN day_of_week INTEGER")
+        .execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE rebalance_schedules ADD COLUMN day_of_month INTEGER")
+        .execute(&pool).await;
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS user_settings (
             key TEXT PRIMARY KEY,
@@ -371,6 +377,85 @@ async fn delete_alert(id: String) -> Result<(), String> {
         .execute(&pool)
         .await
         .map_err(|e| format!("Failed to delete alert: {}", e))?;
+    Ok(())
+}
+
+// ==================== REBALANCE SCHEDULES ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebalanceSchedule {
+    pub id: String,
+    pub plan_name: String,
+    pub frequency: String, // "daily" | "weekly" | "monthly" | "quarterly"
+    pub day_of_week: Option<i64>,
+    pub day_of_month: Option<i64>,
+    pub next_run: String,
+    pub last_run: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+}
+
+#[tauri::command]
+async fn save_schedule(schedule: RebalanceSchedule) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query(
+        "INSERT OR REPLACE INTO rebalance_schedules
+         (id, plan_name, cadence, day_of_week, day_of_month, next_run, last_run, enabled, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&schedule.id)
+    .bind(&schedule.plan_name)
+    .bind(&schedule.frequency)
+    .bind(schedule.day_of_week)
+    .bind(schedule.day_of_month)
+    .bind(&schedule.next_run)
+    .bind(&schedule.last_run)
+    .bind(schedule.enabled as i64)
+    .bind(&schedule.created_at)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to save schedule: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_schedules() -> Result<Vec<RebalanceSchedule>, String> {
+    let pool = get_pool().await?;
+    let rows = sqlx::query(
+        "SELECT id, plan_name, cadence, day_of_week, day_of_month, next_run, last_run, enabled, created_at
+         FROM rebalance_schedules ORDER BY next_run ASC"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to list schedules: {}", e))?;
+
+    let schedules = rows.iter().map(|row| {
+        use sqlx::Row;
+        RebalanceSchedule {
+            id: row.get("id"),
+            plan_name: row.get("plan_name"),
+            frequency: row.get("cadence"),
+            day_of_week: row.get("day_of_week"),
+            day_of_month: row.get("day_of_month"),
+            next_run: row.get("next_run"),
+            last_run: row.get("last_run"),
+            enabled: row.get::<i64, _>("enabled") != 0,
+            created_at: row.get("created_at"),
+        }
+    }).collect();
+
+    Ok(schedules)
+}
+
+#[tauri::command]
+async fn delete_schedule(id: String) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query("DELETE FROM rebalance_schedules WHERE id = ?")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to delete schedule: {}", e))?;
     Ok(())
 }
 
@@ -2462,6 +2547,10 @@ pub fn run() {
             list_alerts,
             update_alert,
             delete_alert,
+            // Rebalance schedules SQLite
+            save_schedule,
+            list_schedules,
+            delete_schedule,
         ])
         .setup(|app| {
             // Initialize local database for caching
