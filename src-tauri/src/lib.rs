@@ -65,6 +65,9 @@ lazy_static::lazy_static! {
     static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> =
         Arc::new(std::sync::atomic::AtomicBool::new(false));
 
+    static ref DB_POOL: Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>> =
+        Arc::new(Mutex::new(None));
+
 }
 
 /// Initialize local SQLite database for caching
@@ -185,17 +188,87 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create saved_portfolios: {}", e))?;
     
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS price_alerts (
+            id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            condition TEXT NOT NULL,
+            threshold REAL NOT NULL,
+            reference_price REAL,
+            active INTEGER NOT NULL DEFAULT 1,
+            triggered INTEGER NOT NULL DEFAULT 0,
+            triggered_at TEXT,
+            created_at TEXT NOT NULL,
+            note TEXT
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create price_alerts: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS rebalance_schedules (
+            id TEXT PRIMARY KEY,
+            plan_name TEXT NOT NULL,
+            cadence TEXT NOT NULL,
+            next_run TEXT NOT NULL,
+            last_run TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create rebalance_schedules: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS user_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create user_settings: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS universes (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            symbols TEXT NOT NULL,
+            tags TEXT NOT NULL DEFAULT '{}',
+            exclude_list TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create universes: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS rebalance_transactions (
+            id TEXT PRIMARY KEY,
+            portfolio_id TEXT,
+            plan_name TEXT,
+            method TEXT NOT NULL,
+            symbols TEXT NOT NULL,
+            allocations TEXT NOT NULL,
+            executed_at TEXT NOT NULL,
+            notes TEXT
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create rebalance_transactions: {}", e))?;
+
     eprintln!("[INFO] [db] Local cache database initialized successfully");
-    
+
     Ok(pool)
 }
 
 /// Initialize the enhanced market service with database
 async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
+    {
+        let mut db = DB_POOL.lock().await;
+        *db = Some(pool.clone());
+    }
     let mut service = ENHANCED_MARKET_SERVICE.lock().await;
     *service = EnhancedMarketDataService::new(Some(pool));
     DB_INITIALIZED.store(true, std::sync::atomic::Ordering::SeqCst);
     eprintln!("[INFO] [service] Enhanced market service initialized with database caching");
+}
+
+async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
+    let pool = DB_POOL.lock().await;
+    pool.clone().ok_or_else(|| "Database not initialized".to_string())
 }
 
 #[allow(dead_code)]
