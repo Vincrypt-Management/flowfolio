@@ -1,6 +1,6 @@
 // src/services/auth.ts
-import { invoke } from '@tauri-apps/api/core';
 import { createLogger } from '../core/logger';
+import { invokeWithResilience } from './apiClient';
 
 const log = createLogger('auth');
 
@@ -19,35 +19,41 @@ export interface User {
 async function migrateTokensFromLocalStorage(): Promise<void> {
   const legacyAccess = localStorage.getItem('flowfolio_access_token');
   const legacyRefresh = localStorage.getItem('flowfolio_refresh_token');
-  if (legacyAccess && legacyRefresh) {
-    await invoke('save_setting', { key: ACCESS_TOKEN_KEY, value: legacyAccess }).catch(() => {});
-    await invoke('save_setting', { key: REFRESH_TOKEN_KEY, value: legacyRefresh }).catch(() => {});
+  if (legacyAccess || legacyRefresh) {
+    if (legacyAccess) {
+      await invokeWithResilience('save_setting', { key: ACCESS_TOKEN_KEY, value: legacyAccess }).catch(() => {});
+    }
+    if (legacyRefresh) {
+      await invokeWithResilience('save_setting', { key: REFRESH_TOKEN_KEY, value: legacyRefresh }).catch(() => {});
+    }
     localStorage.removeItem('flowfolio_access_token');
     localStorage.removeItem('flowfolio_refresh_token');
   }
 }
 
 async function getStoredToken(): Promise<string | null> {
-  const v = await invoke<string | null>('load_setting', { key: ACCESS_TOKEN_KEY }).catch(() => null);
+  const v = await invokeWithResilience<string | null>('load_setting', { key: ACCESS_TOKEN_KEY }).catch(() => null);
   return v || null;
 }
 
 async function getStoredRefreshToken(): Promise<string | null> {
-  const v = await invoke<string | null>('load_setting', { key: REFRESH_TOKEN_KEY }).catch(() => null);
+  const v = await invokeWithResilience<string | null>('load_setting', { key: REFRESH_TOKEN_KEY }).catch(() => null);
   return v || null;
 }
 
 async function storeTokens(accessToken: string, refreshToken: string): Promise<void> {
-  await Promise.all([
-    invoke('save_setting', { key: ACCESS_TOKEN_KEY, value: accessToken }),
-    invoke('save_setting', { key: REFRESH_TOKEN_KEY, value: refreshToken }),
-  ]).catch(err => log.error('Failed to store tokens', err));
+  try {
+    await invokeWithResilience('save_setting', { key: ACCESS_TOKEN_KEY, value: accessToken });
+    await invokeWithResilience('save_setting', { key: REFRESH_TOKEN_KEY, value: refreshToken });
+  } catch (err) {
+    log.error('Failed to store tokens', err);
+  }
 }
 
 async function clearTokens(): Promise<void> {
   await Promise.all([
-    invoke('save_setting', { key: ACCESS_TOKEN_KEY, value: '' }),
-    invoke('save_setting', { key: REFRESH_TOKEN_KEY, value: '' }),
+    invokeWithResilience('save_setting', { key: ACCESS_TOKEN_KEY, value: '' }),
+    invokeWithResilience('save_setting', { key: REFRESH_TOKEN_KEY, value: '' }),
   ]).catch(() => {});
 }
 
@@ -62,8 +68,11 @@ async function refreshAccessToken(): Promise<boolean> {
       body: JSON.stringify({ refresh_token: refreshToken }),
     });
     if (!res.ok) { await clearTokens(); return false; }
-    const data = await res.json();
-    await invoke('save_setting', { key: ACCESS_TOKEN_KEY, value: data.access_token }).catch(() => {});
+    const data = await res.json() as { access_token?: string };
+    const newToken = data.access_token;
+    if (typeof newToken === 'string' && newToken) {
+      await invokeWithResilience('save_setting', { key: ACCESS_TOKEN_KEY, value: newToken }).catch(() => {});
+    }
     return true;
   } catch (e) {
     log.error('Token refresh failed', e);
@@ -122,7 +131,15 @@ export const auth = {
     try {
       const res = await authFetch('/user/me');
       if (!res.ok) return null;
-      return res.json();
+      const data = await res.json() as Partial<User> & { avatar_url?: string };
+      // Server returns snake_case; map to camelCase User shape
+      return {
+        id: data.id ?? '',
+        email: data.email ?? '',
+        name: data.name ?? null,
+        avatarUrl: data.avatarUrl ?? data.avatar_url ?? null,
+        createdAt: data.createdAt ?? (data as Record<string, unknown>)['created_at'] as string ?? '',
+      } as User;
     } catch { return null; }
   },
 
@@ -130,7 +147,14 @@ export const auth = {
     try {
       const res = await authFetch('/user/me', { method: 'PATCH', body: JSON.stringify(data) });
       if (!res.ok) return null;
-      return res.json();
+      const resData = await res.json() as Partial<User> & { avatar_url?: string };
+      return {
+        id: resData.id ?? '',
+        email: resData.email ?? '',
+        name: resData.name ?? null,
+        avatarUrl: resData.avatarUrl ?? resData.avatar_url ?? null,
+        createdAt: resData.createdAt ?? (resData as Record<string, unknown>)['created_at'] as string ?? '',
+      } as User;
     } catch { return null; }
   },
 
