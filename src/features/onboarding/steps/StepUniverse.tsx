@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from '../../../services/apiClient';
 import { Plus } from 'lucide-react';
 
 const PRESETS: Record<string, string[]> = {
@@ -28,7 +28,7 @@ export function StepUniverse({ onNext, onSkip }: Props) {
       return;
     }
     try {
-      await invoke('create_universe', { name: name.trim(), description: 'Created during onboarding', symbols: symbolList });
+      await invokeWithResilience('create_universe', { name: name.trim(), description: 'Created during onboarding', symbols: symbolList });
       setCreated(true);
       setTimeout(onNext, 800);
     } catch (e) {

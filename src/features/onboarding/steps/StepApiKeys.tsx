@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from '../../../services/apiClient';
 import { Key, CheckCircle } from 'lucide-react';
 
 interface Props { onFinish: () => void; }
@@ -18,7 +18,7 @@ export function StepApiKeys({ onFinish }: Props) {
     try {
       const filtered = Object.fromEntries(Object.entries(keys).filter(([, v]) => v.trim()));
       if (Object.keys(filtered).length > 0) {
-        await invoke('save_api_keys', { keys: filtered });
+        await invokeWithResilience('save_api_keys', { keys: filtered });
       }
       setSaved(true);
       setTimeout(onFinish, 600);

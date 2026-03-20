@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from '../../../services/apiClient';
 import { Sparkles } from 'lucide-react';
 
 interface Props { onNext: () => void; onSkip: () => void; }
@@ -9,13 +9,13 @@ export function StepStrategy({ onNext, onSkip }: Props) {
   const [selected, setSelected] = useState('');
 
   useEffect(() => {
-    invoke<string[]>('list_templates').then(setTemplates).catch(() => {});
+    invokeWithResilience<string[]>('list_templates', {}).then(setTemplates).catch(() => {});
   }, []);
 
   const handleLoad = async () => {
     if (!selected) { onSkip(); return; }
     try {
-      await invoke('get_template', { name: selected });
+      await invokeWithResilience('get_template', { name: selected });
     } catch { /* ignore */ }
     onNext();
   };
