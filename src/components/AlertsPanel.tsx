@@ -1,6 +1,6 @@
 /**
  * AlertsPanel Component
- * Price alert management with localStorage persistence and periodic price checking.
+ * Price alert management with SQLite persistence and periodic price checking.
  * Uses get_current_prices_batch Tauri command for live price fetching.
  */
 
@@ -102,17 +102,36 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
   const [formNote, setFormNote] = useState('');
   const [formError, setFormError] = useState('');
 
-  // Desktop notifications toggle (persisted to localStorage)
-  const [desktopNotifs, setDesktopNotifs] = useState<boolean>(() => {
-    return localStorage.getItem('flowfolio-desktop-notifs') !== 'false';
-  });
+  // Desktop notifications toggle (persisted to SQLite user_settings)
+  const [desktopNotifs, setDesktopNotifs] = useState<boolean>(true);
   const desktopNotifsRef = useRef(desktopNotifs);
   useEffect(() => { desktopNotifsRef.current = desktopNotifs; }, [desktopNotifs]);
+
+  // Load desktopNotifs from SQLite on mount; migrate legacy localStorage value if present
+  useEffect(() => {
+    // LEGACY migration: move old localStorage key to SQLite, then remove it
+    const legacyVal = localStorage.getItem('flowfolio-desktop-notifs');
+    if (legacyVal !== null) {
+      const migrated = legacyVal !== 'false';
+      invoke('save_setting', { key: 'alerts_desktop_notifs', value: String(migrated) })
+        .then(() => {
+          localStorage.removeItem('flowfolio-desktop-notifs');
+          setDesktopNotifs(migrated);
+        })
+        .catch(() => { setDesktopNotifs(migrated); });
+      return;
+    }
+    // Normal load from SQLite
+    invoke<string | null>('load_setting', { key: 'alerts_desktop_notifs' })
+      .then(val => { setDesktopNotifs(val !== 'false'); })
+      .catch(() => { /* default true */ });
+  }, []);
 
   const toggleDesktopNotifs = useCallback(() => {
     setDesktopNotifs(prev => {
       const next = !prev;
-      localStorage.setItem('flowfolio-desktop-notifs', String(next));
+      invoke('save_setting', { key: 'alerts_desktop_notifs', value: String(next) })
+        .catch(() => {});
       return next;
     });
   }, []);

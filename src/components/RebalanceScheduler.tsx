@@ -1,6 +1,6 @@
 /**
  * RebalanceScheduler Component
- * Manages scheduled portfolio rebalancing with localStorage persistence.
+ * Manages scheduled portfolio rebalancing with SQLite persistence.
  * Checks for overdue schedules on mount and provides a visual timeline.
  */
 
@@ -27,7 +27,9 @@ import './RebalanceScheduler.css';
 const log = createLogger('RebalanceScheduler');
 
 const LEGACY_STORAGE_KEY = 'flowfolio_rebalance_schedules';
-const HISTORY_KEY = 'flowfolio_rebalance_history';
+// LEGACY: old localStorage key for history — migrated to SQLite user_settings
+const LEGACY_HISTORY_KEY = 'flowfolio_rebalance_history';
+const HISTORY_SETTING_KEY = 'rebalance_history';
 
 interface RebalanceSchedule {
   id: string;
@@ -71,17 +73,18 @@ function generateId(): string {
   return `sched_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function loadHistory(): RebalanceHistoryEntry[] {
+async function loadHistory(): Promise<RebalanceHistoryEntry[]> {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const val = await invoke<string | null>('load_setting', { key: HISTORY_SETTING_KEY });
+    return val ? JSON.parse(val) : [];
   } catch {
     return [];
   }
 }
 
 function saveHistory(history: RebalanceHistoryEntry[]): void {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  invoke('save_setting', { key: HISTORY_SETTING_KEY, value: JSON.stringify(history) })
+    .catch((err: unknown) => log.warn('Failed to persist rebalance history', String(err)));
 }
 
 function calculateNextRun(
@@ -174,7 +177,7 @@ export function RebalanceScheduler({
         log.warn('Failed to load schedules from SQLite', msg);
         setSchedules([]);
       });
-    setHistory(loadHistory());
+    loadHistory().then(setHistory);
   }, []);
 
   // Migrate legacy localStorage schedules to SQLite (one-time)
@@ -194,6 +197,27 @@ export function RebalanceScheduler({
           });
       } catch {
         // ignore malformed legacy data
+      }
+    }
+  }, []);
+
+  // Migrate legacy localStorage history to SQLite user_settings (one-time)
+  useEffect(() => {
+    const legacyHistory = localStorage.getItem(LEGACY_HISTORY_KEY);
+    if (legacyHistory) {
+      try {
+        const items: RebalanceHistoryEntry[] = JSON.parse(legacyHistory);
+        invoke('save_setting', { key: HISTORY_SETTING_KEY, value: JSON.stringify(items) })
+          .then(() => {
+            localStorage.removeItem(LEGACY_HISTORY_KEY);
+            return loadHistory();
+          })
+          .then(setHistory)
+          .catch((err: unknown) => {
+            log.warn('Legacy history migration failed', String(err));
+          });
+      } catch {
+        // ignore malformed legacy history
       }
     }
   }, []);

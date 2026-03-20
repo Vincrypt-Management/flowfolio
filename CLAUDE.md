@@ -282,7 +282,7 @@ cd src-tauri && cargo test -- --nocapture
 2. **Register in `lib.rs`** (add to `.invoke_handler()`)
 3. **Call from frontend** using `invokeWithResilience()`:
 ```typescript
-import { invokeWithResilience } from '@/core/api/client';
+import { invokeWithResilience } from '@/services/apiClient';
 
 const result = await invokeWithResilience<ReturnType>('command_name', {
   param: value
