@@ -271,6 +271,109 @@ async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
     pool.clone().ok_or_else(|| "Database not initialized".to_string())
 }
 
+// ==================== PRICE ALERTS ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriceAlert {
+    pub id: String,
+    pub symbol: String,
+    pub condition: String, // "above" | "below" | "percent_change_up" | "percent_change_down"
+    pub threshold: f64,
+    pub reference_price: Option<f64>,
+    pub active: bool,
+    pub triggered: bool,
+    pub triggered_at: Option<String>,
+    pub created_at: String,
+    pub note: Option<String>,
+}
+
+#[tauri::command]
+async fn create_alert(alert: PriceAlert) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query(
+        "INSERT INTO price_alerts (id, symbol, condition, threshold, reference_price, active, triggered, triggered_at, created_at, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&alert.id)
+    .bind(&alert.symbol)
+    .bind(&alert.condition)
+    .bind(alert.threshold)
+    .bind(alert.reference_price)
+    .bind(alert.active as i64)
+    .bind(alert.triggered as i64)
+    .bind(&alert.triggered_at)
+    .bind(&alert.created_at)
+    .bind(&alert.note)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to create alert: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_alerts() -> Result<Vec<PriceAlert>, String> {
+    let pool = get_pool().await?;
+    let rows = sqlx::query(
+        "SELECT id, symbol, condition, threshold, reference_price, active, triggered, triggered_at, created_at, note
+         FROM price_alerts ORDER BY created_at DESC"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to list alerts: {}", e))?;
+
+    let alerts = rows.iter().map(|row| {
+        use sqlx::Row;
+        PriceAlert {
+            id: row.get("id"),
+            symbol: row.get("symbol"),
+            condition: row.get("condition"),
+            threshold: row.get("threshold"),
+            reference_price: row.get("reference_price"),
+            active: row.get::<i64, _>("active") != 0,
+            triggered: row.get::<i64, _>("triggered") != 0,
+            triggered_at: row.get("triggered_at"),
+            created_at: row.get("created_at"),
+            note: row.get("note"),
+        }
+    }).collect();
+
+    Ok(alerts)
+}
+
+#[tauri::command]
+async fn update_alert(alert: PriceAlert) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query(
+        "UPDATE price_alerts SET symbol=?, condition=?, threshold=?, reference_price=?,
+         active=?, triggered=?, triggered_at=?, note=? WHERE id=?"
+    )
+    .bind(&alert.symbol)
+    .bind(&alert.condition)
+    .bind(alert.threshold)
+    .bind(alert.reference_price)
+    .bind(alert.active as i64)
+    .bind(alert.triggered as i64)
+    .bind(&alert.triggered_at)
+    .bind(&alert.note)
+    .bind(&alert.id)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to update alert: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_alert(id: String) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query("DELETE FROM price_alerts WHERE id = ?")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to delete alert: {}", e))?;
+    Ok(())
+}
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct TemplateInfo {
@@ -2354,6 +2457,11 @@ pub fn run() {
             save_api_keys,
             // Price alert desktop notifications
             send_price_alert_notification,
+            // Price alerts SQLite
+            create_alert,
+            list_alerts,
+            update_alert,
+            delete_alert,
         ])
         .setup(|app| {
             // Initialize local database for caching

@@ -47,7 +47,6 @@ interface AlertsPanelProps {
 
 // --- Constants ---
 
-const STORAGE_KEY = 'flowfolio_price_alerts';
 const CHECK_INTERVAL_MS = 60_000;
 
 const CONDITION_ICONS: Record<PriceAlert['condition'], typeof TrendingUp> = {
@@ -61,22 +60,6 @@ const CONDITION_ICONS: Record<PriceAlert['condition'], typeof TrendingUp> = {
 
 function generateId(): string {
   return `alert_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function loadAlerts(): PriceAlert[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as PriceAlert[];
-  } catch {
-    return [];
-  }
-}
-
-function saveAlerts(alerts: PriceAlert[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
 }
 
 function describeCondition(alert: PriceAlert): string {
@@ -105,7 +88,7 @@ function formatTimestamp(iso: string): string {
 // --- Component ---
 
 export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
-  const [alerts, setAlerts] = useState<PriceAlert[]>(loadAlerts);
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [checking, setChecking] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
@@ -139,10 +122,30 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
     onAlertTriggeredRef.current = onAlertTriggered;
   }, [onAlertTriggered]);
 
-  // Persist alerts on change
+  // Load alerts from SQLite on mount
   useEffect(() => {
-    saveAlerts(alerts);
-  }, [alerts]);
+    invoke<PriceAlert[]>('list_alerts')
+      .then(setAlerts)
+      .catch(() => {});
+  }, []);
+
+  // One-time migration: move any localStorage alerts into SQLite
+  useEffect(() => {
+    const LEGACY_KEY = 'flowfolio_price_alerts';
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+      try {
+        const legacyAlerts: PriceAlert[] = JSON.parse(legacy);
+        Promise.all(legacyAlerts.map(a => invoke('create_alert', { alert: a })))
+          .then(() => {
+            localStorage.removeItem(LEGACY_KEY);
+            return invoke<PriceAlert[]>('list_alerts');
+          })
+          .then(setAlerts)
+          .catch(err => console.error('Migration failed', err));
+      } catch { /* ignore */ }
+    }
+  }, []);
 
   // Derived
   const activeAlerts = alerts.filter((a) => a.active && !a.triggered);
@@ -163,6 +166,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       });
 
       const triggered: Array<{ symbol: string; condition: PriceAlert['condition']; threshold: number; price: number }> = [];
+      const nowTriggeredAlerts: PriceAlert[] = [];
 
       setAlerts((prev) => {
         let changed = false;
@@ -208,6 +212,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
               triggeredAt: new Date().toISOString(),
             };
             onAlertTriggeredRef.current?.(updated);
+            nowTriggeredAlerts.push(updated);
             return updated;
           }
           return alert;
@@ -215,6 +220,11 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
 
         return changed ? next : prev;
       });
+
+      // Persist triggered alerts to SQLite
+      for (const a of nowTriggeredAlerts) {
+        invoke('update_alert', { alert: a }).catch(() => {});
+      }
 
       // Fire desktop notifications OUTSIDE the state updater (must be pure)
       if (desktopNotifsRef.current) {
@@ -289,7 +299,14 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       note: formNote.trim() || undefined,
     };
 
-    setAlerts((prev) => [newAlert, ...prev]);
+    try {
+      await invoke('create_alert', { alert: newAlert });
+      const updated = await invoke<PriceAlert[]>('list_alerts');
+      setAlerts(updated);
+    } catch {
+      setFormError('Failed to save alert');
+      return;
+    }
     setFormSymbol('');
     setFormThreshold('');
     setFormNote('');
@@ -298,16 +315,23 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
   }, [formSymbol, formCondition, formThreshold, formNote]);
 
   const toggleActive = useCallback((id: string) => {
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a))
-    );
+    setAlerts((prev) => {
+      const updated = prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a));
+      const target = updated.find((a) => a.id === id);
+      if (target) {
+        invoke('update_alert', { alert: target }).catch(() => {});
+      }
+      return updated;
+    });
   }, []);
 
   const deleteAlert = useCallback((id: string) => {
+    invoke('delete_alert', { id }).catch(() => {});
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
   const dismissTriggered = useCallback((id: string) => {
+    invoke('delete_alert', { id }).catch(() => {});
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
@@ -320,6 +344,8 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       triggeredAt: undefined,
       createdAt: new Date().toISOString(),
     };
+    invoke('delete_alert', { id: alert.id }).catch(() => {});
+    invoke('create_alert', { alert: recreated }).catch(() => {});
     setAlerts((prev) => [recreated, ...prev.filter((a) => a.id !== alert.id)]);
   }, []);
 
