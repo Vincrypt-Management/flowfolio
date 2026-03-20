@@ -535,6 +535,24 @@ Built on Tauri 2, React 19, and Rust.
   return captions[videoType] || captions['intro'];
 }
 
+async function dismissPopups(page: Page): Promise<void> {
+  const dismissSelectors = [
+    'button:has-text("Not Now")',
+    'button:has-text("Not now")',
+    'button:has-text("Dismiss")',
+    'button:has-text("Close")',
+    '[aria-label="Close"]:not(dialog)',
+  ];
+  for (const sel of dismissSelectors) {
+    const btn = page.locator(sel).first();
+    if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await btn.click({ force: true });
+      console.log(`  Dismissed popup: ${sel}`);
+      await delay(1000);
+    }
+  }
+}
+
 async function uploadCarouselPost(page: Page, slides: string[], caption: string): Promise<boolean> {
   const debugDir = path.join(path.dirname(slides[0]), '..', 'debug');
   if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
@@ -546,6 +564,7 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
   try {
     await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await delay(3000);
+    await dismissPopups(page);
     await screenshot('01-home');
 
     // Click Create / New post button
@@ -570,32 +589,54 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
       await page.click('[href="/create/style/"]', { force: true }).catch(() => {});
     }
     await delay(3000);
+    await dismissPopups(page);
     await screenshot('02-create-dialog');
 
     // Check if creation dialog opened or if we got a dropdown menu
+    // Make sure we're NOT looking at the notifications popup — detect by presence of file input or "drag and drop" text
     let dialog = page.locator('div[role="dialog"]').first();
     let dialogVisible = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+    // If the dialog is the notifications popup, dismiss it and re-check
+    const isNotificationsPopup = await page.locator('div[role="dialog"]:has-text("Turn on Notifications")').isVisible({ timeout: 1000 }).catch(() => false);
+    if (isNotificationsPopup) {
+      console.log('  Notifications popup detected, dismissing...');
+      const notNow = page.locator('button:has-text("Not Now"), button:has-text("Not now")').first();
+      await notNow.click({ force: true }).catch(() => {});
+      await delay(2000);
+      dialogVisible = false;
+    }
 
     if (!dialogVisible) {
-      // IG may show a sidebar sub-menu instead of a dialog — try clicking Create again
-      // or navigate directly to the creation page
-      console.log('  Dialog not found, trying direct navigation to create page...');
-      await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await delay(3000);
-      await screenshot('02b-create-select');
+      // IG shows a sidebar sub-menu with Post/Reel/Story — click "Post" to open the upload dialog
+      const sidebarPostSelectors = [
+        'nav span:text-is("Post")',
+        'nav a:has-text("Post")',
+        'div[style*="drawer"] span:text-is("Post")',
+        'a[role="link"] span:text-is("Post")',
+        'span:text-is("Post")',
+      ];
+      for (const sel of sidebarPostSelectors) {
+        const postBtn = page.locator(sel).first();
+        if (await postBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await postBtn.click({ force: true });
+          console.log(`  Clicked "Post" sub-menu: ${sel}`);
+          await delay(3000);
+          break;
+        }
+      }
+      await screenshot('02b-post-clicked');
 
       dialog = page.locator('div[role="dialog"]').first();
       dialogVisible = await dialog.isVisible({ timeout: 5000 }).catch(() => false);
     }
 
     if (!dialogVisible) {
-      // Fallback: click Create from sidebar again and look for the + icon
-      console.log('  Still no dialog, trying Create click on the + icon...');
-      const createIcon = page.locator('svg[aria-label="New post"]').first();
-      if (await createIcon.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await createIcon.click({ force: true });
-        await delay(3000);
-      }
+      // Fallback: navigate to /create/select/ (different UI, but still works)
+      console.log('  Sub-menu click failed, navigating to /create/select/...');
+      await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await delay(3000);
+      await screenshot('02c-create-select');
+
       dialog = page.locator('div[role="dialog"]').first();
       dialogVisible = await dialog.isVisible({ timeout: 5000 }).catch(() => false);
     }
@@ -603,10 +644,33 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
     console.log(`  Creation dialog visible: ${dialogVisible}`);
     await screenshot('02c-dialog-state');
 
+    // If dialog is showing but no file input yet, click "Select from computer"
+    let inputCount = await page.locator('input[type="file"]').count();
+    console.log(`  File inputs found: ${inputCount}`);
+
+    if (inputCount === 0) {
+      const selectSelectors = [
+        'button:has-text("Select from computer")',
+        'button:has-text("Select from device")',
+        'button:has-text("Select")',
+        'div[role="button"]:has-text("Select from computer")',
+        'div[role="button"]:has-text("Select")',
+      ];
+      for (const sel of selectSelectors) {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await btn.click({ force: true });
+          console.log(`  Clicked "${sel}" to reveal file input`);
+          await delay(2000);
+          break;
+        }
+      }
+      inputCount = await page.locator('input[type="file"]').count();
+      console.log(`  File inputs after click: ${inputCount}`);
+    }
+
     // Upload all slides at once
     const fileInput = page.locator('input[type="file"]').first();
-    const inputCount = await page.locator('input[type="file"]').count();
-    console.log(`  File inputs found: ${inputCount}`);
 
     // Check if input has multiple attribute, if not, set it
     await fileInput.evaluate((el: HTMLInputElement) => {
@@ -619,10 +683,47 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
     await delay(5000);
     await screenshot('03-after-upload');
 
-    // Wait for images to process
-    console.log(`  Processing ${slides.length} carousel slides...`);
-    await delay(3000);
-    await screenshot('04-processing');
+    // Navigate through all slides using the right-arrow button inside the dialog.
+    // The right arrow appears at the center-right of the image area within the dialog.
+    // We find it by locating the rightmost mid-height button inside the dialog.
+    console.log(`  Navigating through all ${slides.length} slides via right arrow...`);
+
+    const rightArrow = await page.evaluate(() => {
+      const dialog = document.querySelector('div[role="dialog"]');
+      if (!dialog) return null;
+      const dialogRect = dialog.getBoundingClientRect();
+      const midY = dialogRect.top + dialogRect.height / 2;
+      let best: { x: number; y: number } | null = null;
+      let bestX = -Infinity;
+      dialog.querySelectorAll('button, [role="button"]').forEach(el => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        const cx = rect.x + rect.width / 2;
+        const cy = rect.y + rect.height / 2;
+        // Must be in the right half of the dialog and vertically near the center
+        if (cx > dialogRect.left + dialogRect.width * 0.6 && Math.abs(cy - midY) < 200) {
+          // Pick the rightmost one (not the Next/Close header buttons — those are at the very top)
+          if (cy > dialogRect.top + 100 && cy < dialogRect.bottom - 100 && cx > bestX) {
+            bestX = cx;
+            best = { x: Math.round(cx), y: Math.round(cy) };
+          }
+        }
+      });
+      return best;
+    });
+
+    if (rightArrow) {
+      console.log(`  Right arrow found at (${rightArrow.x}, ${rightArrow.y})`);
+      for (let i = 1; i < slides.length; i++) {
+        await page.mouse.click(rightArrow.x, rightArrow.y);
+        await delay(600);
+        console.log(`  Navigated to slide ${i + 1}/${slides.length}`);
+      }
+    } else {
+      console.log('  Right arrow not found — proceeding anyway (all slides should still be included)');
+    }
+
+    await screenshot('04-all-slides-visited');
 
     // Step 1: Crop -> Next
     const nextBtn = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")').first();
@@ -726,21 +827,51 @@ async function uploadCarouselPost(page: Page, slides: string[], caption: string)
       return false;
     }
 
-    await delay(15000);
     await screenshot('08-after-share');
 
-    // Check for success indicators
-    const successSelectors = [
-      'text="Post shared"',
-      'text="Your post has been shared"',
-      'text="Reel shared"',
-    ];
-    const success = await Promise.race([
-      ...successSelectors.map(sel =>
-        page.locator(sel).waitFor({ timeout: 45000 }).then(() => true).catch(() => false)
+    // Watch for "Share to story" button and success concurrently.
+    // IG shows the success overlay briefly — use waitForSelector for instant reaction.
+    console.log('  Watching for "Share to story" and post success...');
+    let storyShared = false;
+    let success = false;
+
+    // Race: share-to-story button vs timeout
+    const storyBtnPromise = page.waitForSelector(
+      'button:has-text("Share to story"), div[role="button"]:has-text("Share to story"), button:has-text("Share to Story"), div[role="button"]:has-text("Share to Story")',
+      { timeout: 60000 }
+    ).then(async (el) => {
+      await el.click({ force: true });
+      storyShared = true;
+      console.log('  ✅ Clicked "Share to story" (waitForSelector)');
+    }).catch(() => {});
+
+    const successTexts = ['Post shared', 'Your post has been shared', 'Reel shared'];
+    const successPromise = Promise.race([
+      ...successTexts.map(text =>
+        page.locator(`text="${text}"`).waitFor({ timeout: 60000 }).then(() => {
+          success = true;
+          console.log(`  Success: "${text}"`);
+        }).catch(() => {})
       ),
-      delay(50000).then(() => false),
     ]);
+
+    const feedRedirectPromise = page.waitForURL(
+      url => url.toString() === `${IG_BASE}/` || !url.toString().includes('/create'),
+      { timeout: 60000 }
+    ).then(() => {
+      console.log('  Redirected to feed — post succeeded');
+      success = true;
+    }).catch(() => {});
+
+    // Wait for all three concurrently, give up after 65s
+    await Promise.race([
+      Promise.all([storyBtnPromise, successPromise, feedRedirectPromise]),
+      delay(65000),
+    ]);
+
+    if (!storyShared) {
+      console.log('  "Share to story" button not found — story skipped');
+    }
 
     await screenshot('09-final');
 
@@ -798,79 +929,176 @@ export async function uploadStory(page: Page, mediaPath: string): Promise<boolea
   try {
     await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await delay(3000);
+    await dismissPopups(page);
     await screenshot('s01-home');
 
-    // Click the New post (+) button
-    const createSelectors = [
-      'svg[aria-label="New post"]',
-      '[aria-label="New post"]',
-      'svg[aria-label="New Post"]',
-    ];
-    for (const sel of createSelectors) {
-      const btn = page.locator(sel).first();
-      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await btn.click({ force: true });
-        console.log(`  Clicked create button: ${sel}`);
-        break;
-      }
-    }
-    await delay(2000);
-    await screenshot('s02-after-create');
+    let storyModeEntered = false;
 
-    // Click "Story" from the dropdown menu (not "Post")
-    const storySelectors = [
-      'nav span:text-is("Story")',
-      'a[role="link"] span:text-is("Story")',
-      'span:text-is("Story")',
-    ];
-    let storyClicked = false;
-    for (const sel of storySelectors) {
-      const btn = page.locator(sel).first();
-      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await btn.click({ force: true });
-        storyClicked = true;
-        console.log(`  Clicked "Story": ${sel}`);
-        await delay(3000);
-        break;
+    // Strategy 1: SPA-click the story creation link in the stories tray.
+    // Important: do NOT use page.goto('/stories/create/') — that navigates to the @create
+    // user's profile. Clicking the <a> lets the React router open the story creator modal.
+    const storyCreateLink = page.locator('a[href="/stories/create/"]').first();
+    if (await storyCreateLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await storyCreateLink.click({ force: true });
+      storyModeEntered = true;
+      console.log('  Clicked story creation link (SPA) from home feed');
+      await delay(4000);
+    }
+
+    // Strategy 2: aria-label scan across the whole page
+    if (!storyModeEntered) {
+      const storyBtn = await page.evaluate(() => {
+        const els = Array.from(document.querySelectorAll('a, button, [role="button"], [role="link"]'));
+        for (const el of els) {
+          const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+          if (aria.includes('add to your story') || aria.includes('create story') || aria.includes('new story')) {
+            const rect = (el as HTMLElement).getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2), label: aria };
+            }
+          }
+        }
+        // Also scan all <a> hrefs for stories/create
+        const links = Array.from(document.querySelectorAll('a[href*="stories"][href*="create"]'));
+        if (links.length > 0) {
+          const rect = (links[0] as HTMLElement).getBoundingClientRect();
+          return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2), label: 'stories-create-link' };
+        }
+        return null;
+      });
+      if (storyBtn) {
+        console.log(`  Found story button: "${storyBtn.label}" at (${storyBtn.x}, ${storyBtn.y})`);
+        await page.mouse.click(storyBtn.x, storyBtn.y);
+        storyModeEntered = true;
+        await delay(4000);
       }
     }
-    if (!storyClicked) {
-      console.log('  "Story" menu item not found, trying direct navigation...');
-      await page.goto(`${IG_BASE}/stories/create/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await delay(3000);
+
+    // Strategy 3: "New post" dropdown (works on some account types)
+    if (!storyModeEntered) {
+      console.log('  Trying New post dropdown...');
+      const createBtn = page.locator('svg[aria-label="New post"], [aria-label="New post"]').first();
+      if (await createBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await createBtn.click({ force: true });
+        await delay(3000);
+      }
+      const dropdownStory = await page.evaluate(() => {
+        const allEls = Array.from(document.querySelectorAll('*'));
+        for (const el of allEls) {
+          if (el.children.length === 0 && el.textContent?.trim() === 'Story') {
+            const rect = (el as HTMLElement).getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              (el as HTMLElement).click();
+              return true;
+            }
+          }
+        }
+        return false;
+      });
+      if (dropdownStory) {
+        console.log('  Clicked "Story" via dropdown evaluate');
+        storyModeEntered = true;
+        await delay(3000);
+      }
     }
+
+    // Strategy 4: Mobile viewport — IG mobile web has clear story creation UI
+    if (!storyModeEntered) {
+      console.log('  Switching to mobile viewport for story creation...');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(IG_BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await delay(3000);
+      await dismissPopups(page);
+      await screenshot('s02-mobile');
+
+      const mobileStoryBtn = await page.evaluate(() => {
+        // On mobile IG, the story creation "+" is typically at the top of the screen
+        const els = Array.from(document.querySelectorAll('a, button, [role="button"]'));
+        for (const el of els) {
+          const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+          const href = (el as HTMLAnchorElement).href || '';
+          if (aria.includes('story') || href.includes('stories/create')) {
+            const rect = (el as HTMLElement).getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2), label: aria || href };
+            }
+          }
+        }
+        return null;
+      });
+
+      if (mobileStoryBtn) {
+        console.log(`  Mobile story button: "${mobileStoryBtn.label}" at (${mobileStoryBtn.x}, ${mobileStoryBtn.y})`);
+        await page.mouse.click(mobileStoryBtn.x, mobileStoryBtn.y);
+        storyModeEntered = true;
+        await delay(3000);
+      }
+    }
+
     await screenshot('s03-story-mode');
 
-    // Set file on the file input
-    const fileInput = page.locator('input[type="file"]').first();
-    const inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+    // Find or trigger file input
+    let fileInput = page.locator('input[type="file"]').first();
+    let inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+
+    if (!inputAvailable) {
+      // Try clicking the gallery/upload button that reveals the file input
+      const gallerySelectors = [
+        'button:has-text("Upload")',
+        'div[role="button"]:has-text("Upload")',
+        '[aria-label="Upload photo or video"]',
+        '[aria-label="Add photo or video"]',
+        'svg[aria-label="Upload"]',
+      ];
+      for (const sel of gallerySelectors) {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await btn.click({ force: true });
+          console.log(`  Clicked gallery button: ${sel}`);
+          await delay(2000);
+          break;
+        }
+      }
+      fileInput = page.locator('input[type="file"]').first();
+      inputAvailable = await fileInput.count().then(c => c > 0).catch(() => false);
+    }
 
     if (inputAvailable) {
       await fileInput.setInputFiles(filePath);
+      console.log(`  File set on input: ${path.basename(filePath)}`);
     } else {
-      // Try JS injection
-      await page.evaluate((accept) => {
+      // JS injection fallback
+      await page.evaluate(() => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = accept;
-        input.style.display = 'none';
+        input.accept = 'image/jpeg,image/png,video/mp4,video/quicktime';
+        input.style.position = 'fixed';
+        input.style.top = '0';
+        input.style.left = '0';
+        input.style.opacity = '0';
         document.body.appendChild(input);
-        input.click();
-      }, 'image/jpeg,image/png');
-      await delay(1000);
-      const injected = page.locator('input[type="file"]').first();
-      await injected.setInputFiles(filePath);
+      });
+      await delay(500);
+      fileInput = page.locator('input[type="file"]').last();
+      await fileInput.setInputFiles(filePath);
+      console.log(`  File set via injected input: ${path.basename(filePath)}`);
     }
 
     await delay(5000);
     await screenshot('s04-after-upload');
 
-    // Click "Add to story" / "Share" button
+    // Click share / add-to-story button
     const shareSelectors = [
       'button:has-text("Add to story")',
-      'button:has-text("Share to story")',
       'div[role="button"]:has-text("Add to story")',
+      'button:has-text("Share to story")',
+      'div[role="button"]:has-text("Share to story")',
+      'button:has-text("Your story")',
+      'div[role="button"]:has-text("Your story")',
+      '[aria-label="Share to story"]',
+      '[aria-label="Add to story"]',
       'button:has-text("Share")',
+      'div[role="button"]:has-text("Share")',
     ];
     let shared = false;
     for (const sel of shareSelectors) {
@@ -884,9 +1112,8 @@ export async function uploadStory(page: Page, mediaPath: string): Promise<boolea
     }
 
     if (!shared) {
-      // Try JS fallback
       shared = await page.evaluate(() => {
-        const candidates = ['Add to story', 'Share to story', 'Share'];
+        const candidates = ['Add to story', 'Share to story', 'Your story', 'Share'];
         for (const text of candidates) {
           const els = Array.from(document.querySelectorAll('button, [role="button"]'));
           const btn = els.find(el => el.textContent?.trim() === text) as HTMLElement | undefined;
@@ -894,41 +1121,49 @@ export async function uploadStory(page: Page, mediaPath: string): Promise<boolea
         }
         return false;
       }).catch(() => false);
-      if (shared) console.log('  Share clicked via JS');
+      if (shared) console.log('  Share clicked via JS evaluate');
     }
 
-    await delay(8000);
-    await screenshot('s05-final');
+    if (!shared) {
+      console.log('  WARNING: Share button not found — story may not have been submitted');
+    }
 
-    // Detect success
+    // Wait for success or redirect
     const successTexts = ['Your story has been shared', 'Story shared', 'Story posted'];
     const success = await Promise.race([
       ...successTexts.map(text =>
-        page.locator(`text="${text}"`).waitFor({ timeout: 20000 }).then(() => {
+        page.locator(`text="${text}"`).waitFor({ timeout: 30000 }).then(() => {
           console.log(`  Story success: "${text}"`);
           return true;
         }).catch(() => false)
       ),
-      delay(25000).then(() => false),
+      page.waitForURL(
+        url => url.toString() === `${IG_BASE}/` || !url.toString().includes('/create'),
+        { timeout: 30000 }
+      ).then(() => {
+        console.log('  Redirected away from create — story likely posted');
+        return true;
+      }).catch(() => false),
+      delay(35000).then(() => false),
     ]);
+
+    await screenshot('s05-final');
 
     if (success) {
       console.log('✅ Story posted successfully!');
       return true;
     }
 
-    // Optimistic: if we're back on the home feed, assume it worked
     const finalUrl = page.url();
-    if (finalUrl === IG_BASE + '/' || !finalUrl.includes('/create')) {
-      console.log('✅ Story likely posted (redirected to feed).');
-      return true;
-    }
-
-    console.log('⚠️  Story may have posted — check Instagram manually.');
+    console.log(`  Final story URL: ${finalUrl}`);
+    console.log('⚠️  Story status unclear — check Instagram manually.');
     return true;
   } catch (err) {
     await screenshot('s-error').catch(() => {});
     console.error('❌ Story upload error:', (err as Error).message);
     return false;
+  } finally {
+    // Restore desktop viewport in case we switched to mobile
+    await page.setViewportSize({ width: 1280, height: 900 }).catch(() => {});
   }
 }
