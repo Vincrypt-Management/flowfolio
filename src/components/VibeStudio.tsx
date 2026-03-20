@@ -7,6 +7,7 @@ import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
 import { useToast } from "./Toast";
 import { useUserMode } from '../contexts/UserModeContext';
+import { PremiumGate } from './PremiumGate';
 import { 
   Sparkles, 
   RotateCcw, 
@@ -1580,6 +1581,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
           </div>
 
           {isAdvanced && chatMode && (
+            <PremiumGate tier="ai">
             <div className="chat-section">
               <div className="chat-header">
                 <h3><MessageSquare size={20} /> Chat with AI about this portfolio</h3>
@@ -1683,6 +1685,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
                 </button>
               </div>
             </div>
+            </PremiumGate>
           )}
         </div>
       )}

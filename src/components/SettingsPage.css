@@ -203,6 +203,64 @@
   font-size: 0.75rem;
 }
 
+/* Account Card (Google OAuth) */
+.account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-hover);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.account-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.account-email {
+  font-size: 12px;
+}
+
+.account-tier {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--primary);
+  margin-top: 2px;
+}
+
+.account-login-prompt {
+  padding: 16px;
+  background: var(--bg-hover);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-login-prompt p {
+  margin: 0;
+}
+
 @media (max-width: 768px) {
   .settings-grid {
     max-width: 100%;
@@ -218,5 +276,11 @@
 
   .settings-actions {
     flex-direction: column;
+  }
+
+  .account-card,
+  .account-login-prompt {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

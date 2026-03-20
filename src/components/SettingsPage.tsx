@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useUserProfile, AccountType } from '../contexts/UserProfileContext';
+import { useAuth } from '../contexts/AuthContext';
 import { invoke } from '../services/tauri';
-import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown } from 'lucide-react';
 
 const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }> = [
   { key: 'alpaca_key',        label: 'Alpaca API Key',    placeholder: 'Enter key…' },
@@ -18,6 +19,7 @@ import './SettingsPage.css';
 
 export function SettingsPage() {
   const { profile, updateProfile, resetProfile } = useUserProfile();
+  const { user, isAuthenticated, tier, loginWithGoogle, logout, loading: authLoading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
 
@@ -257,6 +259,46 @@ export function SettingsPage() {
               <span className="pro-tag">PRO</span>
             </button>
           </div>
+        </div>
+
+        {/* Account Section */}
+        <div className="card settings-card">
+          <h3><UserIcon size={20} /> Account</h3>
+          {authLoading ? (
+            <div className="text-muted">Loading...</div>
+          ) : isAuthenticated && user ? (
+            <div className="account-card">
+              <div className="account-info">
+                {user.avatarUrl && (
+                  <img src={user.avatarUrl} alt="Avatar" className="account-avatar" />
+                )}
+                <div>
+                  <div className="account-name">{user.name ?? user.email}</div>
+                  <div className="account-email text-muted">{user.email}</div>
+                  <div className="account-tier">
+                    <Crown size={12} />
+                    <span>{tier === 'free' ? 'Free' : tier === 'ai' ? 'AI Suite' : tier === 'sync' ? 'Cloud Sync' : 'Pro'}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                className="btn-secondary"
+                onClick={() => logout().catch(console.error)}
+              >
+                <LogOut size={14} /> Sign out
+              </button>
+            </div>
+          ) : (
+            <div className="account-login-prompt">
+              <p className="text-muted">Sign in to unlock AI Suite and Cloud Sync premium features.</p>
+              <button
+                className="btn-primary"
+                onClick={() => loginWithGoogle().catch(console.error)}
+              >
+                <LogIn size={14} /> Sign in with Google
+              </button>
+            </div>
+          )}
         </div>
 
         {/* API Keys Section */}
