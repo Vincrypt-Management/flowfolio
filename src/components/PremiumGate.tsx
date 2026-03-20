@@ -1,7 +1,6 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Sparkles, X, Lock } from 'lucide-react';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import type { Tier } from '../contexts/AuthContext';
 import './PremiumGate.css';
 
 type PremiumTier = 'ai' | 'sync' | 'pro';
@@ -46,12 +45,18 @@ interface PremiumGateProps {
   preview?: boolean;
 }
 
-// Suppress unused import warning — Tier is used as a type constraint via SubscriptionContext
-void (null as unknown as Tier);
-
 export function PremiumGate({ tier, children, preview = false }: PremiumGateProps) {
   const { hasTier } = useSubscription();
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModalOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [modalOpen]);
 
   if (hasTier(tier)) {
     return <>{children}</>;
@@ -67,7 +72,12 @@ export function PremiumGate({ tier, children, preview = false }: PremiumGateProp
         onClick={() => setModalOpen(true)}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && setModalOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setModalOpen(true);
+          }
+        }}
       >
         {preview && <div className="premium-gate-preview-blur">{children}</div>}
         <div className="premium-gate-overlay">
