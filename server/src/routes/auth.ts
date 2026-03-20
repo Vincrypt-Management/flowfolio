@@ -7,6 +7,8 @@ import {
   signAccessToken, signRefreshToken, verifyRefreshToken, hashToken, type Tier
 } from '../jwt.js';
 
+const JWT_SECRET = process.env.JWT_SECRET ?? (() => { throw new Error('JWT_SECRET env var is required'); })();
+
 export const authRouter = new Hono();
 
 function makeOAuth2Client() {
@@ -38,9 +40,15 @@ authRouter.get('/google/callback', async (c) => {
   let googleUser: { id: string; email: string; name: string; picture: string };
   try {
     const { tokens } = await client.getToken(code);
+    if (!tokens.id_token) {
+      return c.json({ error: 'Missing id_token from Google' }, 400);
+    }
     client.setCredentials(tokens);
-    const ticket = await client.verifyIdToken({ idToken: tokens.id_token! });
-    const payload = ticket.getPayload()!;
+    const ticket = await client.verifyIdToken({ idToken: tokens.id_token });
+    const payload = ticket.getPayload();
+    if (!payload) {
+      return c.json({ error: 'Invalid Google token' }, 400);
+    }
     googleUser = {
       id: payload.sub,
       email: payload.email!,
@@ -60,9 +68,12 @@ authRouter.get('/google/callback', async (c) => {
     [googleUser.id, googleUser.email, googleUser.name, googleUser.picture]
   );
   const user = result.rows[0];
+  if (!user) {
+    return c.json({ error: 'Failed to create or retrieve user' }, 500);
+  }
 
   // Issue tokens
-  const secret = process.env.JWT_SECRET!;
+  const secret = JWT_SECRET;
   const accessToken = await signAccessToken({
     userId: user.id,
     email: googleUser.email,
@@ -89,7 +100,7 @@ authRouter.post('/refresh', async (c) => {
   const { refresh_token } = body;
   if (!refresh_token) return c.json({ error: 'Missing refresh_token' }, 400);
 
-  const secret = process.env.JWT_SECRET!;
+  const secret = JWT_SECRET;
   let userId: string;
   try {
     ({ userId } = await verifyRefreshToken(refresh_token, secret));

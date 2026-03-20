@@ -19,7 +19,9 @@ if (missing.length > 0) {
 const app = new Hono();
 
 app.use('*', logger());
-app.use('*', cors({ origin: '*' })); // Tauri webview is same-origin; CORS is for dev browser
+app.use('*', cors({
+  origin: process.env.CORS_ORIGIN ?? 'http://localhost:1420',
+}));
 
 app.route('/auth', authRouter);
 app.route('/user', userRouter);
