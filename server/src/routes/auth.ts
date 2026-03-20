@@ -1,7 +1,7 @@
 // server/src/routes/auth.ts
+import crypto from 'node:crypto';
 import { Hono } from 'hono';
 import { OAuth2Client } from 'google-auth-library';
-import bcrypt from 'bcrypt';
 import { pool } from '../db.js';
 import {
   signAccessToken, signRefreshToken, verifyRefreshToken, hashToken, type Tier
@@ -85,7 +85,7 @@ authRouter.get('/google/callback', async (c) => {
 
 // POST /auth/refresh
 authRouter.post('/refresh', async (c) => {
-  const body = await c.req.json<{ refresh_token: string }>();
+  const body = await c.req.json<{ refresh_token: string }>().catch(() => ({} as { refresh_token?: string }));
   const { refresh_token } = body;
   if (!refresh_token) return c.json({ error: 'Missing refresh_token' }, 400);
 

@@ -8,7 +8,7 @@ export const userRouter = new Hono();
 // Middleware: verify Bearer token
 userRouter.use('*', async (c, next) => {
   const auth = c.req.header('Authorization') ?? '';
-  const token = auth.replace('Bearer ', '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token) return c.json({ error: 'Unauthorized' }, 401);
 
   const secret = process.env.JWT_SECRET!;
