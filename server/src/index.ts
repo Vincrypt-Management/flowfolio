@@ -8,6 +8,14 @@ import { authRouter } from './routes/auth.js';
 import { userRouter } from './routes/user.js';
 import { initSchema } from './db.js';
 
+// Validate required env vars at startup
+const required = ['JWT_SECRET', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'DATABASE_URL'];
+const missing = required.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  console.error(`Missing required env vars: ${missing.join(', ')}`);
+  process.exit(1);
+}
+
 const app = new Hono();
 
 app.use('*', logger());

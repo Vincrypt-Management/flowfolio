@@ -436,6 +436,7 @@ function App() {
   // Handle deep-link OAuth callback (flowfolio://auth/callback?access_token=...&refresh_token=...)
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let mounted = true;
     onOpenUrl(async (urls) => {
       for (const url of urls) {
         if (url.startsWith('flowfolio://auth/callback')) {
@@ -443,8 +444,14 @@ function App() {
           addToast('Logged in successfully!', 'success');
         }
       }
-    }).then(fn => { unlisten = fn; });
-    return () => { unlisten?.(); };
+    }).then(fn => {
+      if (mounted) unlisten = fn;
+      else fn();
+    });
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
   }, [handleOAuthCallback, addToast]);
 
   const renderSidebar = () => (

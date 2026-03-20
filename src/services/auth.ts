@@ -138,7 +138,7 @@ export const auth = {
         email: data.email ?? '',
         name: data.name ?? null,
         avatarUrl: data.avatarUrl ?? data.avatar_url ?? null,
-        createdAt: data.createdAt ?? (data as Record<string, unknown>)['created_at'] as string ?? '',
+        createdAt: String(data.createdAt ?? (data as Record<string, unknown>)['created_at'] ?? ''),
       } as User;
     } catch { return null; }
   },
