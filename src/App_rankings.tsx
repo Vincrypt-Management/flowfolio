@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeWithResilience } from "./services/apiClient";
+import { createLogger } from './core/logger';
 import "./App.css";
+
+const log = createLogger('RankingsTab');
 
 interface VibePlan {
   name: string;
@@ -10,13 +13,13 @@ interface VibePlan {
     sectors: string[];
     exclude_list: string[];
   };
-  filters: any[];
+  filters: unknown[];
   ranking: {
     factors: Array<{ name: string; weight: number }>;
   };
-  portfolio: any;
-  cadence: any;
-  risk: any;
+  portfolio: unknown;
+  cadence: unknown;
+  risk: unknown;
 }
 
 interface SymbolScore {
@@ -50,7 +53,7 @@ function App() {
 
   async function checkHealth() {
     try {
-      const health = await invoke<string>("health_check");
+      const health = await invokeWithResilience<string>("health_check");
       setStatus(health);
     } catch (error) {
       setStatus("Error: " + (error instanceof Error ? error.message : String(error)));
@@ -59,37 +62,37 @@ function App() {
 
   async function loadDefaultPlan() {
     try {
-      const defaultPlan = await invoke<VibePlan>("get_default_plan");
+      const defaultPlan = await invokeWithResilience<VibePlan>("get_default_plan");
       setPlan(defaultPlan);
     } catch (error) {
-      console.error("Failed to load default plan:", error);
+      log.error("Failed to load default plan:", error);
     }
   }
 
   async function scoreSymbols() {
     if (!plan) {
-      alert("Please select a plan first");
+      log.warn("Please select a plan first");
       return;
     }
 
     setIsScoring(true);
     setScores([]);
-    
+
     try {
       const symbolsList = rankingsSymbols.split(",").map(s => s.trim()).filter(s => s);
-      
+
       // Get scoring config from plan
-      const config = await invoke<any>("get_scoring_config", { plan });
-      
+      const config = await invokeWithResilience<unknown>("get_scoring_config", { plan });
+
       // Score symbols
-      const results = await invoke<SymbolScore[]>("score_symbols_batch", { 
-        symbols: symbolsList, 
-        config 
+      const results = await invokeWithResilience<SymbolScore[]>("score_symbols_batch", {
+        symbols: symbolsList,
+        config
       });
-      
+
       setScores(results);
     } catch (error) {
-      alert("Error scoring symbols: " + (error instanceof Error ? error.message : String(error)));
+      log.warn("Error scoring symbols: " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsScoring(false);
     }
@@ -158,9 +161,10 @@ function App() {
                     <>
                       <p><strong>Filters:</strong></p>
                       <ul>
-                        {plan.filters.map((filter, i) => (
-                          <li key={i}>{filter.name}: {filter.operator} {JSON.stringify(filter.value)}</li>
-                        ))}
+                        {plan.filters.map((filter, i) => {
+                          const f = filter as { name: string; operator: string; value: unknown };
+                          return <li key={i}>{f.name}: {f.operator} {JSON.stringify(f.value)}</li>;
+                        })}
                       </ul>
                     </>
                   )}

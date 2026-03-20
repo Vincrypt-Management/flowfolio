@@ -17,6 +17,15 @@
   user-select: none;
 }
 
+.premium-gate-preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-muted, #888);
+  font-size: 13px;
+}
+
 .premium-gate-overlay {
   position: absolute;
   inset: 0;

@@ -79,7 +79,13 @@ export function PremiumGate({ tier, children, preview = false }: PremiumGateProp
           }
         }}
       >
-        {preview && <div className="premium-gate-preview-blur">{children}</div>}
+        {preview && (
+          <div className="premium-gate-preview-blur" aria-hidden="true">
+            <div className="premium-gate-preview-placeholder">
+              <span>Preview unavailable</span>
+            </div>
+          </div>
+        )}
         <div className="premium-gate-overlay">
           <Lock size={24} />
           <span>{info.name}</span>
