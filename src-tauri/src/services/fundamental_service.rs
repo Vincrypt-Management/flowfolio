@@ -74,7 +74,7 @@ pub struct FundamentalDataService {
 impl FundamentalDataService {
     /// Create new service
     pub fn new() -> Self {
-        let alpha_vantage_key = std::env::var("VITE_ALPHAVANTAGE_API_KEY").ok();
+        let alpha_vantage_key = std::env::var("ALPHA_VANTAGE_API_KEY").or_else(|_| std::env::var("VITE_ALPHAVANTAGE_API_KEY")).ok();
         
         Self {
             client: Client::builder()

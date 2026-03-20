@@ -90,14 +90,14 @@ pub struct MultiSourceProvider {
 impl MultiSourceProvider {
     pub fn new() -> Self {
         // Load API keys from environment
-        let alpaca_key = std::env::var("VITE_ALPACA_API_KEY").ok();
-        let alpaca_secret = std::env::var("VITE_ALPACA_API_SECRET").ok();
-        let polygon_key = std::env::var("VITE_POLYGON_API_KEY").ok();
-        let alphavantage_key = std::env::var("VITE_ALPHAVANTAGE_API_KEY").ok();
-        let finnhub_key = std::env::var("VITE_FINNHUB_API_KEY").ok();
-        let fmp_key = std::env::var("VITE_FMP_API_KEY").ok();
-        let tiingo_key = std::env::var("VITE_TIINGO_API_KEY").ok();
-        let twelve_data_key = std::env::var("VITE_TWELVE_DATA_API_KEY").ok();
+        let alpaca_key = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).ok();
+        let alpaca_secret = std::env::var("ALPACA_SECRET_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_SECRET")).ok();
+        let polygon_key = std::env::var("POLYGON_API_KEY").or_else(|_| std::env::var("VITE_POLYGON_API_KEY")).ok();
+        let alphavantage_key = std::env::var("ALPHA_VANTAGE_API_KEY").or_else(|_| std::env::var("VITE_ALPHAVANTAGE_API_KEY")).ok();
+        let finnhub_key = std::env::var("FINNHUB_API_KEY").or_else(|_| std::env::var("VITE_FINNHUB_API_KEY")).ok();
+        let fmp_key = std::env::var("FMP_API_KEY").or_else(|_| std::env::var("VITE_FMP_API_KEY")).ok();
+        let tiingo_key = std::env::var("TIINGO_API_KEY").or_else(|_| std::env::var("VITE_TIINGO_API_KEY")).ok();
+        let twelve_data_key = std::env::var("TWELVE_DATA_API_KEY").or_else(|_| std::env::var("VITE_TWELVE_DATA_API_KEY")).ok();
         
         eprintln!("[INFO] [data_provider] Multi-Source Provider initialized");
         eprintln!("[INFO] [data_provider] API Keys status:");

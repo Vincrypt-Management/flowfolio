@@ -1364,11 +1364,11 @@ async fn test_data_connection() -> Result<serde_json::Value, String> {
     let cache_stats = service.get_cache_stats().await;
     
     // Check API keys
-    let alpaca_configured = std::env::var("VITE_ALPACA_API_KEY").is_ok();
-    let finnhub_configured = std::env::var("VITE_FINNHUB_API_KEY").is_ok();
-    let fmp_configured = std::env::var("VITE_FMP_API_KEY").is_ok();
-    let polygon_configured = std::env::var("VITE_POLYGON_API_KEY").is_ok();
-    let alphavantage_configured = std::env::var("VITE_ALPHAVANTAGE_API_KEY").is_ok();
+    let alpaca_configured = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).is_ok();
+    let finnhub_configured = std::env::var("FINNHUB_API_KEY").or_else(|_| std::env::var("VITE_FINNHUB_API_KEY")).is_ok();
+    let fmp_configured = std::env::var("FMP_API_KEY").or_else(|_| std::env::var("VITE_FMP_API_KEY")).is_ok();
+    let polygon_configured = std::env::var("POLYGON_API_KEY").or_else(|_| std::env::var("VITE_POLYGON_API_KEY")).is_ok();
+    let alphavantage_configured = std::env::var("ALPHA_VANTAGE_API_KEY").or_else(|_| std::env::var("VITE_ALPHAVANTAGE_API_KEY")).is_ok();
     
     let result = json!({
         "status": if price > 0.0 { "connected" } else { "failed" },

@@ -84,9 +84,10 @@ pub struct AlpacaService {
 impl AlpacaService {
     /// Create new Alpaca service
     pub fn new() -> Self {
-        let api_key = std::env::var("VITE_ALPACA_API_KEY").ok();
-        let api_secret = std::env::var("VITE_ALPACA_API_SECRET").ok();
-        let is_paper = std::env::var("VITE_ALPACA_PAPER_TRADING")
+        let api_key = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).ok();
+        let api_secret = std::env::var("ALPACA_SECRET_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_SECRET")).ok();
+        let is_paper = std::env::var("ALPACA_PAPER_TRADING")
+            .or_else(|_| std::env::var("VITE_ALPACA_PAPER_TRADING"))
             .map(|v| v == "true")
             .unwrap_or(true); // Default to paper trading for safety
 

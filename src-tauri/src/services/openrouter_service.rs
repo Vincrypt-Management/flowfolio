@@ -63,10 +63,12 @@ pub struct OpenRouterService {
 impl OpenRouterService {
     /// Create new OpenRouter service
     pub fn new() -> Self {
-        let api_key = std::env::var("VITE_OPENROUTER_API_KEY").ok();
-        let api_url = std::env::var("VITE_OPENROUTER_API_URL")
+        let api_key = std::env::var("OPENROUTER_API_KEY").or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY")).ok();
+        let api_url = std::env::var("OPENROUTER_API_URL")
+            .or_else(|_| std::env::var("VITE_OPENROUTER_API_URL"))
             .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
-        let default_model = std::env::var("VITE_DEFAULT_LLM_MODEL")
+        let default_model = std::env::var("DEFAULT_LLM_MODEL")
+            .or_else(|_| std::env::var("VITE_DEFAULT_LLM_MODEL"))
             .unwrap_or_else(|_| "anthropic/claude-3-sonnet-20240229".to_string());
 
         // Debug: Log API key status
@@ -99,7 +101,7 @@ impl OpenRouterService {
         max_tokens: Option<u32>,
     ) -> Result<String, String> {
         let api_key = self.api_key.as_ref()
-            .ok_or_else(|| "OpenRouter API key not configured. Set VITE_OPENROUTER_API_KEY in .env file.".to_string())?;
+            .ok_or_else(|| "OpenRouter API key not configured. Set OPENROUTER_API_KEY (or VITE_OPENROUTER_API_KEY) in .env file.".to_string())?;
 
         // Validate API key format (should start with sk-)
         if !api_key.starts_with("sk-") {
@@ -140,7 +142,7 @@ impl OpenRouterService {
             
             // Provide more helpful error messages
             let user_error = match status.as_u16() {
-                401 => "Invalid API key. Please check your VITE_OPENROUTER_API_KEY.".to_string(),
+                401 => "Invalid API key. Please check your OPENROUTER_API_KEY (or VITE_OPENROUTER_API_KEY).".to_string(),
                 402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
                 429 => "Rate limited. Please wait a moment and try again.".to_string(),
                 500..=599 => format!("OpenRouter server error ({}). The service may be temporarily unavailable.", status),
