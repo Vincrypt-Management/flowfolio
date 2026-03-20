@@ -8,7 +8,9 @@ import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
 import { GeneratedPortfolio } from "./services/portfolioAgent";
 import { DEFAULT_SYMBOLS } from "./shared/constants";
-import { TEMPLATE_METADATA, CATEGORY_COLORS } from './shared/constants/templates';
+import { TemplatesTab } from './features/templates/TemplatesTab';
+import { RankingsTab } from './features/rankings/RankingsTab';
+import { UniverseTab } from './features/universe/UniverseTab';
 import { saveFile } from "./shared/utils/fileSystem";
 import { useUserMode } from "./contexts/UserModeContext";
 import {
@@ -385,6 +387,25 @@ const { isAdvanced, toggleMode } = useUserMode();
     }
   }, [plan, rankingsSymbols, addToast]);
 
+  const loadPlan = useCallback(async (planName: string) => {
+    try {
+      const loadedPlan = await invoke<VibePlan>("load_plan", { name: planName });
+      if (isMountedRef.current) {
+        setPlan(loadedPlan);
+        addToast("Plan loaded successfully!", "success");
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        addToast("Error loading plan: " + (error instanceof Error ? error.message : String(error)), "error");
+      }
+    }
+  }, [addToast]);
+
+  const useUniverseInRankings = useCallback((universe: { id: string; symbols: string[] }) => {
+    setSelectedUniverse(universe as Universe);
+    setRankingsSymbols(universe.symbols.join(", "));
+  }, []);
+
   const handleNavClick = useCallback((tab: string, data?: Record<string, unknown>) => {
     // WatchlistTab calls onNavigate('ticker-analysis', { symbol }) — map to our tab key
     const resolvedTab = tab === 'ticker-analysis' ? 'analysis' : tab;
@@ -713,88 +734,13 @@ const { isAdvanced, toggleMode } = useUserMode();
         )}
 
         {activeTab === "templates" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Templates</h1>
-              <p className="page-subtitle">Start with a pre-configured strategy</p>
-            </header>
-
-            <div className="template-grid">
-              {templates.length === 0 && (
-                <div className="card" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '2rem' }}>
-                  <p className="text-muted">Loading templates…</p>
-                </div>
-              )}
-              {templates.map((template) => {
-                const meta = TEMPLATE_METADATA[template];
-                return (
-                  <div
-                    key={template}
-                    className={`template-card ${selectedTemplate === template ? 'selected' : ''}`}
-                  >
-                    {meta ? (
-                      <>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{
-                            background: CATEGORY_COLORS[meta.category] + '22',
-                            color: CATEGORY_COLORS[meta.category],
-                            border: `1px solid ${CATEGORY_COLORS[meta.category]}55`,
-                            borderRadius: '999px', padding: '2px 10px', fontSize: '11px', fontWeight: 700,
-                            textTransform: 'uppercase', letterSpacing: '0.05em',
-                          }}>
-                            {meta.category}
-                          </span>
-                        </div>
-                        <h3 style={{ margin: '0 0 6px' }}>{template}</h3>
-                        <p className="text-muted" style={{ fontSize: '13px', margin: '0 0 12px' }}>{meta.description}</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
-                          {meta.factors.map(f => (
-                            <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ width: '70px', fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>{f.name}</span>
-                              <div style={{ flex: 1, height: '6px', background: 'var(--bg-hover)', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${f.weight}%`, height: '100%', background: f.color, borderRadius: '3px' }} />
-                              </div>
-                              <span style={{ width: '32px', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'right' }}>{f.weight}%</span>
-                            </div>
-                          ))}
-                        </div>
-                        <button className="btn-primary" style={{ width: '100%' }} onClick={() => loadTemplate(template)}>
-                          Load Template →
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <h3>{template}</h3>
-                        <p>Click to load this template configuration</p>
-                        <button className="btn-primary" style={{ width: '100%' }} onClick={() => loadTemplate(template)}>
-                          Load Template →
-                        </button>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {plan && selectedTemplate && (
-              <div className="card mt-xl">
-                <h3>Selected: {plan.name}</h3>
-                <div className="plan-summary">
-                  <p className="text-muted mb-md"><strong>Strategy Focus:</strong></p>
-                  <ul className="text-main mb-lg" style={{ paddingLeft: '1.5rem' }}>
-                    {plan.ranking.factors.map((factor, i) => (
-                      <li key={i} className="mb-sm">
-                        {factor.name.charAt(0).toUpperCase() + factor.name.slice(1)}: {(factor.weight * 100).toFixed(0)}% weight
-                      </li>
-                    ))}
-                  </ul>
-                  <button className="btn-primary" onClick={() => setActiveTab("dashboard")}>
-                    Use This Plan <ArrowRight size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <TemplatesTab
+            templates={templates}
+            selectedTemplate={selectedTemplate}
+            plan={plan}
+            onLoadTemplate={loadTemplate}
+            onNavigateToDashboard={() => setActiveTab("dashboard")}
+          />
         )}
 
         {activeTab === "data" && (
@@ -804,124 +750,16 @@ const { isAdvanced, toggleMode } = useUserMode();
         )}
 
         {activeTab === "rankings" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Stock Rankings</h1>
-              <p className="page-subtitle">Score and rank symbols based on your plan's factors</p>
-            </header>
-
-            <div className="card">
-              <h3>Score Symbols</h3>
-              <p className="text-muted mb-md">
-                Current Plan: <strong>{plan?.name || "None"}</strong>
-              </p>
-              
-              <div className="form-group">
-                <label>Enter symbol tickers (comma-separated):</label>
-                <input
-                  type="text"
-                  value={rankingsSymbols}
-                  onChange={(e) => setRankingsSymbols(e.target.value)}
-                  placeholder="e.g., AAPL,MSFT,GOOGL"
-                  className="symbol-input"
-                />
-              </div>
-              
-              <button 
-                className="btn-primary" 
-                onClick={scoreSymbols}
-                disabled={isScoring || !plan}
-              >
-                {isScoring ? "Scoring..." : "Score Symbols"}
-              </button>
-              
-              {!plan && <p className="note">Please select a plan from Templates first</p>}
-            </div>
-
-            {scores.length > 0 && (
-              <div className="card mt-lg">
-                <h3>Results ({scores.length} symbols ranked)</h3>
-                <div className="overflow-x-auto">
-                  <table className="data-table">
-                    <caption className="sr-only">Symbol Rankings</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">Rank</th>
-                        <th scope="col">Symbol</th>
-                        <th scope="col">Total Score</th>
-                        {scores[0]?.factors.map((f, i) => (
-                          <th scope="col" key={i}>{f.name.toUpperCase()}</th>
-                        ))}
-                        <th scope="col">Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {scores.map((score, idx) => (
-                        <tr key={score.symbol} className={idx < 3 ? 'highlight-row' : ''}>
-                          <td>{idx + 1}</td>
-                          <td className="font-bold">{score.symbol}</td>
-                          <td>
-                            <div className="score-display">
-                              <div className="score-bar">
-                                <div className="score-bar-fill" style={{ width: `${score.total_score}%` }}></div>
-                              </div>
-                              <span className="score-value">{score.total_score.toFixed(1)}</span>
-                            </div>
-                          </td>
-                          {score.factors.map((f, i) => (
-                            <td key={i} className="font-mono">{f.normalized_value.toFixed(0)}</td>
-                          ))}
-                          <td>
-                            <button 
-                              className="btn-small"
-                              onClick={() => setSelectedScore(score)}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {selectedScore && (
-              <div className="card mt-lg relative">
-                <h3>Detailed Analysis: {selectedScore.symbol}</h3>
-                <button 
-                  className="btn-close"
-                  onClick={() => setSelectedScore(null)}
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-                
-                <div className="explanation-box">
-                  <pre>{selectedScore.explanation}</pre>
-                </div>
-
-                <h4>Factor Contributions</h4>
-                <div className="factor-breakdown">
-                  {selectedScore.factors.map((factor, i) => (
-                    <div key={i} className="factor-item">
-                      <div className="factor-header">
-                        <span className="factor-name">{factor.name.toUpperCase()}</span>
-                        <span className="font-mono">{factor.normalized_value.toFixed(1)}/100</span>
-                      </div>
-                      <div className="factor-bar">
-                        <div className="factor-bar-fill" style={{ width: `${factor.normalized_value}%` }}></div>
-                      </div>
-                      <div className="factor-details">
-                        Weight: {(factor.weight * 100).toFixed(0)}% • Contributes {factor.contribution.toFixed(1)} points
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <RankingsTab
+            plan={plan}
+            rankingsSymbols={rankingsSymbols}
+            onSymbolsChange={setRankingsSymbols}
+            scores={scores}
+            isScoring={isScoring}
+            selectedScore={selectedScore}
+            onSelectScore={setSelectedScore}
+            onScoreSymbols={scoreSymbols}
+          />
         )}
 
         {activeTab === "portfolio" && (
@@ -967,152 +805,25 @@ const { isAdvanced, toggleMode } = useUserMode();
         )}
 
         {activeTab === "universe" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Universe & Watchlists</h1>
-              <p className="page-subtitle">Manage your symbol universes and watchlists</p>
-            </header>
-
-            <div className="dashboard-grid">
-              <div className="card">
-                <h3><Plus size={20} /> Create New Universe</h3>
-                <div className="form-group">
-                  <label>Universe Name</label>
-                  <input
-                    type="text"
-                    value={newUniverseName}
-                    onChange={(e) => setNewUniverseName(e.target.value)}
-                    placeholder="e.g., Tech Leaders"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Symbols (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={newUniverseSymbols}
-                    onChange={(e) => setNewUniverseSymbols(e.target.value)}
-                    placeholder="e.g., AAPL, MSFT, GOOGL"
-                  />
-                </div>
-                <button className="btn-primary" onClick={createUniverse}>
-                  <Plus size={16} /> Create Universe
-                </button>
-              </div>
-
-              <div className="card">
-                <h3><Download size={20} /> Export / Import</h3>
-                <p className="text-muted mb-md">
-                  Export all your data or import from a backup
-                </p>
-                <div className="flex gap-md flex-wrap">
-                  <button className="btn-primary" onClick={exportData}>
-                    <Download size={16} /> Export Data
-                  </button>
-                  <label className="btn-secondary cursor-pointer flex items-center gap-sm">
-                    <Upload size={16} /> Import Data
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={importData}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {universes.length > 0 && (
-              <div className="card mt-lg">
-                <h3><Globe size={20} /> Your Universes ({universes.length})</h3>
-                <div className="universe-list">
-                  {universes.map((universe) => (
-                    <div 
-                      key={universe.id} 
-                      className={`universe-item p-md mb-md bg-hover rounded ${selectedUniverse?.id === universe.id ? 'border-primary' : 'border'}`}
-                    >
-                      <div className="flex justify-between items-start mb-sm">
-                        <div>
-                          <h4 className="mt-0 mb-0">{universe.name}</h4>
-                          <p className="text-muted text-sm mt-0 mb-0">
-                            {universe.symbols.length} symbols
-                          </p>
-                        </div>
-                        <div className="flex gap-sm">
-                          <button 
-                            className="btn-small"
-                            onClick={() => {
-                              setSelectedUniverse(universe);
-                              setRankingsSymbols(universe.symbols.join(", "));
-                            }}
-                          >
-                            Use in Rankings
-                          </button>
-                          <button 
-                            className="btn-small text-error"
-                            onClick={() => deleteUniverse(universe.id)}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-sm">
-                        {universe.symbols.slice(0, 10).map((symbol) => (
-                          <span key={symbol} className="tag">{symbol}</span>
-                        ))}
-                        {universe.symbols.length > 10 && (
-                          <span className="tag">+{universe.symbols.length - 10} more</span>
-                        )}
-                      </div>
-                      {universe.exclude_list.length > 0 && (
-                        <p className="text-muted text-sm mt-sm mb-0">
-                          Excluded: {universe.exclude_list.join(", ")}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {savedPlans.length > 0 && (
-              <div className="card mt-lg">
-                <h3><Save size={20} /> Saved Plans ({savedPlans.length})</h3>
-                <div className="flex flex-wrap gap-md">
-                  {savedPlans.map((planName) => (
-                    <div key={planName} className="saved-plan-card">
-                      <h4 className="saved-plan-name">{planName}</h4>
-                      <button 
-                        className="btn-small"
-                        onClick={async () => {
-                          try {
-                            const loadedPlan = await invoke<VibePlan>("load_plan", { name: planName });
-                            setPlan(loadedPlan);
-                            addToast("Plan loaded successfully!", "success");
-                          } catch (error) {
-                            addToast("Error loading plan: " + (error instanceof Error ? error.message : String(error)), "error");
-                          }
-                        }}
-                      >
-                        Load Plan
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {plan && (
-              <div className="card mt-lg">
-                <h3><Save size={20} /> Current Plan: {plan.name}</h3>
-                <p className="text-muted mb-md">
-                  Save your current plan configuration for later use
-                </p>
-                <button className="btn-primary" onClick={savePlan}>
-                  <Save size={16} /> Save Current Plan
-                </button>
-              </div>
-            )}
-          </div>
+          <UniverseTab
+            universes={universes}
+            newUniverseName={newUniverseName}
+            onNewUniverseNameChange={setNewUniverseName}
+            newUniverseSymbols={newUniverseSymbols}
+            onNewUniverseSymbolsChange={setNewUniverseSymbols}
+            onCreateUniverse={createUniverse}
+            onDeleteUniverse={deleteUniverse}
+            selectedUniverse={selectedUniverse}
+            onSelectUniverse={setSelectedUniverse}
+            onUseInRankings={useUniverseInRankings}
+            savedPlans={savedPlans}
+            plan={plan}
+            onSavePlan={savePlan}
+            onExportData={exportData}
+            onImportData={importData}
+            onLoadPlan={loadPlan}
+            onAddToast={addToast}
+          />
         )}
 
         {activeTab === "watchlist" && (
