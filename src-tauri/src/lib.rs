@@ -1387,19 +1387,30 @@ pub struct Universe {
     pub updated_at: String,
 }
 
-// In-memory universe storage (would be database in production)
-lazy_static::lazy_static! {
-    static ref UNIVERSES: Arc<Mutex<HashMap<String, Universe>>> = Arc::new(Mutex::new(HashMap::new()));
-}
-
 /// Create a new universe/watchlist
 #[tauri::command]
 async fn create_universe(name: String, description: String, symbols: Vec<String>) -> Result<Universe, String> {
-    let id = uuid::Uuid::new_v4().to_string();
+    let pool = get_pool().await?;
     let now = chrono::Utc::now().to_rfc3339();
-    
-    let universe = Universe {
-        id: id.clone(),
+    let id = uuid::Uuid::new_v4().to_string();
+    let symbols_json = serde_json::to_string(&symbols).map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "INSERT INTO universes (id, name, description, symbols, tags, exclude_list, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '{}', '[]', ?, ?)"
+    )
+    .bind(&id)
+    .bind(&name)
+    .bind(&description)
+    .bind(&symbols_json)
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to create universe: {}", e))?;
+
+    Ok(Universe {
+        id,
         name,
         description,
         symbols,
@@ -1407,69 +1418,153 @@ async fn create_universe(name: String, description: String, symbols: Vec<String>
         exclude_list: Vec::new(),
         created_at: now.clone(),
         updated_at: now,
-    };
-    
-    let mut universes = UNIVERSES.lock().await;
-    universes.insert(id, universe.clone());
-    
-    Ok(universe)
+    })
 }
 
 /// Get all universes
 #[tauri::command]
 async fn list_universes() -> Result<Vec<Universe>, String> {
-    let universes = UNIVERSES.lock().await;
-    Ok(universes.values().cloned().collect())
+    let pool = get_pool().await?;
+    let rows = sqlx::query(
+        "SELECT id, name, description, symbols, tags, exclude_list, created_at, updated_at
+         FROM universes ORDER BY created_at DESC"
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to list universes: {}", e))?;
+
+    let universes = rows.iter().map(|row| {
+        use sqlx::Row;
+        let symbols_json: String = row.get("symbols");
+        let tags_json: String = row.get("tags");
+        let exclude_json: String = row.get("exclude_list");
+        let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
+        let tags: HashMap<String, Vec<String>> =
+            serde_json::from_str(&tags_json).unwrap_or_default();
+        let exclude_list: Vec<String> =
+            serde_json::from_str(&exclude_json).unwrap_or_default();
+        Universe {
+            id: row.get("id"),
+            name: row.get("name"),
+            description: row.get("description"),
+            symbols,
+            tags,
+            exclude_list,
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        }
+    }).collect();
+    Ok(universes)
 }
 
 /// Get a specific universe
 #[tauri::command]
-async fn get_universe(id: String) -> Result<Universe, String> {
-    let universes = UNIVERSES.lock().await;
-    universes.get(&id)
-        .cloned()
-        .ok_or_else(|| format!("Universe '{}' not found", id))
+async fn get_universe(id: String) -> Result<Option<Universe>, String> {
+    let pool = get_pool().await?;
+    let row = sqlx::query(
+        "SELECT id, name, description, symbols, tags, exclude_list, created_at, updated_at
+         FROM universes WHERE id = ?"
+    )
+    .bind(&id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("Failed to get universe: {}", e))?;
+
+    Ok(row.map(|row| {
+        use sqlx::Row;
+        let symbols: Vec<String> = serde_json::from_str(row.get::<&str, _>("symbols")).unwrap_or_default();
+        let tags: HashMap<String, Vec<String>> =
+            serde_json::from_str(row.get::<&str, _>("tags")).unwrap_or_default();
+        let exclude_list: Vec<String> =
+            serde_json::from_str(row.get::<&str, _>("exclude_list")).unwrap_or_default();
+        Universe {
+            id: row.get("id"),
+            name: row.get("name"),
+            description: row.get("description"),
+            symbols,
+            tags,
+            exclude_list,
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        }
+    }))
 }
 
 /// Update universe symbols
 #[tauri::command]
 async fn update_universe_symbols(id: String, symbols: Vec<String>) -> Result<Universe, String> {
-    let mut universes = UNIVERSES.lock().await;
-    
-    if let Some(universe) = universes.get_mut(&id) {
-        universe.symbols = symbols;
-        universe.updated_at = chrono::Utc::now().to_rfc3339();
-        Ok(universe.clone())
-    } else {
-        Err(format!("Universe '{}' not found", id))
+    let pool = get_pool().await?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let symbols_json = serde_json::to_string(&symbols).map_err(|e| e.to_string())?;
+
+    let result = sqlx::query(
+        "UPDATE universes SET symbols = ?, updated_at = ? WHERE id = ?"
+    )
+    .bind(&symbols_json)
+    .bind(&now)
+    .bind(&id)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to update universe symbols: {}", e))?;
+
+    if result.rows_affected() == 0 {
+        return Err(format!("Universe '{}' not found", id));
     }
+
+    get_universe(id).await?.ok_or_else(|| "Universe disappeared after update".to_string())
 }
 
 /// Add symbols to universe exclude list
 #[tauri::command]
 async fn add_to_exclude_list(id: String, symbols: Vec<String>) -> Result<Universe, String> {
-    let mut universes = UNIVERSES.lock().await;
-    
-    if let Some(universe) = universes.get_mut(&id) {
-        for symbol in symbols {
-            if !universe.exclude_list.contains(&symbol) {
-                universe.exclude_list.push(symbol);
-            }
+    let pool = get_pool().await?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Fetch current exclude_list
+    let row = sqlx::query(
+        "SELECT exclude_list FROM universes WHERE id = ?"
+    )
+    .bind(&id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("Failed to fetch universe: {}", e))?
+    .ok_or_else(|| format!("Universe '{}' not found", id))?;
+
+    use sqlx::Row;
+    let exclude_json: String = row.get("exclude_list");
+    let mut exclude_list: Vec<String> = serde_json::from_str(&exclude_json).unwrap_or_default();
+
+    for symbol in symbols {
+        if !exclude_list.contains(&symbol) {
+            exclude_list.push(symbol);
         }
-        universe.updated_at = chrono::Utc::now().to_rfc3339();
-        Ok(universe.clone())
-    } else {
-        Err(format!("Universe '{}' not found", id))
     }
+
+    let new_exclude_json = serde_json::to_string(&exclude_list).map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "UPDATE universes SET exclude_list = ?, updated_at = ? WHERE id = ?"
+    )
+    .bind(&new_exclude_json)
+    .bind(&now)
+    .bind(&id)
+    .execute(&pool)
+    .await
+    .map_err(|e| format!("Failed to update exclude list: {}", e))?;
+
+    get_universe(id).await?.ok_or_else(|| "Universe disappeared after update".to_string())
 }
 
 /// Delete a universe
 #[tauri::command]
 async fn delete_universe(id: String) -> Result<(), String> {
-    let mut universes = UNIVERSES.lock().await;
-    universes.remove(&id)
-        .map(|_| ())
-        .ok_or_else(|| format!("Universe '{}' not found", id))
+    let pool = get_pool().await?;
+    sqlx::query("DELETE FROM universes WHERE id = ?")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to delete universe: {}", e))?;
+    Ok(())
 }
 
 // ==================== EXPORT / IMPORT ====================
@@ -1491,17 +1586,17 @@ async fn export_data_bundle(
     plan: Option<VibePlanScript>,
     journal_entries: Vec<JournalEntry>,
 ) -> Result<String, String> {
-    let universes = UNIVERSES.lock().await;
-    
+    let universes = list_universes().await?;
+
     let bundle = ExportBundle {
         version: "1.0.0".to_string(),
         exported_at: chrono::Utc::now().to_rfc3339(),
         plan,
-        universes: universes.values().cloned().collect(),
+        universes,
         journal_entries,
         settings: HashMap::new(),
     };
-    
+
     serde_json::to_string_pretty(&bundle)
         .map_err(|e| format!("Failed to serialize bundle: {}", e))
 }
@@ -1511,19 +1606,22 @@ async fn export_data_bundle(
 async fn import_data_bundle(bundle_json: String) -> Result<serde_json::Value, String> {
     let bundle: ExportBundle = serde_json::from_str(&bundle_json)
         .map_err(|e| format!("Failed to parse bundle: {}", e))?;
-    
-    // Import universes
-    let mut universes = UNIVERSES.lock().await;
+
+    let universe_count = bundle.universes.len();
+    let journal_count = bundle.journal_entries.len();
+    let has_plan = bundle.plan.is_some();
+
+    // Import universes into SQLite
     for universe in bundle.universes {
-        universes.insert(universe.id.clone(), universe);
+        create_universe(universe.name, universe.description, universe.symbols).await?;
     }
-    
+
     Ok(serde_json::json!({
         "success": true,
         "imported": {
-            "universes": universes.len(),
-            "journal_entries": bundle.journal_entries.len(),
-            "has_plan": bundle.plan.is_some(),
+            "universes": universe_count,
+            "journal_entries": journal_count,
+            "has_plan": has_plan,
         }
     }))
 }
