@@ -180,7 +180,7 @@ Cache Update → Response
 2. **Avoid `alert()`** - Use toast notifications instead
 3. **Wrap `JSON.parse` in try-catch** - Always use safe parsing utilities
 4. **Use the logger** - Import from `src/core/logger`, not `console.log`
-5. **Use `invokeWithResilience`** - From `src/core/api/client.ts` instead of direct Tauri invoke
+5. **Use `invokeWithResilience`** - From `src/services/apiClient.ts` instead of direct Tauri invoke
 
 ### React Patterns
 
