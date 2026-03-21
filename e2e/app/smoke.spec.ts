@@ -44,7 +44,7 @@ test.describe('App smoke tests', () => {
   test('can navigate to Portfolio tab', async ({ page }) => {
     await page.locator('aside.sidebar').waitFor({ state: 'visible', timeout: 10000 });
 
-    const portfolioBtn = page.locator('aside .nav-item', { hasText: 'Portfolio' });
+    const portfolioBtn = page.getByRole('menuitem', { name: 'Portfolio', exact: true });
     await expect(portfolioBtn).toBeVisible();
     await portfolioBtn.click();
 

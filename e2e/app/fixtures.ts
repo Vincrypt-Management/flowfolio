@@ -38,7 +38,7 @@ const MOCK_RESPONSES: Record<string, unknown> = {
 
   list_saved_plans: ['My Growth Strategy', 'Dividend Income'],
 
-  load_setting: null,
+  load_setting: 'true',
 
   get_api_key_statuses: {
     alpaca_key: false,
@@ -66,6 +66,11 @@ const MOCK_RESPONSES: Record<string, unknown> = {
     total_requests: 0,
     hit_rate: 0.0,
   },
+
+  // Vault
+  vault_exists: false,
+  vault_is_unlocked: false,
+  vault_get_path: '/tmp/test-vault.hold',
 
   // Catch-all for commands not explicitly listed above
   get_current_prices_batch: {},

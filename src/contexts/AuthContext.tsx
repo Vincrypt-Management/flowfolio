@@ -1,6 +1,6 @@
 import { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
 import { auth, type User } from '../services/auth';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { isTauriContext } from '../services/tauri';
 
 export type Tier = 'free' | 'ai' | 'sync' | 'pro';
 
@@ -57,7 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = useCallback(async () => {
     const url = auth.getLoginUrl();
-    await openUrl(url);
+    if (isTauriContext()) {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+    } else {
+      window.open(url, '_blank');
+    }
   }, []);
 
   const handleOAuthCallback = useCallback(async (deepLinkUrl: string) => {

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCurrency, SUPPORTED_CURRENCIES } from '../contexts/CurrencyContext';
 import { invoke } from '../services/tauri';
 import { createLogger } from '../core/logger';
-import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown } from 'lucide-react';
+import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound } from 'lucide-react';
 
 const log = createLogger('SettingsPage');
 
@@ -33,10 +33,20 @@ export function SettingsPage() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [apiKeysSaved, setApiKeysSaved] = useState(false);
 
+  // Stronghold vault state
+  const [vaultExists, setVaultExists] = useState(false);
+  const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [vaultPassword, setVaultPassword] = useState('');
+  const [vaultConfirm, setVaultConfirm] = useState('');
+  const [vaultError, setVaultError] = useState('');
+  const [vaultLoading, setVaultLoading] = useState(false);
+
   useEffect(() => {
     invoke<Record<string, boolean>>('get_api_key_statuses')
       .then(setApiKeyStatuses)
       .catch(() => {});
+    invoke<boolean>('vault_exists').then(setVaultExists).catch(() => {});
+    invoke<boolean>('vault_is_unlocked').then(setVaultUnlocked).catch(() => {});
   }, []);
 
   const [form, setForm] = useState({ ...profile });
@@ -87,6 +97,76 @@ export function SettingsPage() {
       // silent
     }
   }, [apiKeys]);
+
+  const handleVaultSetup = useCallback(async () => {
+    setVaultError('');
+    if (vaultPassword.length < 8) {
+      setVaultError('Password must be at least 8 characters');
+      return;
+    }
+    if (vaultPassword !== vaultConfirm) {
+      setVaultError('Passwords do not match');
+      return;
+    }
+    setVaultLoading(true);
+    try {
+      // Get vault path and initialize Stronghold via JS API
+      const vaultPath = await invoke<string>('vault_get_path');
+      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
+      const stronghold = await Stronghold.load(vaultPath, vaultPassword);
+
+      // Migrate existing keys from JSON store
+      const existingKeys = await invoke<Record<string, string>>('vault_migrate_keys');
+      const client = await stronghold.createClient('api-keys').catch(() => stronghold.loadClient('api-keys'));
+      const store = client.getStore();
+      for (const [key, value] of Object.entries(existingKeys)) {
+        await store.insert(key, Array.from(new TextEncoder().encode(value)));
+      }
+      await stronghold.save();
+      await invoke('vault_set_unlocked');
+
+      setVaultExists(true);
+      setVaultUnlocked(true);
+      setVaultPassword('');
+      setVaultConfirm('');
+    } catch (e) {
+      setVaultError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setVaultLoading(false);
+    }
+  }, [vaultPassword, vaultConfirm]);
+
+  const handleVaultUnlock = useCallback(async () => {
+    setVaultError('');
+    setVaultLoading(true);
+    try {
+      const vaultPath = await invoke<string>('vault_get_path');
+      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
+      await Stronghold.load(vaultPath, vaultPassword);
+      await invoke('vault_set_unlocked');
+      setVaultUnlocked(true);
+      setVaultPassword('');
+    } catch (e) {
+      setVaultError('Wrong password or corrupt vault');
+      log.error('Vault unlock failed', e);
+    } finally {
+      setVaultLoading(false);
+    }
+  }, [vaultPassword]);
+
+  const handleVaultLock = useCallback(async () => {
+    try {
+      const vaultPath = await invoke<string>('vault_get_path');
+      const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
+      const stronghold = await Stronghold.load(vaultPath, '');
+      await stronghold.unload();
+      await invoke('vault_set_locked');
+      setVaultUnlocked(false);
+    } catch {
+      await invoke('vault_set_locked');
+      setVaultUnlocked(false);
+    }
+  }, []);
 
   const handleReset = useCallback(() => {
     resetProfile();
@@ -325,6 +405,76 @@ export function SettingsPage() {
               >
                 <LogIn size={14} /> Sign in with Google
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* Stronghold Vault Section */}
+        <div className="card settings-card">
+          <h3><KeyRound size={20} /> Encrypted Vault</h3>
+          <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
+            Encrypt your API keys with a vault password using IOTA Stronghold.
+            {vaultUnlocked && ' Vault is unlocked — keys are encrypted at rest.'}
+          </p>
+
+          {vaultUnlocked ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-success, #22c55e)' }}>
+                <Unlock size={16} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>Vault unlocked</span>
+              </div>
+              <button className="btn-secondary btn-small" onClick={handleVaultLock}>
+                <Lock size={14} /> Lock
+              </button>
+            </div>
+          ) : vaultExists ? (
+            <div>
+              <div className="form-group">
+                <label htmlFor="vaultUnlockPw">Vault Password</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    id="vaultUnlockPw"
+                    type="password"
+                    value={vaultPassword}
+                    onChange={e => setVaultPassword(e.target.value)}
+                    placeholder="Enter vault password"
+                    style={{ flex: 1 }}
+                    onKeyDown={e => e.key === 'Enter' && handleVaultUnlock()}
+                  />
+                  <button className="btn-primary btn-small" onClick={handleVaultUnlock} disabled={vaultLoading}>
+                    {vaultLoading ? 'Unlocking...' : <><Unlock size={14} /> Unlock</>}
+                  </button>
+                </div>
+              </div>
+              {vaultError && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.8rem', marginTop: '4px' }}>{vaultError}</p>}
+            </div>
+          ) : (
+            <div>
+              <div className="form-group">
+                <label htmlFor="vaultNewPw">New Vault Password</label>
+                <input
+                  id="vaultNewPw"
+                  type="password"
+                  value={vaultPassword}
+                  onChange={e => setVaultPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="vaultConfirmPw">Confirm Password</label>
+                <input
+                  id="vaultConfirmPw"
+                  type="password"
+                  value={vaultConfirm}
+                  onChange={e => setVaultConfirm(e.target.value)}
+                  placeholder="Confirm password"
+                  onKeyDown={e => e.key === 'Enter' && handleVaultSetup()}
+                />
+              </div>
+              <button className="btn-primary" onClick={handleVaultSetup} disabled={vaultLoading} style={{ marginTop: '4px' }}>
+                {vaultLoading ? 'Setting up...' : <><Lock size={14} /> Set Up Encrypted Vault</>}
+              </button>
+              {vaultError && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.8rem', marginTop: '4px' }}>{vaultError}</p>}
             </div>
           )}
         </div>

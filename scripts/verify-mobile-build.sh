@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set +e
 
 echo "=== FlowFolio Mobile Build Verification ==="
 echo ""

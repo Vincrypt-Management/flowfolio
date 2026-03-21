@@ -46,6 +46,7 @@ use std::path::PathBuf;
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Global service instances
 lazy_static::lazy_static! {
@@ -67,8 +68,13 @@ lazy_static::lazy_static! {
 
     static ref DB_POOL: Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>> =
         Arc::new(Mutex::new(None));
-
 }
+
+/// Whether the Stronghold vault is currently unlocked.
+static VAULT_UNLOCKED: AtomicBool = AtomicBool::new(false);
+
+/// Name of the Stronghold vault file stored in the app data directory.
+const STRONGHOLD_VAULT: &str = "flowfolio-vault.hold";
 
 /// Initialize local SQLite database for caching
 async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
@@ -347,7 +353,10 @@ async fn get_user_tier() -> String {
             return row;
         }
     }
-    "free".to_string()
+    // Default to "pro" for local-first mode — all features available offline.
+    // When the auth/payment server is deployed, the tier will be set via the
+    // subscription flow and stored in user_settings.
+    "pro".to_string()
 }
 
 // ==================== PRICE ALERTS ====================
@@ -2650,6 +2659,8 @@ const API_KEY_NAMES: &[&str] = &[
 
 #[tauri::command]
 async fn get_api_key_statuses(app: tauri::AppHandle) -> Result<std::collections::HashMap<String, bool>, String> {
+    // When vault is unlocked, statuses are managed by frontend via Stronghold JS API.
+    // This command reads from JSON store (fallback / non-vault mode).
     let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
     let statuses = API_KEY_NAMES
         .iter()
@@ -2669,6 +2680,8 @@ async fn save_api_keys(
     app: tauri::AppHandle,
     keys: std::collections::HashMap<String, String>,
 ) -> Result<(), String> {
+    // When vault is unlocked, keys are saved via Stronghold JS API on the frontend.
+    // This command saves to JSON store (fallback / non-vault mode).
     let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
     for (key, value) in &keys {
         if !value.is_empty() {
@@ -2692,6 +2705,69 @@ fn send_price_alert_notification(
         .body(message)
         .show()
         .map_err(|e| e.to_string())
+}
+
+// ==================== STRONGHOLD VAULT ====================
+//
+// The Stronghold plugin exposes its own JS commands (initialize, save_store_record,
+// get_store_record, save, destroy, etc.) and the managed state `StrongholdCollection`.
+//
+// Our wrapper commands handle vault lifecycle (exists/setup/unlock/lock) and key
+// migration.  The actual Stronghold I/O uses the JS plugin API on the frontend
+// while the Rust side tracks vault-unlocked state and consults the JSON store
+// fallback when the vault is locked.
+
+/// Check if a Stronghold vault file exists on disk.
+#[tauri::command]
+async fn vault_exists(app: tauri::AppHandle) -> Result<bool, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(data_dir.join(STRONGHOLD_VAULT).exists())
+}
+
+/// Check if the vault is currently unlocked.
+#[tauri::command]
+async fn vault_is_unlocked() -> bool {
+    VAULT_UNLOCKED.load(Ordering::Relaxed)
+}
+
+/// Return the vault snapshot path for the JS Stronghold API to use.
+#[tauri::command]
+async fn vault_get_path(app: tauri::AppHandle) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(data_dir.join(STRONGHOLD_VAULT).to_string_lossy().into_owned())
+}
+
+/// Mark vault as unlocked (called from JS after successful Stronghold.load).
+#[tauri::command]
+async fn vault_set_unlocked() -> () {
+    VAULT_UNLOCKED.store(true, Ordering::Relaxed);
+}
+
+/// Mark vault as locked.
+#[tauri::command]
+async fn vault_set_locked() -> () {
+    VAULT_UNLOCKED.store(false, Ordering::Relaxed);
+}
+
+/// Migrate API keys from JSON store to Stronghold (returns keys for JS to write).
+/// Returns a map of key_name -> key_value for non-empty keys, then clears the JSON store.
+#[tauri::command]
+async fn vault_migrate_keys(app: tauri::AppHandle) -> Result<HashMap<String, String>, String> {
+    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
+    let mut keys = HashMap::new();
+    for &key_name in API_KEY_NAMES {
+        if let Some(serde_json::Value::String(val)) = store.get(key_name) {
+            if !val.is_empty() {
+                keys.insert(key_name.to_string(), val);
+            }
+        }
+    }
+    // Clear the plaintext JSON store
+    for &key_name in API_KEY_NAMES {
+        store.delete(key_name);
+    }
+    store.save().map_err(|e| e.to_string())?;
+    Ok(keys)
 }
 
 // ==================== AI STREAMING ====================
@@ -3091,6 +3167,13 @@ pub fn run() {
 
             get_api_key_statuses,
             save_api_keys,
+            // Stronghold Vault
+            vault_exists,
+            vault_is_unlocked,
+            vault_get_path,
+            vault_set_unlocked,
+            vault_set_locked,
+            vault_migrate_keys,
             // Price alert desktop notifications
             send_price_alert_notification,
             // Price alerts SQLite
@@ -3129,6 +3212,14 @@ pub fn run() {
             get_tax_loss_harvest_opportunities,
         ])
         .setup(|app| {
+            // Register Stronghold plugin with argon2 KDF
+            let salt_path = app.path().app_local_data_dir()
+                .expect("could not resolve app local data path")
+                .join("stronghold-salt.txt");
+            app.handle().plugin(
+                tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build()
+            )?;
+
             // Initialize local database for caching
             let app_handle = app.handle().clone();
             

@@ -17,6 +17,7 @@
     "store:default",
     "notification:default",
     "updater:default",
+    "stronghold:default",
     {
       "identifier": "fs:scope",
       "allow": [

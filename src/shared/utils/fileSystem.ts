@@ -1,5 +1,3 @@
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeFile, writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { createLogger } from '../../core/logger';
 
 declare global {
@@ -25,6 +23,8 @@ export async function saveFile(
   const isTauri = !!window.__TAURI__ || !!window.__TAURI_INTERNALS__;
 
   if (isTauri) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeFile, writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
     try {
       // For text content
       if (typeof content === 'string') {

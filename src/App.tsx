@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
-import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { isTauriContext } from './services/tauri';
 import { useAuth } from './contexts/AuthContext';
 import { invoke } from "./services/tauri";
 import { invokeWithResilience } from './services/apiClient';
@@ -402,18 +402,21 @@ function App() {
 
   // Handle deep-link OAuth callback (flowfolio://auth/callback?access_token=...&refresh_token=...)
   useEffect(() => {
+    if (!isTauriContext()) return;
     let unlisten: (() => void) | undefined;
     let mounted = true;
-    onOpenUrl(async (urls) => {
-      for (const url of urls) {
-        if (url.startsWith('flowfolio://auth/callback')) {
-          await handleOAuthCallback(url);
-          addToast('Logged in successfully!', 'success');
+    import('@tauri-apps/plugin-deep-link').then(({ onOpenUrl }) => {
+      onOpenUrl(async (urls) => {
+        for (const url of urls) {
+          if (url.startsWith('flowfolio://auth/callback')) {
+            await handleOAuthCallback(url);
+            addToast('Logged in successfully!', 'success');
+          }
         }
-      }
-    }).then(fn => {
-      if (mounted) unlisten = fn;
-      else fn();
+      }).then(fn => {
+        if (mounted) unlisten = fn;
+        else fn();
+      });
     });
     return () => {
       mounted = false;
