@@ -8,6 +8,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import { ToastProvider } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { CurrencyProvider } from "./contexts/CurrencyContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -17,9 +18,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <SubscriptionProvider>
       <UserModeProvider>
       <ToastProvider>
+      <CurrencyProvider>
         <ErrorBoundary>
           <App />
         </ErrorBoundary>
+      </CurrencyProvider>
       </ToastProvider>
       </UserModeProvider>
       </SubscriptionProvider>

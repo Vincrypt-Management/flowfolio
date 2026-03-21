@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, memo } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
-import { OpenRouterMessage } from "../services/openrouter";
+import { OpenRouterMessage, streamChat } from "../services/openrouter";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
 import { invoke } from "../services/tauri";
 import { exportPortfolioToPdf } from "../services/pdfService";
@@ -389,19 +389,49 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
       // Save user message to history
       await saveChatMessage('user', userMessage);
 
-      const response = await portfolioAgent.chatAboutPortfolio(
-        userMessage,
-        generatedPortfolio,
-        chatHistory
+      setStreamingMessage('');
+
+      const vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
+      const streamMessages: Array<{ role: string; content: string }> = [
+        {
+          role: 'system',
+          content: `You are an elite portfolio advisor (CFA, CFP) providing expert consultation.
+
+CURRENT PORTFOLIO CONTEXT:
+${JSON.stringify(generatedPortfolio, null, 2)}
+
+Your consultation style:
+- Provide specific, actionable insights
+- Reference real market data and current conditions
+- Consider tax implications, fees, and transaction costs
+- Explain complex concepts clearly
+- Challenge assumptions when necessary
+- Suggest alternatives when appropriate
+
+Be conversational but professional. Cite specific data points from the portfolio.`
+        },
+        ...chatHistory,
+        { role: 'user', content: userMessage }
+      ];
+
+      const response = await streamChat(
+        streamMessages,
+        (token) => {
+          if (isMountedRef.current) {
+            setStreamingMessage(prev => (prev ?? '') + token);
+          }
+        },
+        { model: vibeModel, temperature: 0.8, maxTokens: 1500 }
       );
 
       // Check if still mounted before updating state
       if (isMountedRef.current) {
+        setStreamingMessage('');
         setChatHistory([
           ...newHistory,
           { role: 'assistant', content: response }
         ]);
-        
+
         // Save assistant response to history
         await saveChatMessage('assistant', response);
       }

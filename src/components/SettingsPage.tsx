@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useUserProfile, AccountType } from '../contexts/UserProfileContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCurrency, SUPPORTED_CURRENCIES } from '../contexts/CurrencyContext';
 import { invoke } from '../services/tauri';
 import { createLogger } from '../core/logger';
 import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown } from 'lucide-react';
@@ -23,6 +24,7 @@ import './SettingsPage.css';
 export function SettingsPage() {
   const { profile, updateProfile, resetProfile } = useUserProfile();
   const { user, isAuthenticated, tier, loginWithGoogle, logout, loading: authLoading } = useAuth();
+  const { currency, setCurrency } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
 
@@ -261,6 +263,29 @@ export function SettingsPage() {
               </div>
               <span className="pro-tag">PRO</span>
             </button>
+          </div>
+        </div>
+
+        {/* Currency Preference */}
+        <div className="card settings-card">
+          <h3><Globe size={20} /> Currency</h3>
+          <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
+            Display all monetary values in your preferred currency.
+          </p>
+          <div className="form-group">
+            <label htmlFor="currency">Display Currency</label>
+            <select
+              id="currency"
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              style={{ width: '200px' }}
+            >
+              {SUPPORTED_CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>
+                  {c.code} — {c.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

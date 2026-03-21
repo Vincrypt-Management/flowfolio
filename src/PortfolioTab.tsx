@@ -1,7 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "./services/tauri";
+import { invokeWithResilience } from './services/apiClient';
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
+import { TransactionHistory } from './components/TransactionHistory';
+import { PortfolioPerformanceChart } from './components/PortfolioPerformanceChart';
+import { DividendTracker } from './components/DividendTracker';
+import { TaxLotView } from './components/TaxLotView';
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
 import { parseBrokerCSV, ParsedHolding } from './shared/utils/csvParser';
@@ -101,6 +106,10 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
   const [rebalanceReport, setRebalanceReport] = useState<RebalanceReport | null>(null);
   const [rebalanceHistory, setRebalanceHistory] = useState<Array<{id: string; recorded_at: string; report: unknown}>>([]);
   const [showRebalanceHistory, setShowRebalanceHistory] = useState(false);
+  const [showPerformance, setShowPerformance] = useState(true);
+  const [showTransactions, setShowTransactions] = useState(false);
+  const [showDividends, setShowDividends] = useState(false);
+  const [showTaxLots, setShowTaxLots] = useState(false);
   const [contribution, setContribution] = useState<string>("1000");
   const [isLoading, setIsLoading] = useState(false);
   
@@ -231,14 +240,28 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
         drift_pct: ((h.market_value / totalValue) * 100) - h.target_pct,
       }));
 
-      setPortfolio({
+      const updatedPortfolio = {
         ...portfolio,
         holdings: holdingsWithPct,
         total_value: totalValue,
         last_updated: new Date().toISOString(),
-      });
+      };
+
+      setPortfolio(updatedPortfolio);
 
       notifyHoldingsChange(holdingsWithPct, totalValue);
+
+      // After prices are updated successfully, save daily snapshot
+      try {
+        await invokeWithResilience('save_portfolio_snapshot', {
+          portfolio_name: updatedPortfolio.name,
+          total_value: updatedPortfolio.total_value,
+          cash: updatedPortfolio.cash,
+          holdings_json: JSON.stringify(updatedPortfolio.holdings),
+        });
+      } catch {
+        // Non-critical, don't show error
+      }
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error updating prices: " + (error instanceof Error ? error.message : String(error)), "error");
@@ -456,6 +479,12 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     setShowImport(false);
     addToast(`Imported ${toImport.length} holdings. Click "Refresh Prices" to update current prices.`, 'success');
   }, [importPreview, importSkipped, portfolio, addToast]);
+
+  const currentPrices = useMemo(() => {
+    const prices: Record<string, number> = {};
+    portfolio.holdings.forEach(h => { prices[h.symbol] = h.current_price; });
+    return prices;
+  }, [portfolio.holdings]);
 
   return (
     <div className="portfolio-tab">
@@ -857,6 +886,77 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
                       <span className="text-muted">{new Date(entry.recorded_at).toLocaleString()}</span>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Performance Chart */}
+          {portfolio.holdings.length > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0 }}>Portfolio Performance</h3>
+                <button className="btn-small" onClick={() => setShowPerformance(s => !s)}>
+                  {showPerformance ? 'Hide ▲' : 'Show ▼'}
+                </button>
+              </div>
+              {showPerformance && (
+                <div style={{ marginTop: '12px' }}>
+                  <PortfolioPerformanceChart
+                    portfolioName={portfolio.name}
+                    currentValue={portfolio.total_value}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transaction History */}
+          {isAdvanced && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0 }}>Transaction History</h3>
+                <button className="btn-small" onClick={() => setShowTransactions(s => !s)}>
+                  {showTransactions ? 'Hide ▲' : 'Show ▼'}
+                </button>
+              </div>
+              {showTransactions && (
+                <div style={{ marginTop: '12px' }}>
+                  <TransactionHistory portfolioName={portfolio.name} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Dividend Tracker */}
+          {isAdvanced && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0 }}>Dividends</h3>
+                <button className="btn-small" onClick={() => setShowDividends(s => !s)}>
+                  {showDividends ? 'Hide ▲' : 'Show ▼'}
+                </button>
+              </div>
+              {showDividends && (
+                <div style={{ marginTop: '12px' }}>
+                  <DividendTracker portfolioName={portfolio.name} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tax Lots */}
+          {isAdvanced && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0 }}>Tax Lots</h3>
+                <button className="btn-small" onClick={() => setShowTaxLots(s => !s)}>
+                  {showTaxLots ? 'Hide ▲' : 'Show ▼'}
+                </button>
+              </div>
+              {showTaxLots && (
+                <div style={{ marginTop: '12px' }}>
+                  <TaxLotView portfolioName={portfolio.name} currentPrices={currentPrices} />
                 </div>
               )}
             </div>

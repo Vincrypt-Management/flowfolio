@@ -1,5 +1,8 @@
 import { createLogger } from '../core/logger';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { isTauriContext } from './tauri';
+import { invokeWithResilience } from './apiClient';
 
 const log = createLogger('openrouter');
 
@@ -139,3 +142,42 @@ class OpenRouterService {
 }
 
 export const openRouterService = new OpenRouterService();
+
+/**
+ * Stream a chat completion using the Tauri ai_chat_stream backend command.
+ * Each token is delivered to `onToken` as it arrives via the 'ai-token' event.
+ * Falls back to a non-streaming single call when running in web mode.
+ */
+export async function streamChat(
+  messages: Array<{ role: string; content: string }>,
+  onToken: (token: string) => void,
+  options?: { model?: string; temperature?: number; maxTokens?: number }
+): Promise<string> {
+  if (!isTauriContext()) {
+    // Web mode fallback: non-streaming, deliver the full response as one token
+    const result = await invokeWithResilience<string>('ai_chat', {
+      messages,
+      model: options?.model,
+      temperature: options?.temperature,
+      maxTokens: options?.maxTokens,
+    });
+    onToken(result);
+    return result;
+  }
+
+  const unlisten = await listen<string>('ai-token', (event) => {
+    onToken(event.payload);
+  });
+
+  try {
+    const result = await invokeWithResilience<string>('ai_chat_stream', {
+      messages,
+      model: options?.model,
+      temperature: options?.temperature,
+      max_tokens: options?.maxTokens,
+    });
+    return result;
+  } finally {
+    unlisten();
+  }
+}
