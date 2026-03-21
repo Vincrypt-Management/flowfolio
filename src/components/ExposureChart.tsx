@@ -17,6 +17,7 @@ import {
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { Loader2, AlertTriangle, Globe } from 'lucide-react';
+import './ExposureChart.css';
 
 const log = createLogger('ExposureChart');
 

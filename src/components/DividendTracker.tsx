@@ -163,7 +163,7 @@ export function DividendTracker({ portfolioName }: DividendTrackerProps) {
 
       setSubmitting(true);
       try {
-        await invokeWithResilience('add_dividend', {
+        await invokeWithResilience('record_dividend', {
           portfolioName,
           symbol,
           amountPerShare,

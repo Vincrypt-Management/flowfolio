@@ -2888,7 +2888,7 @@ async fn get_dividend_summary(portfolio_name: String) -> Result<serde_json::Valu
     ).bind(&portfolio_name).fetch_one(&pool).await.map_err(|e| e.to_string())?;
 
     let total_ytd: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ? AND ex_date >= ? || '-01-01'"
+        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ? AND ex_date >= (? || '-01-01')"
     ).bind(&portfolio_name).bind(&year).fetch_one(&pool).await.map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
