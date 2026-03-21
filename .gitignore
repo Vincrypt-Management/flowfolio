@@ -1,6 +1,9 @@
 # Frontend (separate repo)
 frontend/
 
+# Git worktrees
+.worktrees/
+
 # Logs
 logs
 *.log
