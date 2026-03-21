@@ -18,6 +18,9 @@ import {
   Zap,
   Target,
   Info,
+  FlaskConical,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -27,6 +30,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { ExposureChart } from './ExposureChart';
+import { ScenarioAnalysis } from './ScenarioAnalysis';
 import './RiskDashboard.css';
 
 // --- Types ---
@@ -227,6 +232,7 @@ export function RiskDashboard({
   const [symbolMetrics, setSymbolMetrics] = useState<SymbolMetrics[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
 
   // Build demo holdings from market prices when none provided
   const isDemo = propHoldings.length === 0;
@@ -626,6 +632,39 @@ export function RiskDashboard({
           </div>
         </div>
       )}
+
+      {/* Sector / Geographic Exposure */}
+      <div className="card risk-exposure-card">
+        <h3 className="risk-section-title">
+          <BarChart3 size={16} />
+          Sector Exposure
+        </h3>
+        <ExposureChart
+          holdings={holdings.map((h) => ({
+            symbol: h.symbol,
+            value: h.value,
+            weight: h.weight,
+          }))}
+        />
+      </div>
+
+      {/* Scenario Analysis (collapsible) */}
+      <div className="card risk-scenario-card">
+        <button
+          className="risk-scenario-toggle"
+          onClick={() => setScenarioOpen((v) => !v)}
+          aria-expanded={scenarioOpen}
+        >
+          <FlaskConical size={16} />
+          <span>What-If Scenario Analysis</span>
+          {scenarioOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        </button>
+        {scenarioOpen && (
+          <div className="risk-scenario-body">
+            <ScenarioAnalysis holdings={holdings} portfolioValue={portfolioValue} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

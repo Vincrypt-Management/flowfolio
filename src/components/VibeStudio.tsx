@@ -34,7 +34,8 @@ import {
   AlertTriangle,
   ArrowUpRight,
   RefreshCw,
-  Eye
+  Eye,
+  Share2
 } from "lucide-react";
 import { 
   PieChart as RechartsPie, 
@@ -51,6 +52,8 @@ import {
 } from 'recharts';
 import QuantDashboard from "./charts/QuantDashboard";
 import TickerAnalysis from "./TickerAnalysis";
+import { PrivacyDisclosure } from "./PrivacyDisclosure";
+import { StrategyShareCard } from "./StrategyShareCard";
 import "./VibeStudio.css";
 
 interface ProgressStep {
@@ -88,6 +91,13 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   
   // Save state
   const [isSaving, setIsSaving] = useState(false);
+
+  // Share card modal state
+  const [showShareCard, setShowShareCard] = useState(false);
+
+  // AI privacy consent
+  const [aiPrivacyAccepted, setAiPrivacyAccepted] = useState(false);
+  const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(false);
   
   // Refs for chart containers (for PDF export)
   const pieChartRef = useRef<HTMLDivElement>(null);
@@ -853,6 +863,9 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
               <button className="btn-primary" onClick={handleSavePortfolio} disabled={isSaving}>
                 <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
               </button>
+              <button className="btn-secondary" onClick={() => setShowShareCard(true)} title="Share Strategy">
+                <Share2 size={16} /> Share
+              </button>
               {isAdvanced && (
                 <>
                   <button className="btn-secondary" onClick={handleExportCSV}>
@@ -864,7 +877,18 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
                   <button className="btn-save" onClick={handleSaveJSON}>
                     <Download size={16} /> Save JSON
                   </button>
-                  <button className="btn-chat" onClick={() => setChatMode(!chatMode)}>
+                  <button
+                    className="btn-chat"
+                    onClick={() => {
+                      if (chatMode) {
+                        setChatMode(false);
+                      } else if (aiPrivacyAccepted) {
+                        setChatMode(true);
+                      } else {
+                        setShowPrivacyDisclosure(true);
+                      }
+                    }}
+                  >
                     <MessageSquare size={16} /> {chatMode ? 'Hide Chat' : 'Ask AI'}
                   </button>
                 </>
@@ -1725,6 +1749,43 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
           <Lightbulb size={14} /> Be specific about your risk tolerance, investment goals, preferred sectors, and time horizon
         </div>
       </div>
+
+      {showPrivacyDisclosure && (
+        <PrivacyDisclosure
+          featureName="portfolio_agent"
+          onAccept={() => {
+            setAiPrivacyAccepted(true);
+            setShowPrivacyDisclosure(false);
+            setChatMode(true);
+          }}
+          onDecline={() => {
+            setShowPrivacyDisclosure(false);
+            addToast('AI chat requires data consent. Staying in manual mode.', 'info');
+          }}
+        />
+      )}
+
+      {showShareCard && generatedPortfolio && (
+        <StrategyShareCard
+          planName={generatedPortfolio.title}
+          factors={generatedPortfolio.assets.map((a) => ({
+            name: a.symbol,
+            weight: a.allocation,
+          }))}
+          backtestMetrics={
+            generatedPortfolio.backtestResult
+              ? {
+                  cagr: generatedPortfolio.backtestResult.annualizedReturn,
+                  sharpe: generatedPortfolio.backtestResult.sharpeRatio,
+                  maxDrawdown: generatedPortfolio.backtestResult.maxDrawdown,
+                }
+              : generatedPortfolio.sharpeRatioEstimate !== undefined
+              ? { sharpe: generatedPortfolio.sharpeRatioEstimate }
+              : undefined
+          }
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
     </div>
   );
 }

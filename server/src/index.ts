@@ -6,6 +6,8 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { authRouter } from './routes/auth.js';
 import { userRouter } from './routes/user.js';
+import { checkoutRoutes } from './routes/checkout.js';
+import { webhookRoutes } from './routes/webhook.js';
 import { initSchema } from './db.js';
 
 // Validate required env vars at startup
@@ -25,6 +27,8 @@ app.use('*', cors({
 
 app.route('/auth', authRouter);
 app.route('/user', userRouter);
+app.route('/checkout', checkoutRoutes);
+app.route('/webhooks', webhookRoutes);
 
 app.get('/health', (c) => c.json({ ok: true }));
 

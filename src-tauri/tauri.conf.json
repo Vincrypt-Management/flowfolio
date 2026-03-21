@@ -28,6 +28,10 @@
       "desktop": {
         "schemes": ["flowfolio"]
       }
+    },
+    "updater": {
+      "endpoints": ["https://github.com/vincrypt/flowfolio/releases/latest/download/latest.json"],
+      "pubkey": ""
     }
   },
   "bundle": {

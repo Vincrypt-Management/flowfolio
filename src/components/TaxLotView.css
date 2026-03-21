@@ -1,0 +1,272 @@
+/* TaxLotView.css */
+
+/* ── Loading state ─────────────────────────────────────────────────────────── */
+
+.tax-lot-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  color: var(--color-text-muted, #9ca3af);
+  font-size: 0.875rem;
+}
+
+.tax-lot-spinner {
+  animation: tax-lot-spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes tax-lot-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Root container ─────────────────────────────────────────────────────────── */
+
+.tax-lot-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+
+.tax-lot-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tax-lot-header__icon {
+  color: var(--color-accent, #6366f1);
+  flex-shrink: 0;
+}
+
+.tax-lot-header__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text, #f3f4f6);
+}
+
+.tax-lot-header__subtitle {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #9ca3af);
+  background: var(--color-surface-2, rgba(255,255,255,0.05));
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────────── */
+
+.tax-lot-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tax-lot-section__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text, #f3f4f6);
+}
+
+.tax-lot-section__header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tax-lot-section__icon--loss {
+  color: #f87171;
+  flex-shrink: 0;
+}
+
+.tax-lot-empty {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #9ca3af);
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+/* ── Table ────────────────────────────────────────────────────────────────────── */
+
+.tax-lot-table-wrapper {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border, rgba(255,255,255,0.08));
+}
+
+.tax-lot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.825rem;
+}
+
+.tax-lot-table thead tr {
+  background: var(--color-surface-2, rgba(255,255,255,0.04));
+}
+
+.tax-lot-table th {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-muted, #9ca3af);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.08));
+}
+
+.tax-lot-table td {
+  padding: 0.55rem 0.75rem;
+  color: var(--color-text, #e5e7eb);
+  border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.05));
+  white-space: nowrap;
+}
+
+.tax-lot-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tax-lot-table tbody tr:hover td {
+  background: var(--color-surface-hover, rgba(255,255,255,0.03));
+}
+
+.tax-lot-row--closed td {
+  opacity: 0.55;
+}
+
+/* ── Symbol label ─────────────────────────────────────────────────────────────── */
+
+.tax-lot-symbol {
+  font-weight: 700;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  letter-spacing: 0.03em;
+  color: var(--color-text, #f3f4f6);
+}
+
+/* ── Gain / Loss ──────────────────────────────────────────────────────────────── */
+
+.tax-lot-gain {
+  font-weight: 600;
+}
+
+.tax-lot-gain--positive {
+  color: #4ade80;
+}
+
+.tax-lot-gain--negative {
+  color: #f87171;
+}
+
+.tax-lot-gain--unknown {
+  color: var(--color-text-muted, #9ca3af);
+}
+
+/* ── Term badge ───────────────────────────────────────────────────────────────── */
+
+.tax-lot-term {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.tax-lot-term--long {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.tax-lot-term--short {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+/* ── Status badge ─────────────────────────────────────────────────────────────── */
+
+.tax-lot-status {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.tax-lot-status--open {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.tax-lot-status--closed {
+  background: rgba(156, 163, 175, 0.1);
+  color: #9ca3af;
+  border: 1px solid rgba(156, 163, 175, 0.2);
+}
+
+/* ── Harvest opportunity cards ────────────────────────────────────────────────── */
+
+.tax-lot-opportunities {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.tax-lot-opportunity-card {
+  background: var(--color-surface, rgba(255,255,255,0.04));
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.tax-lot-opportunity-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tax-lot-opportunity-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 1rem;
+}
+
+.tax-lot-opportunity-card__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.8rem;
+}
+
+.tax-lot-opportunity-card__field--highlight {
+  grid-column: 1 / -1;
+  background: rgba(74, 222, 128, 0.06);
+  border: 1px solid rgba(74, 222, 128, 0.15);
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.5rem;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tax-lot-opportunity-card__label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #9ca3af);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tax-lot-benefit {
+  font-weight: 700;
+  color: #4ade80;
+  font-size: 0.9rem;
+}

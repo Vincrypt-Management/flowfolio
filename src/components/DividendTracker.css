@@ -1,0 +1,362 @@
+/* DividendTracker Styles */
+
+.div-tracker {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ── Header ── */
+
+.div-tracker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.div-tracker__title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.div-tracker__title svg {
+  color: #3b82f6;
+}
+
+.div-tracker__title h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.div-tracker__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Buttons ── */
+
+.div-tracker__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.div-tracker__btn--primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+.div-tracker__btn--primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.div-tracker__btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.div-tracker__btn--ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+  padding: 0.4rem 0.6rem;
+}
+
+.div-tracker__btn--ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.div-tracker__btn--ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Summary Cards ── */
+
+.div-tracker__summary-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 480px) {
+  .div-tracker__summary-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.div-tracker__summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.15s;
+}
+
+.div-tracker__summary-card:hover {
+  border-color: var(--border-light);
+}
+
+.div-tracker__summary-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.div-tracker__summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* ── Add Dividend Form ── */
+
+.div-tracker__form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.div-tracker__form-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.div-tracker__form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .div-tracker__form-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .div-tracker__form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.div-tracker__form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.div-tracker__form-field label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.div-tracker__form-field input[type='text'],
+.div-tracker__form-field input[type='number'],
+.div-tracker__form-field input[type='date'] {
+  padding: 0.45rem 0.7rem;
+  background: var(--bg-input, var(--bg-active));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.div-tracker__form-field input:focus {
+  border-color: var(--accent);
+}
+
+.div-tracker__form-field--toggle {
+  justify-content: flex-end;
+  padding-bottom: 0.1rem;
+}
+
+.div-tracker__reinvest-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.div-tracker__reinvest-label input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+}
+
+.div-tracker__form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Loading / Empty ── */
+
+.div-tracker__table-section {
+  min-height: 120px;
+}
+
+.div-tracker__loading,
+.div-tracker__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 2.5rem 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.div-tracker__empty svg {
+  opacity: 0.25;
+}
+
+.div-tracker__empty p {
+  margin: 0;
+}
+
+.div-tracker__empty-sub {
+  font-size: 0.82rem;
+  text-align: center;
+  max-width: 320px;
+}
+
+/* ── Table ── */
+
+.div-tracker__table-wrap {
+  overflow-x: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.div-tracker__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.div-tracker__table thead tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.div-tracker__table th {
+  padding: 0.7rem 1rem;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.div-tracker__table th.div-tracker__num,
+.div-tracker__table td.div-tracker__num {
+  text-align: right;
+}
+
+.div-tracker__row {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+
+.div-tracker__row:last-child {
+  border-bottom: none;
+}
+
+.div-tracker__row:hover {
+  background: var(--bg-active);
+}
+
+.div-tracker__table td {
+  padding: 0.62rem 1rem;
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.div-tracker__date {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.div-tracker__symbol {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.div-tracker__total {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ── Reinvested Badge ── */
+
+.div-tracker__reinvest-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--radius-md);
+  font-size: 0.77rem;
+  font-weight: 600;
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.div-tracker__reinvest-badge--yes {
+  background: rgba(0, 229, 153, 0.1);
+  border-color: rgba(0, 229, 153, 0.3);
+  color: #00e599;
+}
+
+/* ── Spinner ── */
+
+.div-tracker__spinner {
+  animation: div-spin 0.8s linear infinite;
+}
+
+@keyframes div-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

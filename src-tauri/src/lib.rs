@@ -255,6 +255,65 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create rebalance_transactions: {}", e))?;
 
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS transactions (
+            id TEXT PRIMARY KEY,
+            portfolio_name TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            action TEXT NOT NULL,
+            shares REAL NOT NULL,
+            price REAL NOT NULL,
+            total REAL NOT NULL,
+            fees REAL DEFAULT 0,
+            notes TEXT,
+            executed_at TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create transactions: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+            id TEXT PRIMARY KEY,
+            portfolio_name TEXT NOT NULL,
+            total_value REAL NOT NULL,
+            cash REAL NOT NULL,
+            holdings_json TEXT NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(portfolio_name, snapshot_date)
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create portfolio_snapshots: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS dividends (
+            id TEXT PRIMARY KEY,
+            portfolio_name TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            amount_per_share REAL NOT NULL,
+            total_amount REAL NOT NULL,
+            shares_held REAL NOT NULL,
+            ex_date TEXT NOT NULL,
+            pay_date TEXT,
+            reinvested INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create dividends: {}", e))?;
+
+    sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS tax_lots (
+            id TEXT PRIMARY KEY,
+            portfolio_name TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            shares REAL NOT NULL,
+            cost_basis_per_share REAL NOT NULL,
+            purchase_date TEXT NOT NULL,
+            is_closed INTEGER DEFAULT 0,
+            close_date TEXT,
+            close_price REAL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    "#).execute(&pool).await.map_err(|e| format!("Failed to create tax_lots: {}", e))?;
+
     eprintln!("[INFO] [db] Local cache database initialized successfully");
 
     Ok(pool)
@@ -275,6 +334,20 @@ async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
 async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
     let pool = DB_POOL.lock().await;
     pool.clone().ok_or_else(|| "Database not initialized".to_string())
+}
+
+async fn get_user_tier() -> String {
+    if let Some(pool) = DB_POOL.lock().await.as_ref() {
+        if let Ok(Some(row)) = sqlx::query_scalar::<_, String>(
+            "SELECT value FROM user_settings WHERE key = 'subscription_tier'"
+        )
+        .fetch_optional(pool)
+        .await
+        {
+            return row;
+        }
+    }
+    "free".to_string()
 }
 
 // ==================== PRICE ALERTS ====================
@@ -2474,12 +2547,20 @@ async fn ai_chat(
     temperature: Option<f64>,
     max_tokens: Option<u32>,
 ) -> Result<String, String> {
+    let tier = get_user_tier().await;
+    if tier != "ai" && tier != "pro" {
+        return Err("AI features require an AI Suite or Pro subscription".to_string());
+    }
     OPENROUTER_SERVICE.chat(messages, model, temperature, max_tokens).await
 }
 
 /// Generate portfolio insight using AI
 #[tauri::command]
 async fn ai_generate_portfolio_insight(portfolio_data: serde_json::Value) -> Result<String, String> {
+    let tier = get_user_tier().await;
+    if tier != "ai" && tier != "pro" {
+        return Err("AI features require an AI Suite or Pro subscription".to_string());
+    }
     OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data).await
 }
 
@@ -2489,6 +2570,10 @@ async fn ai_chat_assistant(
     message: String,
     history: Vec<OpenRouterMessage>,
 ) -> Result<String, String> {
+    let tier = get_user_tier().await;
+    if tier != "ai" && tier != "pro" {
+        return Err("AI features require an AI Suite or Pro subscription".to_string());
+    }
     OPENROUTER_SERVICE.chat_with_assistant(message, history).await
 }
 
@@ -2609,6 +2694,300 @@ fn send_price_alert_notification(
         .map_err(|e| e.to_string())
 }
 
+// ==================== AI STREAMING ====================
+
+#[tauri::command]
+async fn ai_chat_stream(
+    app: tauri::AppHandle,
+    messages: Vec<serde_json::Value>,
+    model: Option<String>,
+    temperature: Option<f64>,
+    max_tokens: Option<u32>,
+) -> Result<String, String> {
+    // Tier check
+    let tier = get_user_tier().await;
+    if tier != "ai" && tier != "pro" {
+        return Err("AI features require an AI Suite or Pro subscription".to_string());
+    }
+
+    let api_key = std::env::var("OPENROUTER_API_KEY")
+        .or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY"))
+        .map_err(|_| "OpenRouter API key not configured".to_string())?;
+
+    let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".to_string());
+    let client = reqwest::Client::new();
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "temperature": temperature.unwrap_or(0.7),
+        "max_tokens": max_tokens.unwrap_or(4096),
+        "stream": true,
+    });
+
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .header("HTTP-Referer", "https://flowfolio.app")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("OpenRouter API error {}: {}", status, text));
+    }
+
+    let mut full_response = String::new();
+    use futures::StreamExt;
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
+        let text = String::from_utf8_lossy(&chunk);
+        for line in text.lines() {
+            if let Some(data) = line.strip_prefix("data: ") {
+                if data.trim() == "[DONE]" { continue; }
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+                    if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str() {
+                        full_response.push_str(content);
+                        let _ = app.emit("ai-token", content);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(full_response)
+}
+
+// ==================== TRANSACTION HISTORY ====================
+
+#[tauri::command]
+async fn record_transaction(
+    id: String, portfolio_name: String, symbol: String,
+    action: String, shares: f64, price: f64, total: f64,
+    fees: f64, notes: Option<String>, executed_at: String,
+) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query(
+        "INSERT INTO transactions (id, portfolio_name, symbol, action, shares, price, total, fees, notes, executed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&id).bind(&portfolio_name).bind(&symbol).bind(&action)
+    .bind(shares).bind(price).bind(total).bind(fees)
+    .bind(&notes).bind(&executed_at)
+    .execute(&pool).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_transactions(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
+    let pool = get_pool().await?;
+    let rows = sqlx::query_as::<_, (String, String, String, String, f64, f64, f64, f64, Option<String>, String, String)>(
+        "SELECT id, portfolio_name, symbol, action, shares, price, total, fees, notes, executed_at, created_at FROM transactions WHERE portfolio_name = ? ORDER BY executed_at DESC"
+    )
+    .bind(&portfolio_name)
+    .fetch_all(&pool).await.map_err(|e| e.to_string())?;
+
+    Ok(rows.iter().map(|r| serde_json::json!({
+        "id": r.0, "portfolio_name": r.1, "symbol": r.2, "action": r.3,
+        "shares": r.4, "price": r.5, "total": r.6, "fees": r.7,
+        "notes": r.8, "executed_at": r.9, "created_at": r.10
+    })).collect())
+}
+
+#[tauri::command]
+async fn delete_transaction(id: String) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query("DELETE FROM transactions WHERE id = ?")
+        .bind(&id).execute(&pool).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ==================== PORTFOLIO SNAPSHOTS ====================
+
+#[tauri::command]
+async fn save_portfolio_snapshot(
+    portfolio_name: String, total_value: f64, cash: f64, holdings_json: String,
+) -> Result<(), String> {
+    let pool = get_pool().await?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    sqlx::query(
+        "INSERT OR REPLACE INTO portfolio_snapshots (id, portfolio_name, total_value, cash, holdings_json, snapshot_date) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&id).bind(&portfolio_name).bind(total_value).bind(cash)
+    .bind(&holdings_json).bind(&date)
+    .execute(&pool).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_portfolio_snapshots(
+    portfolio_name: String, days: Option<i32>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let pool = get_pool().await?;
+    let days = days.unwrap_or(365);
+    let rows = sqlx::query_as::<_, (String, f64, f64, String, String)>(
+        "SELECT portfolio_name, total_value, cash, holdings_json, snapshot_date FROM portfolio_snapshots WHERE portfolio_name = ? AND snapshot_date >= date('now', '-' || ? || ' days') ORDER BY snapshot_date ASC"
+    )
+    .bind(&portfolio_name).bind(days)
+    .fetch_all(&pool).await.map_err(|e| e.to_string())?;
+
+    Ok(rows.iter().map(|r| serde_json::json!({
+        "portfolio_name": r.0, "total_value": r.1, "cash": r.2,
+        "holdings_json": r.3, "snapshot_date": r.4
+    })).collect())
+}
+
+// ==================== DIVIDEND TRACKING ====================
+
+#[tauri::command]
+async fn record_dividend(
+    id: String, portfolio_name: String, symbol: String,
+    amount_per_share: f64, total_amount: f64, shares_held: f64,
+    ex_date: String, pay_date: Option<String>, reinvested: bool,
+) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query(
+        "INSERT INTO dividends (id, portfolio_name, symbol, amount_per_share, total_amount, shares_held, ex_date, pay_date, reinvested) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&id).bind(&portfolio_name).bind(&symbol)
+    .bind(amount_per_share).bind(total_amount).bind(shares_held)
+    .bind(&ex_date).bind(&pay_date).bind(reinvested as i32)
+    .execute(&pool).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_dividends(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
+    let pool = get_pool().await?;
+    let rows = sqlx::query_as::<_, (String, String, String, f64, f64, f64, String, Option<String>, i32, String)>(
+        "SELECT id, portfolio_name, symbol, amount_per_share, total_amount, shares_held, ex_date, pay_date, reinvested, created_at FROM dividends WHERE portfolio_name = ? ORDER BY ex_date DESC"
+    )
+    .bind(&portfolio_name)
+    .fetch_all(&pool).await.map_err(|e| e.to_string())?;
+
+    Ok(rows.iter().map(|r| serde_json::json!({
+        "id": r.0, "portfolio_name": r.1, "symbol": r.2,
+        "amount_per_share": r.3, "total_amount": r.4, "shares_held": r.5,
+        "ex_date": r.6, "pay_date": r.7, "reinvested": r.8 != 0, "created_at": r.9
+    })).collect())
+}
+
+#[tauri::command]
+async fn get_dividend_summary(portfolio_name: String) -> Result<serde_json::Value, String> {
+    let pool = get_pool().await?;
+    let year = chrono::Utc::now().format("%Y").to_string();
+
+    let total_all: f64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ?"
+    ).bind(&portfolio_name).fetch_one(&pool).await.map_err(|e| e.to_string())?;
+
+    let total_ytd: f64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ? AND ex_date >= ? || '-01-01'"
+    ).bind(&portfolio_name).bind(&year).fetch_one(&pool).await.map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "total_all_time": total_all,
+        "total_ytd": total_ytd,
+    }))
+}
+
+// ==================== TAX LOT TRACKING ====================
+
+#[tauri::command]
+async fn create_tax_lot(
+    id: String, portfolio_name: String, symbol: String,
+    shares: f64, cost_basis_per_share: f64, purchase_date: String,
+) -> Result<(), String> {
+    let pool = get_pool().await?;
+    sqlx::query("INSERT INTO tax_lots (id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(&id).bind(&portfolio_name).bind(&symbol)
+        .bind(shares).bind(cost_basis_per_share).bind(&purchase_date)
+        .execute(&pool).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_tax_lots(portfolio_name: String, symbol: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+    let pool = get_pool().await?;
+    let rows = if let Some(sym) = &symbol {
+        sqlx::query_as::<_, (String, String, String, f64, f64, String, i32, Option<String>, Option<f64>, String)>(
+            "SELECT id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date, is_closed, close_date, close_price, created_at FROM tax_lots WHERE portfolio_name = ? AND symbol = ? ORDER BY purchase_date ASC"
+        ).bind(&portfolio_name).bind(sym).fetch_all(&pool).await
+    } else {
+        sqlx::query_as::<_, (String, String, String, f64, f64, String, i32, Option<String>, Option<f64>, String)>(
+            "SELECT id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date, is_closed, close_date, close_price, created_at FROM tax_lots WHERE portfolio_name = ? ORDER BY purchase_date ASC"
+        ).bind(&portfolio_name).fetch_all(&pool).await
+    }.map_err(|e| e.to_string())?;
+
+    Ok(rows.iter().map(|r| {
+        let days_held = chrono::NaiveDate::parse_from_str(&r.5, "%Y-%m-%d")
+            .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
+            .unwrap_or(0);
+        serde_json::json!({
+            "id": r.0, "portfolio_name": r.1, "symbol": r.2,
+            "shares": r.3, "cost_basis_per_share": r.4, "purchase_date": r.5,
+            "is_closed": r.6 != 0, "close_date": r.7, "close_price": r.8,
+            "created_at": r.9, "days_held": days_held,
+            "is_long_term": days_held > 365
+        })
+    }).collect())
+}
+
+#[tauri::command]
+async fn get_tax_loss_harvest_opportunities(
+    portfolio_name: String, current_prices: std::collections::HashMap<String, f64>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let pool = get_pool().await?;
+    let rows = sqlx::query_as::<_, (String, String, f64, f64, String)>(
+        "SELECT id, symbol, shares, cost_basis_per_share, purchase_date FROM tax_lots WHERE portfolio_name = ? AND is_closed = 0"
+    ).bind(&portfolio_name).fetch_all(&pool).await.map_err(|e| e.to_string())?;
+
+    let mut opportunities = Vec::new();
+    for r in &rows {
+        if let Some(&current_price) = current_prices.get(&r.1) {
+            let unrealized_gain = (current_price - r.3) * r.2;
+            if unrealized_gain < 0.0 {
+                let days_held = chrono::NaiveDate::parse_from_str(&r.4, "%Y-%m-%d")
+                    .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
+                    .unwrap_or(0);
+                opportunities.push(serde_json::json!({
+                    "lot_id": r.0, "symbol": r.1, "shares": r.2,
+                    "cost_basis": r.3, "current_price": current_price,
+                    "unrealized_loss": unrealized_gain,
+                    "days_held": days_held,
+                    "is_long_term": days_held > 365,
+                    "tax_benefit_estimate": unrealized_gain.abs() * 0.25,
+                }));
+            }
+        }
+    }
+    opportunities.sort_by(|a, b| a["unrealized_loss"].as_f64().unwrap().partial_cmp(&b["unrealized_loss"].as_f64().unwrap()).unwrap());
+    Ok(opportunities)
+}
+
+// ==================== MULTI-CURRENCY ====================
+
+#[tauri::command]
+async fn get_exchange_rate(from: String, to: String) -> Result<f64, String> {
+    if from == to { return Ok(1.0); }
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://api.exchangerate-api.com/v4/latest/{}",
+        from.to_uppercase()
+    );
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    data["rates"][to.to_uppercase().as_str()]
+        .as_f64()
+        .ok_or_else(|| format!("Exchange rate not found for {}", to))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize logging for observability
@@ -2630,6 +3009,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_default_plan,
@@ -2728,6 +3108,25 @@ pub fn run() {
             // Rebalance transactions SQLite
             record_rebalance,
             list_rebalance_history,
+            // AI Streaming
+            ai_chat_stream,
+            // Transaction History
+            record_transaction,
+            list_transactions,
+            delete_transaction,
+            // Portfolio Snapshots
+            save_portfolio_snapshot,
+            get_portfolio_snapshots,
+            // Dividend Tracking
+            record_dividend,
+            list_dividends,
+            get_dividend_summary,
+            // Multi-Currency
+            get_exchange_rate,
+            // Tax Lot Tracking
+            create_tax_lot,
+            list_tax_lots,
+            get_tax_loss_harvest_opportunities,
         ])
         .setup(|app| {
             // Initialize local database for caching

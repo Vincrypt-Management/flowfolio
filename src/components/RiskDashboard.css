@@ -341,6 +341,51 @@
   animation: spin 1s linear infinite;
 }
 
+/* Scenario Analysis collapsible card */
+
+.risk-scenario-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.risk-scenario-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: color var(--transition, 0.15s ease),
+    background var(--transition, 0.15s ease);
+}
+
+.risk-scenario-toggle:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.risk-scenario-toggle svg:first-child {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.risk-scenario-toggle svg:last-child {
+  margin-left: auto;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.risk-scenario-body {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
 /* Responsive */
 
 @media (max-width: 700px) {

@@ -1,0 +1,178 @@
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.command-palette {
+  width: 90%;
+  max-width: 560px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Input row ─────────────────────────────────────── */
+
+.command-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-search-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--text-main);
+  caret-color: var(--primary);
+}
+
+.command-input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-esc-hint {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover, #121212);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+/* ── Results container ─────────────────────────────── */
+
+.command-results {
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.command-results::-webkit-scrollbar {
+  width: 4px;
+}
+
+.command-results::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.command-results-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
+
+.command-results-list li {
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Individual item ───────────────────────────────── */
+
+.command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+  transition: background var(--transition);
+  gap: 12px;
+}
+
+.command-item:hover,
+.command-item.selected {
+  background: var(--primary-dim, rgba(0, 229, 153, 0.08));
+}
+
+.command-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.command-label {
+  font-size: 14px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Category badge ────────────────────────────────── */
+
+.command-category {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 100px;
+  line-height: 1.6;
+}
+
+.command-category--navigation {
+  background: var(--primary-dim, rgba(0, 229, 153, 0.1));
+  color: var(--primary);
+}
+
+.command-category--action {
+  background: var(--accent-dim, rgba(99, 102, 241, 0.1));
+  color: var(--accent);
+}
+
+/* ── Shortcut hint ─────────────────────────────────── */
+
+.command-shortcut {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Empty state ───────────────────────────────────── */
+
+.command-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}

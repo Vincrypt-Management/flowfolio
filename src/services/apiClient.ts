@@ -53,6 +53,10 @@ class ApiClient {
   private readonly MAX_DELAY = 5000; // ms
   private readonly BACKOFF_MULTIPLIER = 2;
 
+  // Rate limit tracking
+  private rateLimitedUntil: number = 0;
+  private rateLimitProvider: string = '';
+
   // Metrics
   private metrics: RequestMetrics = {
     totalRequests: 0,
@@ -96,6 +100,13 @@ class ApiClient {
       return result;
     } catch (error) {
       this.recordFailure();
+      // Detect rate limit errors and set cooldown
+      const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
+      if (msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests')) {
+        this.rateLimitedUntil = Date.now() + 60000;
+        this.rateLimitProvider = command;
+        log.warn(`Rate limit detected for ${command}. Cooling down for 60s.`);
+      }
       throw error;
     } finally {
       // Clean up after a delay to allow deduplication window
@@ -274,6 +285,24 @@ class ApiClient {
       state: 'closed',
     };
     log.info('Circuit breaker manually reset');
+  }
+
+  /**
+   * Check whether a rate limit cooldown is currently active
+   */
+  isRateLimited(): boolean {
+    return Date.now() < this.rateLimitedUntil;
+  }
+
+  /**
+   * Get rate limit info if currently rate-limited, otherwise null
+   */
+  getRateLimitInfo(): { provider: string; retryAfterSeconds: number } | null {
+    if (!this.isRateLimited()) return null;
+    return {
+      provider: this.rateLimitProvider,
+      retryAfterSeconds: Math.ceil((this.rateLimitedUntil - Date.now()) / 1000),
+    };
   }
 
   /**

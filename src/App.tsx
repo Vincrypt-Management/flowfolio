@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { useAuth } from './contexts/AuthContext';
 import { invoke } from "./services/tauri";
@@ -8,15 +8,19 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
 import { VibePlan } from "./shared/types";
-import { GeneratedPortfolio } from "./services/portfolioAgent";
 import { DEFAULT_SYMBOLS } from "./shared/constants";
 import { OnboardingWizard } from './features/onboarding/OnboardingWizard';
 import { useSidebarTooltips, SidebarTooltip } from './features/onboarding/SidebarTooltips';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { CommandPalette } from './components/CommandPalette';
+import type { Command } from './components/CommandPalette';
 import { TemplatesTab } from './features/templates/TemplatesTab';
 import { RankingsTab } from './features/rankings/RankingsTab';
 import { UniverseTab } from './features/universe/UniverseTab';
 import { saveFile } from "./shared/utils/fileSystem";
 import { useUserMode } from "./contexts/UserModeContext";
+import { useAppState, actions } from "./hooks/useAppState";
+import type { Universe, SymbolScore, ScoringConfig } from "./hooks/useAppState";
 import {
   LayoutDashboard,
   Sparkles,
@@ -65,6 +69,7 @@ const TickerAnalysis = lazy(() => import('./components/TickerAnalysis'));
 
 import Dashboard from "./components/Dashboard";
 import { UserProfileCard } from "./components/UserProfileCard";
+import { RateLimitBanner } from "./components/RateLimitBanner";
 
 function TabLoading() {
   return (
@@ -75,92 +80,26 @@ function TabLoading() {
   );
 }
 
-interface ScoringConfig {
-  factor_weights: Record<string, number>;
-}
-
-interface SymbolScore {
-  symbol: string;
-  total_score: number;
-  factors: Array<{
-    name: string;
-    raw_value: number | null;
-    normalized_value: number;
-    weight: number;
-    contribution: number;
-  }>;
-  explanation: string;
-}
-
-interface Universe {
-  id: string;
-  name: string;
-  description: string;
-  symbols: string[];
-  tags: Record<string, string[]>;
-  exclude_list: string[];
-  created_at: string;
-  updated_at: string;
-}
-
 function App() {
   const { addToast } = useToast();
   const { isAdvanced, toggleMode } = useUserMode();
   const { handleOAuthCallback } = useAuth();
-  const [status, setStatus] = useState("Initializing...");
-  const [plan, setPlan] = useState<VibePlan | null>(null);
-  const [templates, setTemplates] = useState<string[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // Rankings state
-  const [rankingsSymbols, setRankingsSymbols] = useState<string>(DEFAULT_SYMBOLS.join(","));
-  const [scores, setScores] = useState<SymbolScore[]>([]);
-  const [isScoring, setIsScoring] = useState(false);
-  const [selectedScore, setSelectedScore] = useState<SymbolScore | null>(null);
-  
-  // Universe state
-  const [universes, setUniverses] = useState<Universe[]>([]);
-  const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(null);
-  const [newUniverseName, setNewUniverseName] = useState("");
-  const [newUniverseSymbols, setNewUniverseSymbols] = useState("");
-  
-  // Saved plans state
-  const [savedPlans, setSavedPlans] = useState<string[]>([]);
-  
-  // Market overview state
-  const [marketPrices, setMarketPrices] = useState<Record<string, number>>({});
-  const [isLoadingMarket, setIsLoadingMarket] = useState(false);
-  
-  // Portfolio to load into VibeStudio (from SavedPortfoliosTab)
-  const [portfolioToLoad, setPortfolioToLoad] = useState<GeneratedPortfolio | null>(null);
-
-  // Analysis tab symbol
-  const [analysisSymbol, setAnalysisSymbol] = useState<string>('');
-
-  // Real holdings lifted from PortfolioTab for RiskDashboard
-  const [portfolioHoldings, setPortfolioHoldings] = useState<Array<{
-    symbol: string; shares: number; currentPrice: number;
-    value: number; weight: number;
-  }>>([]);
-  const [portfolioValue, setPortfolioValue] = useState<number>(0);
-
-  // Onboarding state
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+  const { state, dispatch } = useAppState();
 
   const { isShown: isTooltipShown, dismiss: dismissTooltip, getContent: getTooltipContent } =
-    useSidebarTooltips(!!onboardingComplete);
+    useSidebarTooltips(!!state.onboardingComplete);
 
   useEffect(() => {
     invokeWithResilience<string | null>('load_setting', { key: 'onboarding_complete' })
-      .then(val => setOnboardingComplete(val === 'true'))
-      .catch(() => setOnboardingComplete(true));
-  }, []);
+      .then(val => dispatch(actions.setOnboardingComplete(val === 'true')))
+      .catch(() => dispatch(actions.setOnboardingComplete(true)));
+  }, [dispatch]);
 
   // Track mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
+
+  // Hidden file input for "Import Data" command palette action
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -171,7 +110,7 @@ function App() {
     loadUniverses();
     loadSavedPlans();
     loadMarketOverview();
-    
+
     return () => {
       isMountedRef.current = false;
     };
@@ -181,11 +120,11 @@ function App() {
     try {
       const health = await invoke<string>("health_check");
       if (isMountedRef.current) {
-        setStatus(health);
+        dispatch(actions.setStatus(health));
       }
     } catch (error) {
       if (isMountedRef.current) {
-        setStatus("Error: " + (error instanceof Error ? error.message : String(error)));
+        dispatch(actions.setStatus("Error: " + (error instanceof Error ? error.message : String(error))));
       }
     }
   }
@@ -194,7 +133,7 @@ function App() {
     try {
       const templateList = await invoke<string[]>("list_templates");
       if (isMountedRef.current) {
-        setTemplates(templateList);
+        dispatch(actions.setTemplates(templateList));
       }
     } catch (error) {
       logger.error("Failed to load templates:", error);
@@ -205,7 +144,7 @@ function App() {
     try {
       const defaultPlan = await invoke<VibePlan>("get_default_plan");
       if (isMountedRef.current) {
-        setPlan(defaultPlan);
+        dispatch(actions.setPlan(defaultPlan));
       }
     } catch (error) {
       logger.error("Failed to load default plan:", error);
@@ -221,7 +160,7 @@ function App() {
     try {
       const universeList = await invoke<Universe[]>("list_universes");
       if (isMountedRef.current) {
-        setUniverses(universeList);
+        dispatch(actions.setUniverses(universeList));
       }
     } catch (error) {
       logger.error("Failed to load universes:", error);
@@ -232,7 +171,7 @@ function App() {
     try {
       const plans = await invoke<string[]>("list_saved_plans");
       if (isMountedRef.current) {
-        setSavedPlans(plans);
+        dispatch(actions.setSavedPlans(plans));
       }
     } catch (error) {
       logger.error("Failed to load saved plans:", error);
@@ -241,71 +180,66 @@ function App() {
 
   const loadMarketOverview = useCallback(async () => {
     if (isMountedRef.current) {
-      setIsLoadingMarket(true);
+      dispatch(actions.setIsLoadingMarket(true));
     }
     try {
       const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols: DEFAULT_SYMBOLS });
       if (isMountedRef.current) {
-        setMarketPrices(prices);
+        dispatch(actions.setMarketPrices(prices));
       }
     } catch (error) {
       logger.error("Failed to load market prices:", error);
     } finally {
       if (isMountedRef.current) {
-        setIsLoadingMarket(false);
+        dispatch(actions.setIsLoadingMarket(false));
       }
     }
-  }, []);
+  }, [dispatch]);
 
   const createUniverse = useCallback(async () => {
-    if (!newUniverseName.trim()) {
+    if (!state.newUniverseName.trim()) {
       addToast("Please enter a universe name", "warning");
       return;
     }
-    
+
     try {
-      const symbols = newUniverseSymbols.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
+      const symbols = state.newUniverseSymbols.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
       const universe = await invoke<Universe>("create_universe", {
-        name: newUniverseName,
+        name: state.newUniverseName,
         description: `Universe created on ${new Date().toLocaleDateString()}`,
         symbols
       });
       if (isMountedRef.current) {
-        setUniverses([...universes, universe]);
-        setNewUniverseName("");
-        setNewUniverseSymbols("");
+        dispatch(actions.universeCreated(universe));
       }
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error creating universe: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
-  }, [newUniverseName, newUniverseSymbols, universes, addToast]);
+  }, [state.newUniverseName, state.newUniverseSymbols, dispatch, addToast]);
 
   const deleteUniverse = useCallback(async (id: string) => {
     try {
       await invoke("delete_universe", { id });
       if (isMountedRef.current) {
-        setUniverses(universes.filter(u => u.id !== id));
-        if (selectedUniverse?.id === id) {
-          setSelectedUniverse(null);
-        }
+        dispatch(actions.universeDeleted(id));
       }
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error deleting universe: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
-  }, [universes, selectedUniverse, addToast]);
+  }, [dispatch, addToast]);
 
   const savePlan = useCallback(async () => {
-    if (!plan) {
+    if (!state.plan) {
       addToast("No plan to save", "warning");
       return;
     }
-    
+
     try {
-      await invoke("save_plan", { plan });
+      await invoke("save_plan", { plan: state.plan });
       await loadSavedPlans();
       if (isMountedRef.current) {
         addToast("Plan saved successfully!", "success");
@@ -315,15 +249,15 @@ function App() {
         addToast("Error saving plan: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
-  }, [plan, addToast]);
+  }, [state.plan, addToast]);
 
   const exportData = useCallback(async () => {
     try {
       const bundleJson = await invoke<string>("export_data_bundle", {
-        plan,
+        plan: state.plan,
         journalEntries: []
       });
-      
+
       const filename = `flowfolio-export-${new Date().toISOString().split("T")[0]}.json`;
       await saveFile(bundleJson, filename, "application/json");
     } catch (error) {
@@ -331,12 +265,12 @@ function App() {
         addToast("Error exporting data: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
-  }, [plan, addToast]);
+  }, [state.plan, addToast]);
 
   const importData = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
+
     try {
       const text = await file.text();
       const result = await invoke<{ success: boolean }>("import_data_bundle", { bundleJson: text });
@@ -356,29 +290,29 @@ function App() {
     try {
       const template = await invoke<VibePlan>("get_template", { name: templateName });
       if (isMountedRef.current) {
-        setPlan(template);
-        setSelectedTemplate(templateName);
+        dispatch(actions.setPlan(template));
+        dispatch(actions.setSelectedTemplate(templateName));
       }
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error loading template: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
-  }, [addToast]);
+  }, [dispatch, addToast]);
 
   const scoreSymbols = useCallback(async () => {
-    if (!plan) {
+    if (!state.plan) {
       addToast('Please select a plan first', 'warning');
       return;
     }
 
-    setIsScoring(true);
-    setScores([]);
+    dispatch(actions.setIsScoring(true));
+    dispatch(actions.setScores([]));
 
     try {
-      const symbolsList = rankingsSymbols.split(',').map(s => s.trim()).filter(s => s);
+      const symbolsList = state.rankingsSymbols.split(',').map(s => s.trim()).filter(s => s);
 
-      const config = await invokeWithResilience<ScoringConfig>('get_scoring_config', { plan });
+      const config = await invokeWithResilience<ScoringConfig>('get_scoring_config', { plan: state.plan });
       const results = await invokeWithResilience<SymbolScore[]>('score_symbols_batch', {
         symbols: symbolsList,
         config,
@@ -386,7 +320,7 @@ function App() {
 
       results.sort((a, b) => b.total_score - a.total_score);
       if (isMountedRef.current) {
-        setScores(results);
+        dispatch(actions.scoresReady(results));
       }
     } catch (error) {
       if (isMountedRef.current) {
@@ -394,16 +328,16 @@ function App() {
       }
     } finally {
       if (isMountedRef.current) {
-        setIsScoring(false);
+        dispatch(actions.setIsScoring(false));
       }
     }
-  }, [plan, rankingsSymbols, addToast]);
+  }, [state.plan, state.rankingsSymbols, dispatch, addToast]);
 
   const loadPlan = useCallback(async (planName: string) => {
     try {
       const loadedPlan = await invoke<VibePlan>("load_plan", { name: planName });
       if (isMountedRef.current) {
-        setPlan(loadedPlan);
+        dispatch(actions.setPlan(loadedPlan));
         addToast("Plan loaded successfully!", "success");
       }
     } catch (error) {
@@ -411,22 +345,60 @@ function App() {
         addToast("Error loading plan: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     }
-  }, [addToast]);
+  }, [dispatch, addToast]);
 
   const useUniverseInRankings = useCallback((universe: { id: string; symbols: string[] }) => {
-    setSelectedUniverse(universe as Universe);
-    setRankingsSymbols(universe.symbols.join(", "));
-  }, []);
+    dispatch(actions.setSelectedUniverse(universe as Universe));
+    dispatch(actions.setRankingsSymbols(universe.symbols.join(", ")));
+  }, [dispatch]);
 
   const handleNavClick = useCallback((tab: string, data?: Record<string, unknown>) => {
     // WatchlistTab calls onNavigate('ticker-analysis', { symbol }) — map to our tab key
     const resolvedTab = tab === 'ticker-analysis' ? 'analysis' : tab;
     if (resolvedTab === 'analysis' && typeof data?.symbol === 'string') {
-      setAnalysisSymbol(data.symbol);
+      dispatch(actions.setAnalysisSymbol(data.symbol));
     }
-    setActiveTab(resolvedTab);
-    setIsMobileMenuOpen(false);
-  }, []);
+    dispatch(actions.setActiveTab(resolvedTab));
+    dispatch(actions.setMobileMenuOpen(false));
+  }, [dispatch]);
+
+  const commandPaletteCommands: Command[] = useMemo<Command[]>(() => [
+    // Navigation commands
+    { id: 'nav-dashboard',        label: 'Go to Dashboard',        category: 'navigation', shortcut: 'Cmd+1', action: () => handleNavClick('dashboard') },
+    { id: 'nav-vibe-studio',      label: 'Go to Vibe Studio',      category: 'navigation', shortcut: 'Cmd+2', action: () => handleNavClick('vibe-studio') },
+    { id: 'nav-portfolio',        label: 'Go to Portfolio',         category: 'navigation', shortcut: 'Cmd+3', action: () => handleNavClick('portfolio') },
+    { id: 'nav-backtest',         label: 'Go to Backtest',          category: 'navigation', shortcut: 'Cmd+4', action: () => handleNavClick('backtest') },
+    { id: 'nav-journal',          label: 'Go to Journal',           category: 'navigation', shortcut: 'Cmd+5', action: () => handleNavClick('journal') },
+    { id: 'nav-watchlist',        label: 'Go to Watchlist',         category: 'navigation', shortcut: 'Cmd+6', action: () => handleNavClick('watchlist') },
+    { id: 'nav-settings',         label: 'Go to Settings',          category: 'navigation', shortcut: 'Cmd+7', action: () => handleNavClick('settings') },
+    { id: 'nav-saved-portfolios', label: 'Go to Saved Portfolios',  category: 'navigation', action: () => handleNavClick('saved-portfolios') },
+    { id: 'nav-templates',        label: 'Go to Templates',         category: 'navigation', action: () => handleNavClick('templates') },
+    { id: 'nav-rankings',         label: 'Go to Rankings',          category: 'navigation', action: () => handleNavClick('rankings') },
+    { id: 'nav-yearly-review',    label: 'Go to Yearly Review',     category: 'navigation', action: () => handleNavClick('yearly-review') },
+    { id: 'nav-universe',         label: 'Go to Universe',          category: 'navigation', action: () => handleNavClick('universe') },
+    { id: 'nav-analysis',         label: 'Go to Analysis',          category: 'navigation', action: () => handleNavClick('analysis') },
+    { id: 'nav-alerts',           label: 'Go to Alerts',            category: 'navigation', action: () => handleNavClick('alerts') },
+    { id: 'nav-comparison',       label: 'Go to Comparison',        category: 'navigation', action: () => handleNavClick('comparison') },
+    { id: 'nav-risk',             label: 'Go to Risk Dashboard',    category: 'navigation', action: () => handleNavClick('risk') },
+    { id: 'nav-scheduler',        label: 'Go to Scheduler',         category: 'navigation', action: () => handleNavClick('scheduler') },
+    { id: 'nav-news',             label: 'Go to News',              category: 'navigation', action: () => handleNavClick('news') },
+    { id: 'nav-data',             label: 'Go to Data Sources',      category: 'navigation', action: () => handleNavClick('data') },
+    // Action commands
+    { id: 'action-export',        label: 'Export Data',             category: 'action', action: () => { exportData(); } },
+    { id: 'action-import',        label: 'Import Data',             category: 'action', action: () => { importFileRef.current?.click(); } },
+  ], [handleNavClick, exportData]);
+
+  useKeyboardShortcuts({
+    'mod+k': () => dispatch(actions.setShowCommandPalette(true)),
+    'mod+1': () => handleNavClick('dashboard'),
+    'mod+2': () => handleNavClick('vibe-studio'),
+    'mod+3': () => handleNavClick('portfolio'),
+    'mod+4': () => handleNavClick('backtest'),
+    'mod+5': () => handleNavClick('journal'),
+    'mod+6': () => handleNavClick('watchlist'),
+    'mod+7': () => handleNavClick('settings'),
+    'escape': () => dispatch(actions.setShowCommandPalette(false)),
+  });
 
   // Handle deep-link OAuth callback (flowfolio://auth/callback?access_token=...&refresh_token=...)
   useEffect(() => {
@@ -450,8 +422,8 @@ function App() {
   }, [handleOAuthCallback, addToast]);
 
   const renderSidebar = () => (
-    <aside 
-      className={`sidebar ${isSidebarCollapsed ? "collapsed" : ""} ${isMobileMenuOpen ? "mobile-open" : ""}`}
+    <aside
+      className={`sidebar ${state.isSidebarCollapsed ? "collapsed" : ""} ${state.isMobileMenuOpen ? "mobile-open" : ""}`}
       role="navigation"
       aria-label="Main navigation"
     >
@@ -460,28 +432,28 @@ function App() {
           <div className="logo-icon-wrapper">
             <img src="/logo.png" alt="FlowFolio" className="logo-image" />
           </div>
-          {!isSidebarCollapsed && <span className="logo-text">FlowFolio</span>}
+          {!state.isSidebarCollapsed && <span className="logo-text">FlowFolio</span>}
         </div>
-        <button 
-          className="sidebar-toggle" 
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        <button
+          className="sidebar-toggle"
+          onClick={() => dispatch(actions.setSidebarCollapsed(!state.isSidebarCollapsed))}
+          aria-label={state.isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {state.isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </div>
-      
+
       <nav className="nav-menu" role="menubar" aria-label="Application sections">
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "dashboard" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "dashboard" ? "active" : ""}`}
             onClick={() => handleNavClick("dashboard")}
-            title={isSidebarCollapsed ? "Dashboard" : ""}
+            title={state.isSidebarCollapsed ? "Dashboard" : ""}
             role="menuitem"
-            aria-current={activeTab === "dashboard" ? "page" : undefined}
+            aria-current={state.activeTab === "dashboard" ? "page" : undefined}
           >
             <LayoutDashboard className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Dashboard</span>}
+            {!state.isSidebarCollapsed && <span>Dashboard</span>}
           </button>
           <SidebarTooltip
             tab="dashboard"
@@ -492,14 +464,14 @@ function App() {
         </div>
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "vibe-studio" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "vibe-studio" ? "active" : ""}`}
             onClick={() => handleNavClick("vibe-studio")}
-            title={isSidebarCollapsed ? "Vibe Studio" : ""}
+            title={state.isSidebarCollapsed ? "Vibe Studio" : ""}
             role="menuitem"
-            aria-current={activeTab === "vibe-studio" ? "page" : undefined}
+            aria-current={state.activeTab === "vibe-studio" ? "page" : undefined}
           >
             <Sparkles className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Vibe Studio</span>}
+            {!state.isSidebarCollapsed && <span>Vibe Studio</span>}
           </button>
           <SidebarTooltip
             tab="vibe_studio"
@@ -508,27 +480,27 @@ function App() {
             onDismiss={dismissTooltip}
           />
         </div>
-        <button 
-          className={`nav-item ${activeTab === "saved-portfolios" ? "active" : ""}`}
+        <button
+          className={`nav-item ${state.activeTab === "saved-portfolios" ? "active" : ""}`}
           onClick={() => handleNavClick("saved-portfolios")}
-          title={isSidebarCollapsed ? "Saved Portfolios" : ""}
+          title={state.isSidebarCollapsed ? "Saved Portfolios" : ""}
           role="menuitem"
-          aria-current={activeTab === "saved-portfolios" ? "page" : undefined}
+          aria-current={state.activeTab === "saved-portfolios" ? "page" : undefined}
         >
           <Save className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Saved Portfolios</span>}
+          {!state.isSidebarCollapsed && <span>Saved Portfolios</span>}
         </button>
         {isAdvanced && (
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "templates" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "templates" ? "active" : ""}`}
             onClick={() => handleNavClick("templates")}
-            title={isSidebarCollapsed ? "Templates" : ""}
+            title={state.isSidebarCollapsed ? "Templates" : ""}
             role="menuitem"
-            aria-current={activeTab === "templates" ? "page" : undefined}
+            aria-current={state.activeTab === "templates" ? "page" : undefined}
           >
             <FileText className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Templates</span>}
+            {!state.isSidebarCollapsed && <span>Templates</span>}
           </button>
           <SidebarTooltip
             tab="templates"
@@ -541,14 +513,14 @@ function App() {
         {isAdvanced && (
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "rankings" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "rankings" ? "active" : ""}`}
             onClick={() => handleNavClick("rankings")}
-            title={isSidebarCollapsed ? "Rankings" : ""}
+            title={state.isSidebarCollapsed ? "Rankings" : ""}
             role="menuitem"
-            aria-current={activeTab === "rankings" ? "page" : undefined}
+            aria-current={state.activeTab === "rankings" ? "page" : undefined}
           >
             <TrendingUp className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Rankings</span>}
+            {!state.isSidebarCollapsed && <span>Rankings</span>}
           </button>
           <SidebarTooltip
             tab="rankings"
@@ -560,14 +532,14 @@ function App() {
         )}
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "portfolio" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "portfolio" ? "active" : ""}`}
             onClick={() => handleNavClick("portfolio")}
-            title={isSidebarCollapsed ? "Portfolio" : ""}
+            title={state.isSidebarCollapsed ? "Portfolio" : ""}
             role="menuitem"
-            aria-current={activeTab === "portfolio" ? "page" : undefined}
+            aria-current={state.activeTab === "portfolio" ? "page" : undefined}
           >
             <PieChart className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Portfolio</span>}
+            {!state.isSidebarCollapsed && <span>Portfolio</span>}
           </button>
           <SidebarTooltip
             tab="portfolio"
@@ -578,14 +550,14 @@ function App() {
         </div>
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "backtest" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "backtest" ? "active" : ""}`}
             onClick={() => handleNavClick("backtest")}
-            title={isSidebarCollapsed ? "Backtest" : ""}
+            title={state.isSidebarCollapsed ? "Backtest" : ""}
             role="menuitem"
-            aria-current={activeTab === "backtest" ? "page" : undefined}
+            aria-current={state.activeTab === "backtest" ? "page" : undefined}
           >
             <FlaskConical className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Backtest</span>}
+            {!state.isSidebarCollapsed && <span>Backtest</span>}
           </button>
           <SidebarTooltip
             tab="backtest"
@@ -596,14 +568,14 @@ function App() {
         </div>
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "journal" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "journal" ? "active" : ""}`}
             onClick={() => handleNavClick("journal")}
-            title={isSidebarCollapsed ? "Journal" : ""}
+            title={state.isSidebarCollapsed ? "Journal" : ""}
             role="menuitem"
-            aria-current={activeTab === "journal" ? "page" : undefined}
+            aria-current={state.activeTab === "journal" ? "page" : undefined}
           >
             <BookOpen className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Journal</span>}
+            {!state.isSidebarCollapsed && <span>Journal</span>}
           </button>
           <SidebarTooltip
             tab="journal"
@@ -614,14 +586,14 @@ function App() {
         </div>
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "watchlist" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "watchlist" ? "active" : ""}`}
             onClick={() => handleNavClick("watchlist")}
-            title={isSidebarCollapsed ? "Watchlist" : ""}
+            title={state.isSidebarCollapsed ? "Watchlist" : ""}
             role="menuitem"
-            aria-current={activeTab === "watchlist" ? "page" : undefined}
+            aria-current={state.activeTab === "watchlist" ? "page" : undefined}
           >
             <Eye className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Watchlist</span>}
+            {!state.isSidebarCollapsed && <span>Watchlist</span>}
           </button>
           <SidebarTooltip
             tab="watchlist"
@@ -631,25 +603,25 @@ function App() {
           />
         </div>
         <button
-          className={`nav-item ${activeTab === "analysis" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "analysis" ? "active" : ""}`}
           onClick={() => handleNavClick("analysis")}
-          title={isSidebarCollapsed ? "Analysis" : ""}
+          title={state.isSidebarCollapsed ? "Analysis" : ""}
           role="menuitem"
-          aria-current={activeTab === "analysis" ? "page" : undefined}
+          aria-current={state.activeTab === "analysis" ? "page" : undefined}
         >
           <TrendingUp className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Analysis</span>}
+          {!state.isSidebarCollapsed && <span>Analysis</span>}
         </button>
         <div style={{ position: 'relative' }}>
           <button
-            className={`nav-item ${activeTab === "alerts" ? "active" : ""}`}
+            className={`nav-item ${state.activeTab === "alerts" ? "active" : ""}`}
             onClick={() => handleNavClick("alerts")}
-            title={isSidebarCollapsed ? "Alerts" : ""}
+            title={state.isSidebarCollapsed ? "Alerts" : ""}
             role="menuitem"
-            aria-current={activeTab === "alerts" ? "page" : undefined}
+            aria-current={state.activeTab === "alerts" ? "page" : undefined}
           >
             <Bell className="nav-icon" size={20} />
-            {!isSidebarCollapsed && <span>Alerts</span>}
+            {!state.isSidebarCollapsed && <span>Alerts</span>}
           </button>
           <SidebarTooltip
             tab="alerts"
@@ -660,118 +632,118 @@ function App() {
         </div>
         {isAdvanced && (
         <button
-          className={`nav-item ${activeTab === "comparison" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "comparison" ? "active" : ""}`}
           onClick={() => handleNavClick("comparison")}
-          title={isSidebarCollapsed ? "Compare" : ""}
+          title={state.isSidebarCollapsed ? "Compare" : ""}
           role="menuitem"
-          aria-current={activeTab === "comparison" ? "page" : undefined}
+          aria-current={state.activeTab === "comparison" ? "page" : undefined}
         >
           <GitCompare className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Compare</span>}
+          {!state.isSidebarCollapsed && <span>Compare</span>}
         </button>
         )}
         {isAdvanced && (
         <button
-          className={`nav-item ${activeTab === "risk" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "risk" ? "active" : ""}`}
           onClick={() => handleNavClick("risk")}
-          title={isSidebarCollapsed ? "Risk" : ""}
+          title={state.isSidebarCollapsed ? "Risk" : ""}
           role="menuitem"
-          aria-current={activeTab === "risk" ? "page" : undefined}
+          aria-current={state.activeTab === "risk" ? "page" : undefined}
         >
           <Shield className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Risk</span>}
+          {!state.isSidebarCollapsed && <span>Risk</span>}
         </button>
         )}
         {isAdvanced && (
         <button
-          className={`nav-item ${activeTab === "scheduler" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "scheduler" ? "active" : ""}`}
           onClick={() => handleNavClick("scheduler")}
-          title={isSidebarCollapsed ? "Scheduler" : ""}
+          title={state.isSidebarCollapsed ? "Scheduler" : ""}
           role="menuitem"
-          aria-current={activeTab === "scheduler" ? "page" : undefined}
+          aria-current={state.activeTab === "scheduler" ? "page" : undefined}
         >
           <Clock className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Scheduler</span>}
+          {!state.isSidebarCollapsed && <span>Scheduler</span>}
         </button>
         )}
         <button
-          className={`nav-item ${activeTab === "news" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "news" ? "active" : ""}`}
           onClick={() => handleNavClick("news")}
-          title={isSidebarCollapsed ? "News" : ""}
+          title={state.isSidebarCollapsed ? "News" : ""}
           role="menuitem"
-          aria-current={activeTab === "news" ? "page" : undefined}
+          aria-current={state.activeTab === "news" ? "page" : undefined}
         >
           <Newspaper className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>News</span>}
+          {!state.isSidebarCollapsed && <span>News</span>}
         </button>
         <button
-          className={`nav-item ${activeTab === "yearly-review" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "yearly-review" ? "active" : ""}`}
           onClick={() => handleNavClick("yearly-review")}
-          title={isSidebarCollapsed ? "Yearly Review" : ""}
+          title={state.isSidebarCollapsed ? "Yearly Review" : ""}
           role="menuitem"
-          aria-current={activeTab === "yearly-review" ? "page" : undefined}
+          aria-current={state.activeTab === "yearly-review" ? "page" : undefined}
         >
           <ClipboardCheck className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Yearly Review</span>}
+          {!state.isSidebarCollapsed && <span>Yearly Review</span>}
         </button>
         {isAdvanced && (
         <button
-          className={`nav-item ${activeTab === "universe" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "universe" ? "active" : ""}`}
           onClick={() => handleNavClick("universe")}
-          title={isSidebarCollapsed ? "Universe" : ""}
+          title={state.isSidebarCollapsed ? "Universe" : ""}
           role="menuitem"
-          aria-current={activeTab === "universe" ? "page" : undefined}
+          aria-current={state.activeTab === "universe" ? "page" : undefined}
         >
           <Globe className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Universe</span>}
+          {!state.isSidebarCollapsed && <span>Universe</span>}
         </button>
         )}
         {isAdvanced && (
         <button
-          className={`nav-item ${activeTab === "data" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "data" ? "active" : ""}`}
           onClick={() => handleNavClick("data")}
-          title={isSidebarCollapsed ? "Data Sources" : ""}
+          title={state.isSidebarCollapsed ? "Data Sources" : ""}
           role="menuitem"
-          aria-current={activeTab === "data" ? "page" : undefined}
+          aria-current={state.activeTab === "data" ? "page" : undefined}
         >
           <Database className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Data Sources</span>}
+          {!state.isSidebarCollapsed && <span>Data Sources</span>}
         </button>
         )}
         <button
-          className={`nav-item ${activeTab === "settings" ? "active" : ""}`}
+          className={`nav-item ${state.activeTab === "settings" ? "active" : ""}`}
           onClick={() => handleNavClick("settings")}
-          title={isSidebarCollapsed ? "Settings" : ""}
+          title={state.isSidebarCollapsed ? "Settings" : ""}
           role="menuitem"
-          aria-current={activeTab === "settings" ? "page" : undefined}
+          aria-current={state.activeTab === "settings" ? "page" : undefined}
         >
           <Settings className="nav-icon" size={20} />
-          {!isSidebarCollapsed && <span>Settings</span>}
+          {!state.isSidebarCollapsed && <span>Settings</span>}
         </button>
       </nav>
 
       <div className="sidebar-footer">
         <UserProfileCard
-          collapsed={isSidebarCollapsed}
+          collapsed={state.isSidebarCollapsed}
           onSettingsClick={() => handleNavClick("settings")}
         />
-        <button 
-          className={`mode-toggle ${isSidebarCollapsed ? "collapsed" : ""}`}
+        <button
+          className={`mode-toggle ${state.isSidebarCollapsed ? "collapsed" : ""}`}
           onClick={toggleMode}
           aria-label={isAdvanced ? "Switch to Simple mode" : "Switch to Advanced mode"}
-          title={isSidebarCollapsed ? (isAdvanced ? "Advanced Mode" : "Simple Mode") : ""}
+          title={state.isSidebarCollapsed ? (isAdvanced ? "Advanced Mode" : "Simple Mode") : ""}
         >
           {isAdvanced ? <ToggleRight className="mode-toggle-icon active" size={20} /> : <ToggleLeft className="mode-toggle-icon" size={20} />}
-          {!isSidebarCollapsed && (
+          {!state.isSidebarCollapsed && (
             <span className="mode-toggle-label">
               {isAdvanced ? "Advanced" : "Simple"}
             </span>
           )}
         </button>
-        <ThemeToggle compact={isSidebarCollapsed} />
-        <div className={`status-badge ${isSidebarCollapsed ? "collapsed" : ""}`}>
-          <div className={`status-dot ${status.includes("running") || status === "Healthy" ? "online" : "offline"}`}></div>
-          {!isSidebarCollapsed && <span>{status.includes("running") || status === "Healthy" ? "System Online" : status}</span>}
+        <ThemeToggle compact={state.isSidebarCollapsed} />
+        <div className={`status-badge ${state.isSidebarCollapsed ? "collapsed" : ""}`}>
+          <div className={`status-dot ${state.status.includes("running") || state.status === "Healthy" ? "online" : "offline"}`}></div>
+          {!state.isSidebarCollapsed && <span>{state.status.includes("running") || state.status === "Healthy" ? "System Online" : state.status}</span>}
         </div>
       </div>
     </aside>
@@ -782,108 +754,124 @@ function App() {
     h: Array<{ symbol: string; shares: number; currentPrice: number; value: number; weight: number }>,
     v: number
   ) => {
-    setPortfolioHoldings(h);
-    setPortfolioValue(v);
-  }, []);
+    dispatch(actions.setPortfolioHoldingsAndValue(h, v));
+  }, [dispatch]);
 
-  if (onboardingComplete === null) {
+  if (state.onboardingComplete === null) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
       <div className="tab-loading-spinner" />
     </div>;
   }
 
-  if (!onboardingComplete) {
-    return <OnboardingWizard onComplete={() => setOnboardingComplete(true)} />;
+  if (!state.onboardingComplete) {
+    return <OnboardingWizard onComplete={() => dispatch(actions.setOnboardingComplete(true))} />;
   }
 
   return (
     <div className="app-container">
       <a href="#main-content" className="skip-nav">Skip to main content</a>
-      
+
       <button
         className="mobile-menu-btn"
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-        aria-expanded={isMobileMenuOpen}
+        onClick={() => dispatch(actions.setMobileMenuOpen(!state.isMobileMenuOpen))}
+        aria-label={state.isMobileMenuOpen ? "Close menu" : "Open menu"}
+        aria-expanded={state.isMobileMenuOpen}
       >
-        {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        {state.isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
-      
+
       <div
-        className={`sidebar-overlay ${isMobileMenuOpen ? "visible" : ""}`}
-        onClick={() => setIsMobileMenuOpen(false)}
+        className={`sidebar-overlay ${state.isMobileMenuOpen ? "visible" : ""}`}
+        onClick={() => dispatch(actions.setMobileMenuOpen(false))}
         aria-hidden="true"
       />
-      
+
+      <CommandPalette
+        isOpen={state.showCommandPalette}
+        onClose={() => dispatch(actions.setShowCommandPalette(false))}
+        commands={commandPaletteCommands}
+      />
+
+      {/* Hidden file input for Import Data command palette action */}
+      <input
+        ref={importFileRef}
+        type="file"
+        accept=".json"
+        style={{ display: 'none' }}
+        onChange={importData}
+        aria-hidden="true"
+      />
+
       {renderSidebar()}
 
       <main id="main-content" className="main-content" role="main">
-        {activeTab === "dashboard" && (
+        <RateLimitBanner />
+        {state.activeTab === "dashboard" && (
           <div className="animate-fade-in">
             <Dashboard
-              plan={plan}
+              plan={state.plan}
               onNavigate={handleNavClick}
-              marketPrices={marketPrices}
+              marketPrices={state.marketPrices}
               onRefreshMarket={loadMarketOverview}
-              isLoadingMarket={isLoadingMarket}
+              isLoadingMarket={state.isLoadingMarket}
             />
           </div>
         )}
 
-        {activeTab === "vibe-studio" && (
+        {state.activeTab === "vibe-studio" && (
           <div className="animate-fade-in">
-            <VibeStudio 
-              initialPortfolio={portfolioToLoad}
-              onPortfolioLoaded={() => setPortfolioToLoad(null)}
+            <VibeStudio
+              initialPortfolio={state.portfolioToLoad}
+              onPortfolioLoaded={() => dispatch(actions.setPortfolioToLoad(null))}
             />
           </div>
         )}
 
-        {activeTab === "saved-portfolios" && (
+        {state.activeTab === "saved-portfolios" && (
           <Suspense fallback={<TabLoading />}>
             <SavedPortfoliosTab onLoadPortfolio={(portfolio) => {
-              setPortfolioToLoad(portfolio);
-              setActiveTab("vibe-studio");
+              dispatch(actions.setPortfolioToLoad(portfolio));
+              dispatch(actions.setActiveTab("vibe-studio"));
             }} />
           </Suspense>
         )}
 
-        {activeTab === "templates" && (
+        {state.activeTab === "templates" && (
           <TemplatesTab
-            templates={templates}
-            selectedTemplate={selectedTemplate}
-            plan={plan}
+            templates={state.templates}
+            selectedTemplate={state.selectedTemplate}
+            plan={state.plan}
             onLoadTemplate={loadTemplate}
-            onNavigateToDashboard={() => setActiveTab("dashboard")}
+            onNavigateToDashboard={() => dispatch(actions.setActiveTab("dashboard"))}
           />
         )}
 
-        {activeTab === "data" && (
+        {state.activeTab === "data" && (
           <Suspense fallback={<TabLoading />}>
             <DataSourcesPage />
           </Suspense>
         )}
 
-        {activeTab === "rankings" && (
+        {state.activeTab === "rankings" && (
           <RankingsTab
-            plan={plan}
-            rankingsSymbols={rankingsSymbols}
-            onSymbolsChange={setRankingsSymbols}
-            scores={scores}
-            isScoring={isScoring}
-            selectedScore={selectedScore}
-            onSelectScore={setSelectedScore}
+            plan={state.plan}
+            rankingsSymbols={state.rankingsSymbols}
+            onSymbolsChange={(v) => dispatch(actions.setRankingsSymbols(v))}
+            scores={state.scores}
+            isScoring={state.isScoring}
+            selectedScore={state.selectedScore}
+            onSelectScore={(v) => dispatch(actions.setSelectedScore(v))}
             onScoreSymbols={scoreSymbols}
           />
         )}
 
-        {activeTab === "portfolio" && (
+        {state.activeTab === "portfolio" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <PortfolioTab
                 onHoldingsChange={handleHoldingsChange}
                 onAnalyze={(symbol) => {
-                  setAnalysisSymbol(symbol);
+                  dispatch(actions.setAnalysisSymbol(symbol));
                   handleNavClick('analysis');
                 }}
               />
@@ -891,7 +879,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === "backtest" && (
+        {state.activeTab === "backtest" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <BacktestTab />
@@ -899,7 +887,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === "journal" && (
+        {state.activeTab === "journal" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <JournalTab />
@@ -907,32 +895,32 @@ function App() {
           </div>
         )}
 
-        {activeTab === "yearly-review" && (
+        {state.activeTab === "yearly-review" && (
           <div className="animate-fade-in">
             <header className="page-header">
               <h1 className="page-title">Yearly Review</h1>
               <p className="page-subtitle">Comprehensive annual strategy and portfolio review checklist</p>
             </header>
             <Suspense fallback={<TabLoading />}>
-              <YearlyReviewComponent portfolioName={plan?.name || "My Portfolio"} />
+              <YearlyReviewComponent portfolioName={state.plan?.name || "My Portfolio"} />
             </Suspense>
           </div>
         )}
 
-        {activeTab === "universe" && (
+        {state.activeTab === "universe" && (
           <UniverseTab
-            universes={universes}
-            newUniverseName={newUniverseName}
-            onNewUniverseNameChange={setNewUniverseName}
-            newUniverseSymbols={newUniverseSymbols}
-            onNewUniverseSymbolsChange={setNewUniverseSymbols}
+            universes={state.universes}
+            newUniverseName={state.newUniverseName}
+            onNewUniverseNameChange={(v) => dispatch(actions.setNewUniverseName(v))}
+            newUniverseSymbols={state.newUniverseSymbols}
+            onNewUniverseSymbolsChange={(v) => dispatch(actions.setNewUniverseSymbols(v))}
             onCreateUniverse={createUniverse}
             onDeleteUniverse={deleteUniverse}
-            selectedUniverse={selectedUniverse}
-            onSelectUniverse={setSelectedUniverse}
+            selectedUniverse={state.selectedUniverse}
+            onSelectUniverse={(v) => dispatch(actions.setSelectedUniverse(v))}
             onUseInRankings={useUniverseInRankings}
-            savedPlans={savedPlans}
-            plan={plan}
+            savedPlans={state.savedPlans}
+            plan={state.plan}
             onSavePlan={savePlan}
             onExportData={exportData}
             onImportData={importData}
@@ -941,7 +929,7 @@ function App() {
           />
         )}
 
-        {activeTab === "watchlist" && (
+        {state.activeTab === "watchlist" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <WatchlistTab onNavigate={handleNavClick} />
@@ -949,7 +937,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'analysis' && (
+        {state.activeTab === 'analysis' && (
           <div className="animate-fade-in">
             <header className="page-header">
               <h1 className="page-title">Ticker Analysis</h1>
@@ -957,16 +945,16 @@ function App() {
             </header>
             <Suspense fallback={<TabLoading />}>
               <TickerAnalysis
-                symbol={analysisSymbol}
+                symbol={state.analysisSymbol}
                 onClose={() => {}}
                 inline={true}
-                onTickerChange={setAnalysisSymbol}
+                onTickerChange={(v) => dispatch(actions.setAnalysisSymbol(v))}
               />
             </Suspense>
           </div>
         )}
 
-        {activeTab === "alerts" && (
+        {state.activeTab === "alerts" && (
           <div className="animate-fade-in">
             <header className="page-header">
               <h1 className="page-title">Price Alerts</h1>
@@ -982,7 +970,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === "comparison" && (
+        {state.activeTab === "comparison" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <ComparisonMode />
@@ -990,19 +978,19 @@ function App() {
           </div>
         )}
 
-        {activeTab === "risk" && (
+        {state.activeTab === "risk" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <RiskDashboard
-                holdings={portfolioHoldings}
-                portfolioValue={portfolioValue}
-                marketPrices={marketPrices}
+                holdings={state.portfolioHoldings}
+                portfolioValue={state.portfolioValue}
+                marketPrices={state.marketPrices}
               />
             </Suspense>
           </div>
         )}
 
-        {activeTab === "scheduler" && (
+        {state.activeTab === "scheduler" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <RebalanceScheduler
@@ -1016,7 +1004,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === "news" && (
+        {state.activeTab === "news" && (
           <div className="animate-fade-in">
             <header className="page-header">
               <h1 className="page-title">News & Sentiment</h1>
@@ -1044,7 +1032,7 @@ function App() {
         )}
 
 
-        {activeTab === "settings" && (
+        {state.activeTab === "settings" && (
           <div className="animate-fade-in">
             <Suspense fallback={<TabLoading />}>
               <SettingsPage />

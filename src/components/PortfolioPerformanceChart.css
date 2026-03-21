@@ -1,0 +1,227 @@
+/* PortfolioPerformanceChart Styles */
+
+.perf-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+
+/* ── Header ── */
+
+.perf-chart__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.perf-chart__title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.perf-chart__title svg {
+  color: var(--accent);
+}
+
+.perf-chart__title h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.perf-chart__return {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+
+.perf-chart__return-pct {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.perf-chart__return-dollar {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.perf-chart__return--up .perf-chart__return-pct {
+  color: var(--accent);
+}
+
+.perf-chart__return--down .perf-chart__return-pct {
+  color: #ef4444;
+}
+
+/* ── Controls ── */
+
+.perf-chart__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.perf-chart__ranges {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.perf-chart__range-btn {
+  padding: 0.3rem 0.65rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.perf-chart__range-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.perf-chart__range-btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+/* ── Benchmark Controls ── */
+
+.perf-chart__benchmark-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.perf-chart__benchmark-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.perf-chart__benchmark-toggle input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.perf-chart__benchmark-select {
+  appearance: none;
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.28rem 0.65rem;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.perf-chart__benchmark-select:focus {
+  border-color: var(--accent);
+}
+
+/* ── Body ── */
+
+.perf-chart__body {
+  position: relative;
+  min-height: 320px;
+}
+
+.perf-chart__loading,
+.perf-chart__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 320px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.perf-chart__empty svg {
+  opacity: 0.25;
+}
+
+.perf-chart__empty-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0;
+  text-align: center;
+  max-width: 300px;
+}
+
+.perf-chart__chart-wrap {
+  position: relative;
+}
+
+.perf-chart__benchmark-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  z-index: 1;
+}
+
+/* ── Tooltip ── */
+
+.perf-chart__tooltip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.perf-chart__tooltip-date {
+  margin: 0 0 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.perf-chart__tooltip-row {
+  margin: 0.15rem 0;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+/* ── Spinner ── */
+
+.perf-chart__spinner {
+  animation: perf-spin 0.8s linear infinite;
+}
+
+@keyframes perf-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

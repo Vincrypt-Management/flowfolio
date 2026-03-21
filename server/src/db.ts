@@ -10,13 +10,17 @@ export const pool = new Pool({
 export async function initSchema(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id          TEXT PRIMARY KEY,
-      email       TEXT NOT NULL UNIQUE,
-      name        TEXT,
-      avatar_url  TEXT,
-      subscription_tier TEXT NOT NULL DEFAULT 'free',
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      id                 TEXT PRIMARY KEY,
+      email              TEXT NOT NULL UNIQUE,
+      name               TEXT,
+      avatar_url         TEXT,
+      subscription_tier  TEXT NOT NULL DEFAULT 'free',
+      stripe_customer_id TEXT,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id          TEXT PRIMARY KEY,

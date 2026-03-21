@@ -5,19 +5,19 @@ const platforms = [
     name: "Windows",
     icon: <Monitor />,
     version: "v0.1.0",
-    href: "https://github.com/your-username/flowfolio/releases/latest",
+    href: "https://github.com/vincrypt/flowfolio/releases/latest",
   },
   {
     name: "macOS",
     icon: <Apple />,
     version: "v0.1.0",
-    href: "https://github.com/your-username/flowfolio/releases/latest",
+    href: "https://github.com/vincrypt/flowfolio/releases/latest",
   },
   {
     name: "Linux",
     icon: <Terminal />,
     version: "v0.1.0",
-    href: "https://github.com/your-username/flowfolio/releases/latest",
+    href: "https://github.com/vincrypt/flowfolio/releases/latest",
   },
 ];
 

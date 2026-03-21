@@ -1,0 +1,294 @@
+/* StrategyShareCard – modal overlay and preview card */
+
+/* ── Overlay ── */
+.share-card-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: share-overlay-in 0.18s ease;
+}
+
+@keyframes share-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Modal container ── */
+.share-card-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  animation: share-modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes share-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Modal header ── */
+.share-card-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.share-card-modal-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-card-modal-header h3 svg {
+  color: var(--accent);
+}
+
+.share-card-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  transition: color var(--transition);
+}
+
+.share-card-close:hover {
+  color: var(--text-main);
+}
+
+/* ── Preview wrapper ── */
+.share-card-preview {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+/* ── The shareable card itself ── */
+.share-card {
+  background: #050505;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.share-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--accent);
+  z-index: 1;
+}
+
+/* ── Card header ── */
+.share-card-header {
+  padding: 1.25rem 1.5rem 1rem 1.5rem;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.12) 0%,
+    rgba(0, 229, 153, 0.05) 100%
+  );
+  border-bottom: 1px solid #27272a;
+}
+
+.share-card-brand {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #00e599;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+.share-card-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.share-card-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  font-weight: 400;
+}
+
+/* ── Card body ── */
+.share-card-body {
+  padding: 1rem 1.5rem;
+}
+
+.share-card-section-label {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #a1a1aa;
+  text-transform: uppercase;
+}
+
+/* ── Factor rows ── */
+.share-card-factors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.share-factor-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 44px;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-factor-name {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-factor-bar-track {
+  height: 10px;
+  background: #1a1a1a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.share-factor-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 4px;
+}
+
+.share-factor-pct {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Metrics section ── */
+.share-card-metrics {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #27272a;
+}
+
+.share-metric {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.share-metric-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.share-metric-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: #a1a1aa;
+  text-transform: uppercase;
+}
+
+/* ── Card footer ── */
+.share-card-footer {
+  padding: 0.65rem 1.5rem;
+  background: #0a0a0a;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  text-align: center;
+  border-top: 1px solid #27272a;
+}
+
+/* ── Action buttons ── */
+.share-card-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.share-btn-download,
+.share-btn-copy {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+
+.share-btn-download {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.share-btn-download:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.share-btn-copy {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--border-light);
+}
+
+.share-btn-copy:hover {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Disclaimer note ── */
+.share-card-note {
+  margin: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}

@@ -1,0 +1,122 @@
+.privacy-disclosure-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.privacy-disclosure-modal {
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border, #2a2a3e);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.privacy-disclosure-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+  color: var(--warning, #f59e0b);
+}
+
+.privacy-disclosure-modal h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-main, #e2e8f0);
+  letter-spacing: -0.01em;
+}
+
+.privacy-disclosure-body {
+  color: var(--text-secondary, #a0aec0);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 1.25rem;
+}
+
+.privacy-disclosure-body p {
+  margin: 0 0 0.75rem 0;
+}
+
+.privacy-disclosure-body p:last-child {
+  margin-bottom: 0;
+}
+
+.privacy-disclosure-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.privacy-disclosure-list li {
+  padding-left: 1.25rem;
+  position: relative;
+  color: var(--text-secondary, #a0aec0);
+  font-size: 0.875rem;
+}
+
+.privacy-disclosure-list li::before {
+  content: '•';
+  position: absolute;
+  left: 0.25rem;
+  color: var(--primary, #00e599);
+}
+
+.privacy-disclosure-consent-note {
+  font-size: 0.8rem;
+  color: var(--text-muted, #718096);
+  font-style: italic;
+  border-top: 1px solid var(--border, #2a2a3e);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.privacy-disclosure-link {
+  color: var(--accent, #6366f1);
+  text-decoration: underline;
+  font-size: 0.875rem;
+}
+
+.privacy-disclosure-link:hover {
+  color: var(--primary, #00e599);
+}
+
+.privacy-disclosure-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+.privacy-disclosure-actions .btn-secondary {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+}
+
+.privacy-disclosure-actions .btn-primary {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 480px) {
+  .privacy-disclosure-actions {
+    flex-direction: column-reverse;
+  }
+
+  .privacy-disclosure-actions .btn-primary,
+  .privacy-disclosure-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+}

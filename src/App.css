@@ -4637,3 +4637,15 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Rate limit warning banner */
+.rate-limit-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--warning-bg, #78350f);
+  color: var(--warning-text, #fbbf24);
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}

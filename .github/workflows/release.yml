@@ -101,6 +101,9 @@ jobs:
         run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
 
       - name: Build Tauri (Windows)
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: npx tauri build --bundles nsis msi
 
       - name: Rename artifacts
@@ -120,8 +123,58 @@ jobs:
           path: release/FlowFolio-*
           retention-days: 30
 
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Write encrypted env
+        run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
+
+      - name: Build Tauri (macOS)
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx tauri build --bundles dmg
+
+      - name: Rename artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION=$(node -p "require('./package.json').version")
+          mkdir -p release
+          cp src-tauri/target/release/bundle/dmg/*.dmg "release/FlowFolio-${VERSION}-macos.dmg" 2>/dev/null || true
+          ls -lh release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: release/FlowFolio-*
+          retention-days: 30
+
   create-release:
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
