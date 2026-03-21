@@ -60,3 +60,5 @@ SESSION*.md
 .ig-schedule.db-wal
 out/
 .superpowers/
+dist-landing/
+test-results/
