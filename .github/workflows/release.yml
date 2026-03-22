@@ -17,7 +17,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  preflight:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cd src-tauri && cargo clippy -- -D warnings
+
   build-linux:
+    needs: preflight
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -75,6 +91,7 @@ jobs:
           retention-days: 30
 
   build-windows:
+    needs: preflight
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +141,7 @@ jobs:
           retention-days: 30
 
   build-macos:
+    needs: preflight
     runs-on: macos-latest
     strategy:
       matrix:
@@ -174,6 +192,7 @@ jobs:
           retention-days: 30
 
   build-android:
+    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
