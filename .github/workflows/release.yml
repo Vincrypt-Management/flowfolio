@@ -173,10 +173,76 @@ jobs:
           path: release/FlowFolio-*
           retention-days: 30
 
-  create-release:
-    needs: [build-linux, build-windows, build-macos]
+  build-android:
     runs-on: ubuntu-latest
-    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;27.0.12077973"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Write encrypted env
+        run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
+
+      - name: Initialize Tauri Android
+        run: npx tauri android init
+
+      - name: Build APK
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: npx tauri android build --apk true
+
+      - name: Rename artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION=$(node -p "require('./package.json').version")
+          mkdir -p release
+          find src-tauri/gen/android -name "*.apk" -path "*/release/*" | while read apk; do
+            cp "$apk" "release/FlowFolio-${VERSION}-android.apk"
+            break
+          done
+          ls -lh release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: release/FlowFolio-*
+          retention-days: 30
+
+  create-release:
+    needs: [build-linux, build-windows, build-macos, build-android]
+    runs-on: ubuntu-latest
+    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success' || needs.build-android.result == 'success')
     steps:
       - uses: actions/checkout@v4
 
