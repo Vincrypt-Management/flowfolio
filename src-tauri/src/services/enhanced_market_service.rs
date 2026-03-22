@@ -18,7 +18,7 @@ use sqlx::{Pool, Sqlite};
 /// Industrial-grade features: circuit breaker, retry logic, health monitoring
 pub struct EnhancedMarketDataService {
     provider: Arc<MultiSourceProvider>,
-    db_cache: Option<Arc<DatabaseCacheService>>,
+    db_cache: RwLock<Option<Arc<DatabaseCacheService>>>,
     // Industrial-grade components
     circuit_breaker: Arc<CircuitBreakerManager>,
     #[allow(dead_code)]
@@ -35,7 +35,7 @@ impl EnhancedMarketDataService {
     /// Create new service with database pool
     pub fn new(db_pool: Option<Pool<Sqlite>>) -> Self {
         let db_cache = db_pool.map(|pool| Arc::new(DatabaseCacheService::new(pool)));
-        
+
         // Configure circuit breaker for data providers
         let cb_config = CircuitBreakerConfig {
             failure_threshold: 5,
@@ -43,10 +43,10 @@ impl EnhancedMarketDataService {
             success_threshold: 2,
             failure_window: std::time::Duration::from_secs(60),
         };
-        
+
         Self {
             provider: Arc::new(MultiSourceProvider::new()),
-            db_cache,
+            db_cache: RwLock::new(db_cache),
             circuit_breaker: Arc::new(CircuitBreakerManager::with_config(cb_config)),
             retry_executor: Arc::new(RetryExecutor::new(RetryConfig::network())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -64,10 +64,10 @@ impl EnhancedMarketDataService {
             success_threshold: 2,
             failure_window: std::time::Duration::from_secs(60),
         };
-        
+
         Self {
             provider: Arc::new(MultiSourceProvider::new()),
-            db_cache: None,
+            db_cache: RwLock::new(None),
             circuit_breaker: Arc::new(CircuitBreakerManager::with_config(cb_config)),
             retry_executor: Arc::new(RetryExecutor::new(RetryConfig::network())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -77,9 +77,16 @@ impl EnhancedMarketDataService {
         }
     }
 
-    /// Get reference to the database pool (for direct queries like saved portfolios)
-    pub fn get_db_pool(&self) -> Option<&Pool<Sqlite>> {
-        self.db_cache.as_ref().map(|cache| cache.get_pool())
+    /// Set the database pool using interior mutability (no &mut self needed).
+    pub async fn set_db_pool(&self, pool: Pool<Sqlite>) {
+        let mut db = self.db_cache.write().await;
+        *db = Some(Arc::new(DatabaseCacheService::new(pool)));
+    }
+
+    /// Get a clone of the database pool (for direct queries like saved portfolios)
+    pub async fn get_db_pool(&self) -> Option<Pool<Sqlite>> {
+        let db = self.db_cache.read().await;
+        db.as_ref().map(|cache| cache.get_pool().clone())
     }
 
     // ================== PRICE FETCHING ==================
@@ -104,7 +111,8 @@ impl EnhancedMarketDataService {
         HEALTH_MONITOR.record_cache_miss();
 
         // 2. Check database cache
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt {
             if let Some(cached) = db_cache.get_cached_price(&symbol).await {
                 // Update memory cache
                 let mut cache = self.price_cache.write().await;
@@ -148,7 +156,8 @@ impl EnhancedMarketDataService {
             }
 
             // Update database cache
-            if let Some(ref db_cache) = self.db_cache {
+            let db_cache_opt2 = self.db_cache.read().await.clone();
+            if let Some(ref db_cache) = db_cache_opt2 {
                 let _ = db_cache.set_cached_price(&symbol, price).await;
             }
 
@@ -183,7 +192,8 @@ impl EnhancedMarketDataService {
         eprintln!("[DEBUG] [enhanced_market] Prices: {}/{} from memory cache", results.len(), symbols.len());
 
         // 2. Check database cache for remaining symbols
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt {
             let mut still_needed = Vec::new();
             for symbol in &symbols_to_fetch {
                 if let Some(cached) = db_cache.get_cached_price(symbol).await {
@@ -216,7 +226,8 @@ impl EnhancedMarketDataService {
                     }
 
                     // Update database cache
-                    if let Some(ref db_cache) = self.db_cache {
+                    let db_cache_opt2 = self.db_cache.read().await.clone();
+                    if let Some(ref db_cache) = db_cache_opt2 {
                         let _ = db_cache.set_cached_price(&symbol, price).await;
                     }
                 }
@@ -234,7 +245,8 @@ impl EnhancedMarketDataService {
         let symbol = symbol.to_uppercase();
 
         // 1. Check database cache for historical data
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt {
             if let Some(cached) = db_cache.get_cached_historical_prices(&symbol).await {
                 let historical: Vec<HistoricalPrice> = cached.into_iter()
                     .map(|(date, open, high, low, close, volume)| HistoricalPrice {
@@ -263,7 +275,8 @@ impl EnhancedMarketDataService {
         }
 
         // 3. Save to database cache
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt2 = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt2 {
             let cache_data: Vec<(String, f64, f64, f64, f64, i64)> = data.historical.iter()
                 .map(|h| (h.date.clone(), h.open, h.high, h.low, h.close, h.volume))
                 .collect();
@@ -293,7 +306,8 @@ impl EnhancedMarketDataService {
         }
 
         // 2. Check database cache
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt {
             if let Some(cached) = db_cache.get_cached_quant_metrics(&symbol).await {
                 let metrics = QuantMetrics {
                     symbol: cached.symbol,
@@ -347,7 +361,8 @@ impl EnhancedMarketDataService {
         }
 
         // Update database cache
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt2 = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt2 {
             let _ = db_cache.set_cached_quant_metrics(
                 &symbol,
                 metrics.sharpe_ratio,
@@ -466,7 +481,8 @@ impl EnhancedMarketDataService {
         self.provider.clear_cache();
 
         // Clear database cache (expired entries)
-        if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt = self.db_cache.read().await.clone();
+        if let Some(ref db_cache) = db_cache_opt {
             let _ = db_cache.clear_expired_cache().await;
         }
 
@@ -484,7 +500,8 @@ impl EnhancedMarketDataService {
             cache.len()
         };
 
-        let db_stats = if let Some(ref db_cache) = self.db_cache {
+        let db_cache_opt = self.db_cache.read().await.clone();
+        let db_stats = if let Some(ref db_cache) = db_cache_opt {
             Some(db_cache.get_cache_stats().await)
         } else {
             None
@@ -539,7 +556,7 @@ mod tests {
     #[tokio::test]
     async fn test_new_without_db_has_no_db_cache() {
         let svc = EnhancedMarketDataService::new_without_db();
-        assert!(svc.db_cache.is_none(), "db_cache should be None for new_without_db()");
+        assert!(svc.db_cache.read().await.is_none(), "db_cache should be None for new_without_db()");
     }
 
     #[tokio::test]

@@ -51,8 +51,8 @@ use crate::core::validation::{validate_symbol, validate_symbols};
 
 // Global service instances
 lazy_static::lazy_static! {
-    static ref ENHANCED_MARKET_SERVICE: Arc<Mutex<EnhancedMarketDataService>> =
-        Arc::new(Mutex::new(EnhancedMarketDataService::new_without_db()));
+    static ref ENHANCED_MARKET_SERVICE: Arc<EnhancedMarketDataService> =
+        Arc::new(EnhancedMarketDataService::new_without_db());
 
     static ref OPENROUTER_SERVICE: Arc<OpenRouterService> =
         Arc::new(OpenRouterService::new());
@@ -328,13 +328,10 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
 
 /// Initialize the enhanced market service with database
 async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
-    {
-        let mut db = DB_POOL.lock().await;
-        *db = Some(pool.clone());
-    }
-    let mut service = ENHANCED_MARKET_SERVICE.lock().await;
-    *service = EnhancedMarketDataService::new(Some(pool));
-    DB_INITIALIZED.store(true, std::sync::atomic::Ordering::SeqCst);
+    ENHANCED_MARKET_SERVICE.set_db_pool(pool.clone()).await;
+    let mut db = DB_POOL.lock().await;
+    *db = Some(pool);
+    DB_INITIALIZED.store(true, std::sync::atomic::Ordering::Release);
     eprintln!("[INFO] [service] Enhanced market service initialized with database caching");
 }
 
@@ -712,12 +709,11 @@ async fn score_symbols_batch(
     validate_symbols(&symbols)?;
     use modules::scoring::FactorScore;
 
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
     let mut scores = Vec::new();
-    
+
     for symbol in symbols {
         // Get quant metrics for this symbol
-        let metrics_result = service.get_quant_metrics(&symbol).await;
+        let metrics_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await;
         
         match metrics_result {
             Ok(metrics) => {
@@ -987,24 +983,22 @@ async fn generate_optimization_report(
     candidate_symbols: Vec<String>,
     thresholds: Option<OptimizationThresholds>,
 ) -> Result<PortfolioOptimizationReport, String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
     // Get metrics for current holdings
     let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
     let mut holding_metrics: HashMap<String, QuantMetrics> = HashMap::new();
-    
+
     for symbol in &holding_symbols {
-        if let Ok(metrics) = service.get_quant_metrics(symbol).await {
+        if let Ok(metrics) = ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
             holding_metrics.insert(symbol.clone(), metrics);
         }
     }
-    
+
     // Get metrics for candidate replacements
     let mut candidate_metrics: HashMap<String, QuantMetrics> = HashMap::new();
-    
+
     for symbol in &candidate_symbols {
         if !holding_symbols.contains(symbol) {
-            if let Ok(metrics) = service.get_quant_metrics(symbol).await {
+            if let Ok(metrics) = ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
                 candidate_metrics.insert(symbol.clone(), metrics);
             }
         }
@@ -1032,8 +1026,7 @@ async fn generate_optimization_report_live(
     thresholds: Option<OptimizationThresholds>,
 ) -> Result<PortfolioOptimizationReport, String> {
     let operation_id = generate_operation_id();
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
+
     let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
     let total_symbols = holding_symbols.len() + candidate_symbols.len();
     
@@ -1072,7 +1065,7 @@ async fn generate_optimization_report_live(
         
         loop {
             attempts += 1;
-            match service.get_quant_metrics(symbol).await {
+            match ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
                 Ok(metrics) => {
                     // Emit partial result for immediate UI update
                     let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
@@ -1145,7 +1138,7 @@ async fn generate_optimization_report_live(
         
         loop {
             attempts += 1;
-            match service.get_quant_metrics(symbol).await {
+            match ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
                 Ok(metrics) => {
                     // Emit partial result
                     let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
@@ -1341,8 +1334,7 @@ fn export_journal_markdown(
 #[tauri::command]
 async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
     validate_symbols(&symbols)?;
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    Ok(service.get_batch_quant_metrics(symbols).await)
+    Ok(ENHANCED_MARKET_SERVICE.get_batch_quant_metrics(symbols).await)
 }
 
 /// Generate comprehensive dashboard data - ALL calculations done on backend
@@ -1352,13 +1344,11 @@ async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, Strin
     validate_symbols(&symbols)?;
     use modules::quant_analysis::HistoricalPrice as QuantHistoricalPrice;
 
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
     // Fetch historical data for all symbols
     let mut assets_data: Vec<(String, Vec<QuantHistoricalPrice>)> = Vec::new();
-    
+
     for symbol in &symbols {
-        match service.get_historical_prices(symbol).await {
+        match ENHANCED_MARKET_SERVICE.get_historical_prices(symbol).await {
             Ok(prices) => {
                 // Convert from provider's HistoricalPrice to quant_analysis HistoricalPrice
                 let historical: Vec<QuantHistoricalPrice> = prices
@@ -1385,46 +1375,40 @@ async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, Strin
 #[tauri::command]
 async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String, f64>, String> {
     validate_symbols(&symbols)?;
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    Ok(service.get_batch_prices(symbols).await)
+    Ok(ENHANCED_MARKET_SERVICE.get_batch_prices(symbols).await)
 }
 
 /// Get single symbol quantitative metrics
 #[tauri::command]
 async fn get_quant_metrics_single(symbol: String) -> Result<QuantMetrics, String> {
     validate_symbol(&symbol)?;
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    service.get_quant_metrics(&symbol).await
+    ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await
 }
 
 /// Get single symbol current price
 #[tauri::command]
 async fn get_current_price_single(symbol: String) -> Result<f64, String> {
     validate_symbol(&symbol)?;
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    service.get_current_price(&symbol).await
+    ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await
 }
 
 /// Get cache statistics
 #[tauri::command]
 async fn get_cache_stats() -> Result<CacheStats, String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    Ok(service.get_cache_stats().await)
+    Ok(ENHANCED_MARKET_SERVICE.get_cache_stats().await)
 }
 
 /// Clear all caches
 #[tauri::command]
 async fn clear_all_caches() -> Result<(), String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    service.clear_all_caches().await;
+    ENHANCED_MARKET_SERVICE.clear_all_caches().await;
     Ok(())
 }
 
 /// Prefetch symbols for faster access
 #[tauri::command]
 async fn prefetch_symbols(symbols: Vec<String>) -> Result<(), String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    service.prefetch_symbols(symbols).await;
+    ENHANCED_MARKET_SERVICE.prefetch_symbols(symbols).await;
     Ok(())
 }
 
@@ -1435,22 +1419,20 @@ async fn test_data_connection() -> Result<serde_json::Value, String> {
     
     eprintln!("🔬 Testing data connection...");
     
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
     // Test with a common symbol
     let test_symbol = "AAPL";
-    
+
     // Try to get price
-    let price_result = service.get_current_price(test_symbol).await;
+    let price_result = ENHANCED_MARKET_SERVICE.get_current_price(test_symbol).await;
     let price = price_result.unwrap_or(0.0);
-    
+
     // Try to get metrics
-    let metrics_result = service.get_quant_metrics(test_symbol).await;
+    let metrics_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(test_symbol).await;
     let metrics_ok = metrics_result.is_ok();
     let signal = metrics_result.map(|m| m.signal).unwrap_or_else(|_| "FAILED".to_string());
-    
+
     // Get cache stats
-    let cache_stats = service.get_cache_stats().await;
+    let cache_stats = ENHANCED_MARKET_SERVICE.get_cache_stats().await;
     
     // Check API keys
     use crate::core::encrypted_env::get_env_var;
@@ -1812,9 +1794,7 @@ struct SavedPortfolioInfo {
 /// Save a generated portfolio to the database
 #[tauri::command]
 async fn save_generated_portfolio(id: String, name: String, data: serde_json::Value) -> Result<String, String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
-    if let Some(pool) = service.get_db_pool() {
+    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
         let now = chrono::Utc::now().to_rfc3339();
         let data_str = serde_json::to_string(&data)
             .map_err(|e| format!("Failed to serialize portfolio: {}", e))?;
@@ -1829,7 +1809,7 @@ async fn save_generated_portfolio(id: String, name: String, data: serde_json::Va
         .bind(&id)
         .bind(&now)
         .bind(&now)
-        .execute(pool)
+        .execute(&pool)
         .await
         .map_err(|e| format!("Failed to save portfolio: {}", e))?;
         
@@ -1843,14 +1823,12 @@ async fn save_generated_portfolio(id: String, name: String, data: serde_json::Va
 /// Load a saved portfolio by ID
 #[tauri::command]
 async fn load_generated_portfolio(id: String) -> Result<serde_json::Value, String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
-    if let Some(pool) = service.get_db_pool() {
+    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
         let row: Option<(String,)> = sqlx::query_as(r#"
             SELECT data FROM saved_portfolios WHERE id = ?
         "#)
         .bind(&id)
-        .fetch_optional(pool)
+        .fetch_optional(&pool)
         .await
         .map_err(|e| format!("Failed to load portfolio: {}", e))?;
         
@@ -1868,13 +1846,11 @@ async fn load_generated_portfolio(id: String) -> Result<serde_json::Value, Strin
 /// List all saved portfolios
 #[tauri::command]
 async fn list_saved_portfolios() -> Result<Vec<SavedPortfolioInfo>, String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
-    if let Some(pool) = service.get_db_pool() {
+    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
         let rows: Vec<(String, String, String, String)> = sqlx::query_as(r#"
             SELECT id, name, created_at, updated_at FROM saved_portfolios ORDER BY updated_at DESC
         "#)
-        .fetch_all(pool)
+        .fetch_all(&pool)
         .await
         .map_err(|e| format!("Failed to list portfolios: {}", e))?;
         
@@ -1889,12 +1865,10 @@ async fn list_saved_portfolios() -> Result<Vec<SavedPortfolioInfo>, String> {
 /// Delete a saved portfolio
 #[tauri::command]
 async fn delete_saved_portfolio(id: String) -> Result<(), String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
-    if let Some(pool) = service.get_db_pool() {
+    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
         sqlx::query("DELETE FROM saved_portfolios WHERE id = ?")
             .bind(&id)
-            .execute(pool)
+            .execute(&pool)
             .await
             .map_err(|e| format!("Failed to delete portfolio: {}", e))?;
         
@@ -1908,11 +1882,9 @@ async fn delete_saved_portfolio(id: String) -> Result<(), String> {
 /// Get detailed quantitative analysis for a single ticker
 #[tauri::command]
 async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Value, String> {
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
-    
     // Get available data for the ticker
-    let quant_result = service.get_quant_metrics(&symbol).await;
-    let price_result = service.get_current_price(&symbol).await;
+    let quant_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await;
+    let price_result = ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await;
     
     // Fetch real fundamentals from the fundamental service
     let fundamentals_result = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await;
@@ -2534,10 +2506,9 @@ fn assess_dividend_safety(fund: &FundamentalMetrics) -> Option<String> {
 #[tauri::command]
 async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
     validate_symbol(&symbol)?;
-    let service = ENHANCED_MARKET_SERVICE.lock().await;
     let _days = days.unwrap_or(365);
 
-    match service.get_historical_prices(&symbol).await {
+    match ENHANCED_MARKET_SERVICE.get_historical_prices(&symbol).await {
         Ok(prices) => {
             let result: Vec<serde_json::Value> = prices.into_iter()
                 .map(|p| serde_json::json!({
