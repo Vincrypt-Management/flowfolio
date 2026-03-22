@@ -154,26 +154,14 @@ jobs:
       - name: Write encrypted env
         run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
 
-      - name: Build Tauri (macOS signed)
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx tauri build --bundles dmg --target ${{ matrix.target }}
-
-      - name: Build Tauri (macOS unsigned)
-        if: ${{ secrets.APPLE_CERTIFICATE == '' }}
+      - name: Build Tauri (macOS)
         run: npx tauri build --bundles dmg --target ${{ matrix.target }}
 
       - name: Rename artifacts
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           [ -z "$VERSION" ] && VERSION=$(node -p "require('./package.json').version")
-          ARCH="${{ matrix.target == 'aarch64-apple-darwin' && 'aarch64' || 'x64' }}"
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then ARCH="aarch64"; else ARCH="x64"; fi
           mkdir -p release
           cp src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg "release/FlowFolio-${VERSION}-macos-${ARCH}.dmg" 2>/dev/null || true
           ls -lh release/
@@ -188,7 +176,7 @@ jobs:
   create-release:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
-    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success') }}
+    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
     steps:
       - uses: actions/checkout@v4
 
