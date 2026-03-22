@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod factors;
 pub mod parser;
 

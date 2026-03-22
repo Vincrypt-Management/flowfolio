@@ -1,6 +1,8 @@
 // Live Progress Event System for FlowFolio
 // Enables real-time updates during long-running operations
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::broadcast;

@@ -16,6 +16,7 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
+    #[cfg(test)]
     fn as_str(&self) -> &'static str {
         match self {
             LogLevel::Trace => "TRACE",

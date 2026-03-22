@@ -26,6 +26,7 @@ pub struct CachedQuantMetrics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct CachedFundamentals {
     pub symbol: String,
     pub market_cap: Option<f64>,
@@ -39,6 +40,7 @@ pub struct CachedFundamentals {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct CachedSentiment {
     pub symbol: String,
     pub overall_sentiment: String,
@@ -49,6 +51,7 @@ pub struct CachedSentiment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct CachedAnalystRating {
     pub symbol: String,
     pub consensus_rating: String,
@@ -64,6 +67,7 @@ pub struct DatabaseCacheService {
     // Cache TTL settings (in hours)
     price_ttl_hours: i64,
     quant_ttl_hours: i64,
+    #[allow(dead_code)]
     fundamentals_ttl_hours: i64,
     sentiment_ttl_hours: i64,
     analyst_ttl_hours: i64,
@@ -225,7 +229,8 @@ impl DatabaseCacheService {
     }
 
     // ========== FUNDAMENTALS CACHE ==========
-    
+
+    #[allow(dead_code)]
     pub async fn get_cached_fundamentals(&self, symbol: &str) -> Option<CachedFundamentals> {
         // First get or create symbol_id
         let symbol_row = sqlx::query("SELECT id FROM symbols WHERE ticker = ?")
@@ -267,7 +272,8 @@ impl DatabaseCacheService {
     }
 
     // ========== SENTIMENT CACHE ==========
-    
+
+    #[allow(dead_code)]
     pub async fn get_cached_sentiment(&self, symbol: &str) -> Option<CachedSentiment> {
         let result = sqlx::query(
             "SELECT * FROM sentiment_cache WHERE symbol = ?"
@@ -296,6 +302,7 @@ impl DatabaseCacheService {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn set_cached_sentiment(
         &self,
         symbol: &str,
@@ -331,7 +338,8 @@ impl DatabaseCacheService {
     }
 
     // ========== ANALYST CACHE ==========
-    
+
+    #[allow(dead_code)]
     pub async fn get_cached_analyst_rating(&self, symbol: &str) -> Option<CachedAnalystRating> {
         let result = sqlx::query(
             "SELECT * FROM analyst_cache WHERE symbol = ?"
@@ -361,6 +369,7 @@ impl DatabaseCacheService {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn set_cached_analyst_rating(
         &self,
         symbol: &str,

@@ -1,6 +1,8 @@
 // Industrial-Grade Circuit Breaker Pattern
 // Prevents cascading failures when external services are down
 
+#![allow(dead_code)]
+
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};

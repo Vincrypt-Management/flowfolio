@@ -150,6 +150,7 @@ impl WelfordStats {
 /// Uses SIMD-friendly operations, single-pass algorithms, and parallel processing
 pub struct QuantAnalyzer;
 
+#[allow(dead_code)]
 impl QuantAnalyzer {
     // Pre-computed constants for performance (avoid runtime sqrt calls)
     const SQRT_252: f64 = 15.874507866387544; // sqrt(252)

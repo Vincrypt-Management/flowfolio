@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::models::*;
 use anyhow::Result;
 use sqlx::{SqlitePool, Row};

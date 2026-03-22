@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use governor::{Quota, RateLimiter as GovernorLimiter, DefaultDirectRateLimiter};
 use anyhow::Result;
 use std::num::NonZeroU32;

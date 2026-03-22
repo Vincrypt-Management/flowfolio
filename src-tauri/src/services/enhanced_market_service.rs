@@ -33,6 +33,7 @@ pub struct EnhancedMarketDataService {
 
 impl EnhancedMarketDataService {
     /// Create new service with database pool
+    #[allow(dead_code)]
     pub fn new(db_pool: Option<Pool<Sqlite>>) -> Self {
         let db_cache = db_pool.map(|pool| Arc::new(DatabaseCacheService::new(pool)));
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::modules::{
     scoring::factors::{FinancialMetrics, MomentumMetrics},
     data_provider::CompanyOverview,

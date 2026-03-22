@@ -1,6 +1,8 @@
 // Industrial-Grade Error Handling Module
 // Provides structured error types with context for debugging and monitoring
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;

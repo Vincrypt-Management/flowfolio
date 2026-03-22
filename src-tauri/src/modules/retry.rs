@@ -1,6 +1,8 @@
 // Industrial-Grade Retry Mechanism with Exponential Backoff
 // Handles transient failures gracefully with configurable retry strategies
 
+#![allow(dead_code)]
+
 use std::future::Future;
 use std::time::Duration;
 use tokio::time::sleep;

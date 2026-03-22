@@ -152,6 +152,7 @@ impl Journal {
     }
 
     /// Create a reflection entry
+    #[allow(dead_code)]
     pub fn log_reflection(
         title: &str,
         content: &str,

@@ -16,6 +16,8 @@
 // 10. World Bank       - Economic indicators
 // ============================================================================
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

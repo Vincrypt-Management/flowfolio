@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub mod multi_source_provider;
 pub mod free_sources;
 
