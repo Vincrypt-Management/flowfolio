@@ -1,6 +1,3 @@
-#[allow(dead_code)]
-pub mod market_data_service;
-#[allow(dead_code)]
 pub mod db_cache;
 pub mod enhanced_market_service;
 pub mod openrouter_service;

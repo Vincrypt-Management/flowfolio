@@ -59,11 +59,8 @@ parking_lot = "0.12"                                     # Fast synchronization 
 lazy_static = "1.4"                                      # Lazy static initialization
 tracing = "0.1"                                          # Structured logging for observability
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }  # Log filtering
-backoff = { version = "0.4", features = ["tokio"] }     # Exponential backoff for retries
-metrics = "0.24"                                         # Performance metrics collection
 once_cell = "1.20"                                       # Thread-safe lazy initialization
 regex = "1.11"                                           # Regex engine for input validation
-arc-swap = "1.7"                                         # Lock-free Arc swapping
 
 # Encryption for secure env storage in release builds (obfuscation-grade, machine-derived key)
 aes-gcm = "0.10"                                         # AES-256-GCM encryption with random nonces
