@@ -9,6 +9,7 @@ import { Receipt, Loader2, TrendingDown } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
+import { formatCurrency } from '../shared/utils';
 import './TaxLotView.css';
 
 const log = createLogger('TaxLotView');
@@ -48,10 +49,6 @@ export interface TaxLotViewProps {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
 
 function formatDate(dateStr: string): string {
   try {

@@ -20,6 +20,7 @@ import { TrendingUp, Loader2 } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
+import { formatCurrency } from '../shared/utils';
 import './PortfolioPerformanceChart.css';
 
 const log = createLogger('PortfolioPerformanceChart');
@@ -89,14 +90,6 @@ function formatDateShort(dateStr: string): string {
 
 function formatPercent(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-}
-
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  });
 }
 
 function normalizeToPercent(

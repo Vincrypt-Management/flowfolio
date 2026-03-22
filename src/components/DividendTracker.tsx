@@ -9,6 +9,7 @@ import { DollarSign, Plus, Loader2, X, RefreshCw } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
+import { formatCurrency } from '../shared/utils';
 import './DividendTracker.css';
 
 const log = createLogger('DividendTracker');
@@ -72,10 +73,6 @@ function formReducer(state: FormState, action: FormAction): FormState {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
 
 function formatDate(dateStr: string): string {
   try {

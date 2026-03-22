@@ -9,6 +9,7 @@ import { History, Trash2, Loader2, ChevronDown } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
+import { formatCurrency } from '../shared/utils';
 import './TransactionHistory.css';
 
 const log = createLogger('TransactionHistory');
@@ -31,10 +32,6 @@ export interface TransactionHistoryProps {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
 
 function formatDate(dateStr: string): string {
   try {

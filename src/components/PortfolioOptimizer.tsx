@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, memo } from "react";
 import { invokeWithResilience } from "../services/apiClient";
+import { formatCurrency } from '../shared/utils';
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { LiveProgressPanel } from "./LiveProgressPanel";
 import { useToast } from "./Toast";
@@ -237,15 +238,6 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
       case "LOW": return "var(--text-muted)";
       default: return "var(--text-muted)";
     }
-  }
-
-  function formatCurrency(value: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
   }
 
   function exportReportMarkdown() {

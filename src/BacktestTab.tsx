@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
+import { formatCurrency } from './shared/utils';
 import {
   FlaskConical,
   Play,
@@ -179,15 +180,6 @@ export function BacktestTab() {
   const calculateGrowth = () => {
     if (!result || result.metrics.total_invested === 0) return 0;
     return ((result.metrics.final_value - result.metrics.total_invested) / result.metrics.total_invested * 100);
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
   };
 
   const renderMetricCard = (
