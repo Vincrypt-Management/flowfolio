@@ -26,7 +26,12 @@ export default defineConfig(async () => ({
     assetsInlineLimit: 0,
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-charts': ['recharts'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-pdf': ['jspdf', 'html2canvas'],
+        },
       },
     },
     minify: 'esbuild',
