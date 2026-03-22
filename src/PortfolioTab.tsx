@@ -9,6 +9,7 @@ import { TaxLotView } from './components/TaxLotView';
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
 import { parseBrokerCSV, ParsedHolding } from './shared/utils/csvParser';
+import { PersistedHolding as Holding } from './hooks/useAppState';
 import { Upload } from 'lucide-react';
 
 interface Portfolio {
@@ -17,17 +18,6 @@ interface Portfolio {
   cash: number;
   total_value: number;
   last_updated: string;
-}
-
-interface Holding {
-  symbol: string;
-  shares: number;
-  cost_basis: number;
-  current_price: number;
-  market_value: number;
-  target_pct: number;
-  current_pct: number;
-  drift_pct: number;
 }
 
 interface AllocationPlan {

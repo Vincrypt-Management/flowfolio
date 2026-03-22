@@ -1,16 +1,6 @@
 import { Download, Globe, Plus, Save, Trash2, Upload } from "lucide-react";
 import { VibePlan } from "../../shared/types";
-
-interface Universe {
-  id: string;
-  name: string;
-  description: string;
-  symbols: string[];
-  tags: Record<string, string[]>;
-  exclude_list: string[];
-  created_at: string;
-  updated_at: string;
-}
+import { Universe } from "../../hooks/useAppState";
 
 interface UniverseTabProps {
   universes: Universe[];

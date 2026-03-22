@@ -19,19 +19,10 @@ import {
 import { FlaskConical, ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
+import { PortfolioHolding as Holding } from '../hooks/useAppState';
 import './ScenarioAnalysis.css';
 
 const log = createLogger('scenario-analysis');
-
-// --- Types ---
-
-interface Holding {
-  symbol: string;
-  shares: number;
-  currentPrice: number;
-  value: number;
-  weight: number;
-}
 
 interface ScenarioAnalysisProps {
   holdings: Holding[];

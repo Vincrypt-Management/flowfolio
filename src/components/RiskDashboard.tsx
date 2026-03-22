@@ -32,17 +32,8 @@ import {
 } from 'recharts';
 import { ExposureChart } from './ExposureChart';
 import { ScenarioAnalysis } from './ScenarioAnalysis';
+import { PortfolioHolding as Holding } from '../hooks/useAppState';
 import './RiskDashboard.css';
-
-// --- Types ---
-
-interface Holding {
-  symbol: string;
-  shares: number;
-  currentPrice: number;
-  value: number;
-  weight: number;
-}
 
 interface RiskDashboardProps {
   holdings: Holding[];

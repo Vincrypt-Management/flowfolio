@@ -23,7 +23,7 @@ const log = createLogger('ExposureChart');
 
 // --- Types ---
 
-export interface Holding {
+interface Holding {
   symbol: string;
   value: number;
   weight: number;

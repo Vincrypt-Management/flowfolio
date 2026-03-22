@@ -27,19 +27,9 @@ import {
   Clock,
 } from 'lucide-react';
 import './WatchlistTab.css';
+import { Universe } from '../hooks/useAppState';
 
 const log = createLogger('WatchlistTab');
-
-interface Universe {
-  id: string;
-  name: string;
-  description: string;
-  symbols: string[];
-  tags: Record<string, string[]>;
-  exclude_list: string[];
-  created_at: string;
-  updated_at: string;
-}
 
 interface WatchlistTabProps {
   onNavigate?: (tab: string, data?: Record<string, unknown>) => void;
