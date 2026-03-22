@@ -284,10 +284,11 @@ pub async fn clear_fundamentals_cache() -> Result<(), String> {
 /// Get detailed quantitative analysis for a single ticker
 #[tauri::command]
 pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Value, String> {
-    let quant_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await;
-    let price_result = ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await;
-
-    let fundamentals_result = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await;
+    let (quant_result, price_result, fundamentals_result) = tokio::join!(
+        ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol),
+        ENHANCED_MARKET_SERVICE.get_current_price(&symbol),
+        FUNDAMENTAL_SERVICE.get_fundamentals(&symbol),
+    );
 
     let is_etf = is_etf_symbol(&symbol);
     let is_bond_etf = is_bond_etf_symbol(&symbol);
