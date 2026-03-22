@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useMemo, memo } from "react";
+import { useReducer, useRef, useEffect, useMemo, memo } from "react";
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage, streamChat } from "../services/openrouter";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
-import { invoke } from "../services/tauri";
+import { invokeWithResilience } from "../services/apiClient";
 import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
 import { useToast } from "./Toast";
@@ -63,6 +63,186 @@ interface ProgressStep {
   message?: string;
 }
 
+// --- VibeStudio useReducer ---
+
+interface VibeStudioState {
+  prompt: string;
+  isGenerating: boolean;
+  generatedPortfolio: GeneratedPortfolio | null;
+  error: string | null;
+  chatMode: boolean;
+  chatHistory: OpenRouterMessage[];
+  chatInput: string;
+  isChatting: boolean;
+  progressSteps: ProgressStep[];
+  streamingMessage: string;
+  showQuantDashboard: boolean;
+  isExportingPDF: boolean;
+  currentConversationId: string | null;
+  savedConversations: Conversation[];
+  showChatHistory: boolean;
+  isSaving: boolean;
+  showShareCard: boolean;
+  aiPrivacyAccepted: boolean;
+  showPrivacyDisclosure: boolean;
+}
+
+type VibeStudioAction =
+  | { type: 'SET_PROMPT'; payload: string }
+  | { type: 'SET_IS_GENERATING'; payload: boolean }
+  | { type: 'SET_GENERATED_PORTFOLIO'; payload: GeneratedPortfolio | null }
+  | { type: 'MERGE_GENERATED_PORTFOLIO'; payload: Partial<GeneratedPortfolio> }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_CHAT_MODE'; payload: boolean }
+  | { type: 'SET_CHAT_HISTORY'; payload: OpenRouterMessage[] }
+  | { type: 'SET_CHAT_INPUT'; payload: string }
+  | { type: 'SET_IS_CHATTING'; payload: boolean }
+  | { type: 'SET_PROGRESS_STEPS'; payload: ProgressStep[] }
+  | { type: 'UPDATE_PROGRESS_STEP'; payload: { stepId: string; message: string; isCompleted: boolean } }
+  | { type: 'COMPLETE_ALL_PROGRESS_STEPS' }
+  | { type: 'ERROR_ACTIVE_PROGRESS_STEPS' }
+  | { type: 'SET_STREAMING_MESSAGE'; payload: string }
+  | { type: 'APPEND_STREAMING_MESSAGE'; payload: string }
+  | { type: 'SET_SHOW_QUANT_DASHBOARD'; payload: boolean }
+  | { type: 'SET_IS_EXPORTING_PDF'; payload: boolean }
+  | { type: 'SET_CURRENT_CONVERSATION_ID'; payload: string | null }
+  | { type: 'SET_SAVED_CONVERSATIONS'; payload: Conversation[] }
+  | { type: 'SET_SHOW_CHAT_HISTORY'; payload: boolean }
+  | { type: 'SET_IS_SAVING'; payload: boolean }
+  | { type: 'SET_SHOW_SHARE_CARD'; payload: boolean }
+  | { type: 'SET_AI_PRIVACY_ACCEPTED'; payload: boolean }
+  | { type: 'SET_SHOW_PRIVACY_DISCLOSURE'; payload: boolean }
+  | { type: 'RESET' };
+
+const initialVibeStudioState: VibeStudioState = {
+  prompt: '',
+  isGenerating: false,
+  generatedPortfolio: null,
+  error: null,
+  chatMode: false,
+  chatHistory: [],
+  chatInput: '',
+  isChatting: false,
+  progressSteps: [],
+  streamingMessage: '',
+  showQuantDashboard: true,
+  isExportingPDF: false,
+  currentConversationId: null,
+  savedConversations: [],
+  showChatHistory: false,
+  isSaving: false,
+  showShareCard: false,
+  aiPrivacyAccepted: false,
+  showPrivacyDisclosure: false,
+};
+
+function vibeStudioReducer(state: VibeStudioState, action: VibeStudioAction): VibeStudioState {
+  switch (action.type) {
+    case 'SET_PROMPT':
+      return { ...state, prompt: action.payload };
+    case 'SET_IS_GENERATING':
+      return { ...state, isGenerating: action.payload };
+    case 'SET_GENERATED_PORTFOLIO':
+      return { ...state, generatedPortfolio: action.payload };
+    case 'MERGE_GENERATED_PORTFOLIO':
+      return {
+        ...state,
+        generatedPortfolio: state.generatedPortfolio
+          ? { ...state.generatedPortfolio, ...action.payload }
+          : action.payload as GeneratedPortfolio,
+      };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'SET_CHAT_MODE':
+      return { ...state, chatMode: action.payload };
+    case 'SET_CHAT_HISTORY':
+      return { ...state, chatHistory: action.payload };
+    case 'SET_CHAT_INPUT':
+      return { ...state, chatInput: action.payload };
+    case 'SET_IS_CHATTING':
+      return { ...state, isChatting: action.payload };
+    case 'SET_PROGRESS_STEPS':
+      return { ...state, progressSteps: action.payload };
+    case 'UPDATE_PROGRESS_STEP': {
+      const { stepId, message, isCompleted } = action.payload;
+      const existingIndex = state.progressSteps.findIndex(s => s.id === stepId);
+      if (existingIndex >= 0) {
+        const updated = [...state.progressSteps];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          status: isCompleted ? 'completed' : 'active',
+          message,
+        };
+        for (let i = 0; i < existingIndex; i++) {
+          if (updated[i].status !== 'completed') {
+            updated[i] = { ...updated[i], status: 'completed' };
+          }
+        }
+        return { ...state, progressSteps: updated };
+      } else {
+        const updatedPrev = state.progressSteps.map(s =>
+          s.status !== 'completed' ? { ...s, status: 'completed' as const } : s
+        );
+        return {
+          ...state,
+          progressSteps: [
+            ...updatedPrev,
+            {
+              id: stepId,
+              label: message.replace(/^✓\s*/, ''),
+              status: isCompleted ? 'completed' as const : 'active' as const,
+              message,
+            },
+          ],
+        };
+      }
+    }
+    case 'COMPLETE_ALL_PROGRESS_STEPS':
+      return {
+        ...state,
+        progressSteps: state.progressSteps.map(step => ({ ...step, status: 'completed' as const })),
+      };
+    case 'ERROR_ACTIVE_PROGRESS_STEPS':
+      return {
+        ...state,
+        progressSteps: state.progressSteps.map(s =>
+          s.status === 'active' ? { ...s, status: 'error' as const } : s
+        ),
+      };
+    case 'SET_STREAMING_MESSAGE':
+      return { ...state, streamingMessage: action.payload };
+    case 'APPEND_STREAMING_MESSAGE':
+      return { ...state, streamingMessage: (state.streamingMessage ?? '') + action.payload };
+    case 'SET_SHOW_QUANT_DASHBOARD':
+      return { ...state, showQuantDashboard: action.payload };
+    case 'SET_IS_EXPORTING_PDF':
+      return { ...state, isExportingPDF: action.payload };
+    case 'SET_CURRENT_CONVERSATION_ID':
+      return { ...state, currentConversationId: action.payload };
+    case 'SET_SAVED_CONVERSATIONS':
+      return { ...state, savedConversations: action.payload };
+    case 'SET_SHOW_CHAT_HISTORY':
+      return { ...state, showChatHistory: action.payload };
+    case 'SET_IS_SAVING':
+      return { ...state, isSaving: action.payload };
+    case 'SET_SHOW_SHARE_CARD':
+      return { ...state, showShareCard: action.payload };
+    case 'SET_AI_PRIVACY_ACCEPTED':
+      return { ...state, aiPrivacyAccepted: action.payload };
+    case 'SET_SHOW_PRIVACY_DISCLOSURE':
+      return { ...state, showPrivacyDisclosure: action.payload };
+    case 'RESET':
+      return {
+        ...initialVibeStudioState,
+        savedConversations: state.savedConversations,
+        showQuantDashboard: state.showQuantDashboard,
+        aiPrivacyAccepted: state.aiPrivacyAccepted,
+      };
+    default:
+      return state;
+  }
+}
+
 interface VibeStudioProps {
   initialPortfolio?: GeneratedPortfolio | null;
   onPortfolioLoaded?: () => void;
@@ -71,33 +251,29 @@ interface VibeStudioProps {
 function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const { addToast } = useToast();
   const { isAdvanced } = useUserMode();
-  const [prompt, setPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedPortfolio, setGeneratedPortfolio] = useState<GeneratedPortfolio | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [chatMode, setChatMode] = useState(false);
-  const [chatHistory, setChatHistory] = useState<OpenRouterMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [isChatting, setIsChatting] = useState(false);
-  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
-  const [streamingMessage, setStreamingMessage] = useState<string>('');
-  const [showQuantDashboard, setShowQuantDashboard] = useState(true);
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
-  
-  // Chat history persistence
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [savedConversations, setSavedConversations] = useState<Conversation[]>([]);
-  const [showChatHistory, setShowChatHistory] = useState(false);
-  
-  // Save state
-  const [isSaving, setIsSaving] = useState(false);
+  const [state, dispatch] = useReducer(vibeStudioReducer, initialVibeStudioState);
 
-  // Share card modal state
-  const [showShareCard, setShowShareCard] = useState(false);
-
-  // AI privacy consent
-  const [aiPrivacyAccepted, setAiPrivacyAccepted] = useState(false);
-  const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(false);
+  const {
+    prompt,
+    isGenerating,
+    generatedPortfolio,
+    error,
+    chatMode,
+    chatHistory,
+    chatInput,
+    isChatting,
+    progressSteps,
+    streamingMessage,
+    showQuantDashboard,
+    isExportingPDF,
+    currentConversationId,
+    savedConversations,
+    showChatHistory,
+    isSaving,
+    showShareCard,
+    aiPrivacyAccepted,
+    showPrivacyDisclosure,
+  } = state;
   
   // Refs for chart containers (for PDF export)
   const pieChartRef = useRef<HTMLDivElement>(null);
@@ -116,8 +292,8 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   // Load portfolio from props when passed (from SavedPortfoliosTab)
   useEffect(() => {
     if (initialPortfolio) {
-      setGeneratedPortfolio(initialPortfolio);
-      setError(null);
+      dispatch({ type: 'SET_GENERATED_PORTFOLIO', payload: initialPortfolio });
+      dispatch({ type: 'SET_ERROR', payload: null });
       if (onPortfolioLoaded) {
         onPortfolioLoaded();
       }
@@ -129,7 +305,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
     try {
       const conversations = await chatHistoryService.listConversations();
       if (isMountedRef.current) {
-        setSavedConversations(conversations);
+        dispatch({ type: 'SET_SAVED_CONVERSATIONS', payload: conversations });
       }
     } catch (err) {
       logger.error('Failed to load chat history:', err);
@@ -144,7 +320,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
         const conv = await chatHistoryService.createConversation(
           prompt.substring(0, 50) || 'New Conversation'
         );
-        setCurrentConversationId(conv.id);
+        dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: conv.id });
         await chatHistoryService.addMessage(conv.id, role, content);
       } else {
         await chatHistoryService.addMessage(currentConversationId, role, content);
@@ -161,13 +337,16 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
     try {
       const conversation = await chatHistoryService.getConversation(conversationId);
       if (conversation && isMountedRef.current) {
-        setCurrentConversationId(conversation.id);
-        setChatHistory(conversation.messages.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-        })));
-        setChatMode(true);
-        setShowChatHistory(false);
+        dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: conversation.id });
+        dispatch({
+          type: 'SET_CHAT_HISTORY',
+          payload: conversation.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+        });
+        dispatch({ type: 'SET_CHAT_MODE', payload: true });
+        dispatch({ type: 'SET_SHOW_CHAT_HISTORY', payload: false });
       }
     } catch (err) {
       logger.error('Failed to load conversation:', err);
@@ -179,8 +358,8 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
     try {
       await chatHistoryService.deleteConversation(conversationId);
       if (currentConversationId === conversationId) {
-        setCurrentConversationId(null);
-        setChatHistory([]);
+        dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: null });
+        dispatch({ type: 'SET_CHAT_HISTORY', payload: [] });
       }
       loadSavedConversations();
     } catch (err) {
@@ -190,12 +369,12 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
 
   // Start a new conversation
   const startNewConversation = () => {
-    setCurrentConversationId(null);
-    setChatHistory([]);
-    setChatMode(false);
-    setGeneratedPortfolio(null);
-    setPrompt('');
-    setShowChatHistory(false);
+    dispatch({ type: 'SET_CURRENT_CONVERSATION_ID', payload: null });
+    dispatch({ type: 'SET_CHAT_HISTORY', payload: [] });
+    dispatch({ type: 'SET_CHAT_MODE', payload: false });
+    dispatch({ type: 'SET_GENERATED_PORTFOLIO', payload: null });
+    dispatch({ type: 'SET_PROMPT', payload: '' });
+    dispatch({ type: 'SET_SHOW_CHAT_HISTORY', payload: false });
   };
 
   // Helper to check if sections have data (for hiding empty sections)
@@ -229,18 +408,18 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   // Save current portfolio to local storage via backend
   const handleSavePortfolio = async () => {
     if (!generatedPortfolio) return;
-    
-    setIsSaving(true);
+
+    dispatch({ type: 'SET_IS_SAVING', payload: true });
     try {
       const id = `portfolio_${Date.now()}`;
       const name = generatedPortfolio.title || 'Untitled Portfolio';
-      
-      await invoke('save_generated_portfolio', {
+
+      await invokeWithResilience('save_generated_portfolio', {
         id,
         name,
         data: generatedPortfolio
       });
-      
+
       if (isMountedRef.current) {
         addToast('Portfolio saved successfully! View it in the Saved Portfolios tab.', 'success');
       }
@@ -251,7 +430,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
       }
     } finally {
       if (isMountedRef.current) {
-        setIsSaving(false);
+        dispatch({ type: 'SET_IS_SAVING', payload: false });
       }
     }
   };
@@ -274,83 +453,45 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const handleGeneratePlan = async () => {
     if (!prompt.trim() || isGenerating) return;
 
-    setIsGenerating(true);
-    setError(null);
-    setGeneratedPortfolio(null);
-    setChatMode(false);
-    setChatHistory([]);
-    setStreamingMessage('');
-    
+    dispatch({ type: 'SET_IS_GENERATING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    dispatch({ type: 'SET_GENERATED_PORTFOLIO', payload: null });
+    dispatch({ type: 'SET_CHAT_MODE', payload: false });
+    dispatch({ type: 'SET_CHAT_HISTORY', payload: [] });
+    dispatch({ type: 'SET_STREAMING_MESSAGE', payload: '' });
+
     // Start with empty steps - will be populated dynamically from backend
-    setProgressSteps([]);
+    dispatch({ type: 'SET_PROGRESS_STEPS', payload: [] });
 
     try {
       logger.info('[INFO] Streaming portfolio generation for:', prompt);
 
       // Use streaming API - asset type is auto-detected from prompt
       const stream = portfolioAgent.generatePortfolioStream(prompt);
-      
+
       for await (const update of stream) {
         // Check if still mounted before updating state
         if (!isMountedRef.current) break;
-        
+
         logger.debug('📡 Stream update:', update);
-        
+
         if ((update.type === 'progress' || update.type === 'data') && update.step) {
           const stepId = update.step;
           const message = update.message || '';
           const isCompleted = message.startsWith('✓') || update.type === 'data';
-          
-          setStreamingMessage(message);
-          
-          // Dynamically add or update step
-          setProgressSteps(prev => {
-            const existingIndex = prev.findIndex(s => s.id === stepId);
-            
-            if (existingIndex >= 0) {
-              // Update existing step
-              const updated = [...prev];
-              updated[existingIndex] = {
-                ...updated[existingIndex],
-                status: isCompleted ? 'completed' : 'active',
-                message: message,
-              };
-              // Mark all previous steps as completed
-              for (let i = 0; i < existingIndex; i++) {
-                if (updated[i].status !== 'completed') {
-                  updated[i] = { ...updated[i], status: 'completed' };
-                }
-              }
-              return updated;
-            } else {
-              // Add new step - mark all previous as completed
-              const updatedPrev = prev.map(s => 
-                s.status !== 'completed' ? { ...s, status: 'completed' as const } : s
-              );
-              return [
-                ...updatedPrev,
-                {
-                  id: stepId,
-                  label: message.replace(/^✓\s*/, ''), // Use message as label, remove checkmark
-                  status: isCompleted ? 'completed' as const : 'active' as const,
-                  message: message,
-                }
-              ];
-            }
-          });
-          
+
+          dispatch({ type: 'SET_STREAMING_MESSAGE', payload: message });
+          dispatch({ type: 'UPDATE_PROGRESS_STEP', payload: { stepId, message, isCompleted } });
+
           // If data update, merge into portfolio
           if (update.type === 'data' && update.data) {
-            setGeneratedPortfolio(prev => ({
-              ...prev,
-              ...update.data
-            } as GeneratedPortfolio));
+            dispatch({ type: 'MERGE_GENERATED_PORTFOLIO', payload: update.data as Partial<GeneratedPortfolio> });
           }
         } else if (update.type === 'complete' && update.data) {
           // Mark all as complete
-          setProgressSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
-          setGeneratedPortfolio(update.data as GeneratedPortfolio);
-          setStreamingMessage('');
+          dispatch({ type: 'COMPLETE_ALL_PROGRESS_STEPS' });
+          dispatch({ type: 'SET_GENERATED_PORTFOLIO', payload: update.data as GeneratedPortfolio });
+          dispatch({ type: 'SET_STREAMING_MESSAGE', payload: '' });
         } else if (update.type === 'error') {
           throw new Error(update.error || 'Stream error');
         }
@@ -362,13 +503,13 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
     } catch (err) {
       if (isMountedRef.current) {
         logger.error('[ERROR] Portfolio generation failed:', err);
-        setError(err instanceof Error ? err.message : 'Failed to generate portfolio');
-        setProgressSteps(prev => prev.map(s => s.status === 'active' ? { ...s, status: 'error' } : s));
+        dispatch({ type: 'SET_ERROR', payload: err instanceof Error ? err.message : 'Failed to generate portfolio' });
+        dispatch({ type: 'ERROR_ACTIVE_PROGRESS_STEPS' });
       }
     } finally {
       if (isMountedRef.current) {
-        setIsGenerating(false);
-        setStreamingMessage('');
+        dispatch({ type: 'SET_IS_GENERATING', payload: false });
+        dispatch({ type: 'SET_STREAMING_MESSAGE', payload: '' });
       }
     }
   };
@@ -376,9 +517,9 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const handleChat = async () => {
     if (!chatInput.trim() || isChatting || !generatedPortfolio) return;
 
-    setIsChatting(true);
+    dispatch({ type: 'SET_IS_CHATTING', payload: true });
     const userMessage = chatInput;
-    setChatInput("");
+    dispatch({ type: 'SET_CHAT_INPUT', payload: '' });
 
     try {
       const newHistory: OpenRouterMessage[] = [
@@ -389,7 +530,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
       // Save user message to history
       await saveChatMessage('user', userMessage);
 
-      setStreamingMessage('');
+      dispatch({ type: 'SET_STREAMING_MESSAGE', payload: '' });
 
       const vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
       const streamMessages: Array<{ role: string; content: string }> = [
@@ -418,7 +559,7 @@ Be conversational but professional. Cite specific data points from the portfolio
         streamMessages,
         (token) => {
           if (isMountedRef.current) {
-            setStreamingMessage(prev => (prev ?? '') + token);
+            dispatch({ type: 'APPEND_STREAMING_MESSAGE', payload: token });
           }
         },
         { model: vibeModel, temperature: 0.8, maxTokens: 1500 }
@@ -426,11 +567,14 @@ Be conversational but professional. Cite specific data points from the portfolio
 
       // Check if still mounted before updating state
       if (isMountedRef.current) {
-        setStreamingMessage('');
-        setChatHistory([
-          ...newHistory,
-          { role: 'assistant', content: response }
-        ]);
+        dispatch({ type: 'SET_STREAMING_MESSAGE', payload: '' });
+        dispatch({
+          type: 'SET_CHAT_HISTORY',
+          payload: [
+            ...newHistory,
+            { role: 'assistant', content: response }
+          ],
+        });
 
         // Save assistant response to history
         await saveChatMessage('assistant', response);
@@ -438,27 +582,21 @@ Be conversational but professional. Cite specific data points from the portfolio
     } catch (error) {
       if (isMountedRef.current) {
         logger.error("Chat error:", error);
-        setError(error instanceof Error ? error.message : "Chat failed");
+        dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : "Chat failed" });
       }
     } finally {
       if (isMountedRef.current) {
-        setIsChatting(false);
+        dispatch({ type: 'SET_IS_CHATTING', payload: false });
       }
     }
   };
 
   const handleExampleClick = (example: string) => {
-    setPrompt(example);
+    dispatch({ type: 'SET_PROMPT', payload: example });
   };
 
   const handleReset = () => {
-    setGeneratedPortfolio(null);
-    setError(null);
-    setPrompt("");
-    setChatMode(false);
-    setChatHistory([]);
-    setProgressSteps([]);
-    setCurrentConversationId(null);
+    dispatch({ type: 'RESET' });
   };
 
   const handleSaveJSON = async () => {
@@ -486,8 +624,8 @@ Be conversational but professional. Cite specific data points from the portfolio
 
   const handleExportPDF = async () => {
     if (!generatedPortfolio || isExportingPDF) return;
-    
-    setIsExportingPDF(true);
+
+    dispatch({ type: 'SET_IS_EXPORTING_PDF', payload: true });
     
     try {
       await exportPortfolioToPdf({
@@ -502,7 +640,7 @@ Be conversational but professional. Cite specific data points from the portfolio
     } catch (err) {
       logger.error('PDF export error:', err);
     } finally {
-      setIsExportingPDF(false);
+      dispatch({ type: 'SET_IS_EXPORTING_PDF', payload: false });
     }
   };
 
@@ -893,7 +1031,7 @@ Be conversational but professional. Cite specific data points from the portfolio
               <button className="btn-primary" onClick={handleSavePortfolio} disabled={isSaving}>
                 <Save size={16} /> {isSaving ? 'Saving...' : 'Save'}
               </button>
-              <button className="btn-secondary" onClick={() => setShowShareCard(true)} title="Share Strategy">
+              <button className="btn-secondary" onClick={() => dispatch({ type: 'SET_SHOW_SHARE_CARD', payload: true })} title="Share Strategy">
                 <Share2 size={16} /> Share
               </button>
               {isAdvanced && (
@@ -911,11 +1049,11 @@ Be conversational but professional. Cite specific data points from the portfolio
                     className="btn-chat"
                     onClick={() => {
                       if (chatMode) {
-                        setChatMode(false);
+                        dispatch({ type: 'SET_CHAT_MODE', payload: false });
                       } else if (aiPrivacyAccepted) {
-                        setChatMode(true);
+                        dispatch({ type: 'SET_CHAT_MODE', payload: true });
                       } else {
-                        setShowPrivacyDisclosure(true);
+                        dispatch({ type: 'SET_SHOW_PRIVACY_DISCLOSURE', payload: true });
                       }
                     }}
                   >
@@ -1568,7 +1706,7 @@ Be conversational but professional. Cite specific data points from the portfolio
               <div className="quant-dashboard-toggle">
                 <button 
                   className="btn-quant-toggle"
-                  onClick={() => setShowQuantDashboard(!showQuantDashboard)}
+                  onClick={() => dispatch({ type: 'SET_SHOW_QUANT_DASHBOARD', payload: !showQuantDashboard })}
                 >
                   <Gauge size={20} />
                   <span>Advanced Quantitative Analysis</span>
@@ -1642,7 +1780,7 @@ Be conversational but professional. Cite specific data points from the portfolio
                 <div className="chat-header-actions">
                   <button 
                     className="btn-icon"
-                    onClick={() => setShowChatHistory(!showChatHistory)}
+                    onClick={() => dispatch({ type: 'SET_SHOW_CHAT_HISTORY', payload: !showChatHistory })}
                     title="Chat history"
                   >
                     <FileText size={16} />
@@ -1722,7 +1860,7 @@ Be conversational but professional. Cite specific data points from the portfolio
                   className="chat-input"
                   placeholder="Ask anything about this portfolio..."
                   value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
+                  onChange={(e) => dispatch({ type: 'SET_CHAT_INPUT', payload: e.target.value })}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isChatting) {
                       handleChat();
@@ -1750,7 +1888,7 @@ Be conversational but professional. Cite specific data points from the portfolio
             className="prompt-input"
             placeholder="Describe your investment goals... (e.g., 'Create a growth-focused tech portfolio with quarterly rebalancing and moderate risk tolerance')"
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) => dispatch({ type: 'SET_PROMPT', payload: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -1784,12 +1922,12 @@ Be conversational but professional. Cite specific data points from the portfolio
         <PrivacyDisclosure
           featureName="portfolio_agent"
           onAccept={() => {
-            setAiPrivacyAccepted(true);
-            setShowPrivacyDisclosure(false);
-            setChatMode(true);
+            dispatch({ type: 'SET_AI_PRIVACY_ACCEPTED', payload: true });
+            dispatch({ type: 'SET_SHOW_PRIVACY_DISCLOSURE', payload: false });
+            dispatch({ type: 'SET_CHAT_MODE', payload: true });
           }}
           onDecline={() => {
-            setShowPrivacyDisclosure(false);
+            dispatch({ type: 'SET_SHOW_PRIVACY_DISCLOSURE', payload: false });
             addToast('AI chat requires data consent. Staying in manual mode.', 'info');
           }}
         />
@@ -1813,7 +1951,7 @@ Be conversational but professional. Cite specific data points from the portfolio
               ? { sharpe: generatedPortfolio.sharpeRatioEstimate }
               : undefined
           }
-          onClose={() => setShowShareCard(false)}
+          onClose={() => dispatch({ type: 'SET_SHOW_SHARE_CARD', payload: false })}
         />
       )}
     </div>

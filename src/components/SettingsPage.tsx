@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { useUserProfile, AccountType } from '../contexts/UserProfileContext';
+import { useReducer, useRef, useCallback, useEffect } from 'react';
+import { useUserProfile, AccountType, UserProfile } from '../contexts/UserProfileContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency, SUPPORTED_CURRENCIES } from '../contexts/CurrencyContext';
-import { invoke } from '../services/tauri';
+import { invoke } from '../services/tauri'; // Direct invoke: vault commands should fail fast
+import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound } from 'lucide-react';
 
@@ -21,44 +22,133 @@ const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }>
 ];
 import './SettingsPage.css';
 
+// --- SettingsPage useReducer ---
+
+interface SettingsState {
+  saved: boolean;
+  apiKeys: Record<string, string>;
+  apiKeyStatuses: Record<string, boolean>;
+  showKeys: Record<string, boolean>;
+  apiKeysSaved: boolean;
+  vaultExists: boolean;
+  vaultUnlocked: boolean;
+  vaultPassword: string;
+  vaultConfirm: string;
+  vaultError: string;
+  vaultLoading: boolean;
+  form: UserProfile;
+}
+
+type SettingsAction =
+  | { type: 'SET_SAVED'; payload: boolean }
+  | { type: 'SET_API_KEYS'; payload: Record<string, string> }
+  | { type: 'SET_API_KEY'; payload: { key: string; value: string } }
+  | { type: 'SET_API_KEY_STATUSES'; payload: Record<string, boolean> }
+  | { type: 'TOGGLE_SHOW_KEY'; payload: string }
+  | { type: 'SET_API_KEYS_SAVED'; payload: boolean }
+  | { type: 'SET_VAULT_EXISTS'; payload: boolean }
+  | { type: 'SET_VAULT_UNLOCKED'; payload: boolean }
+  | { type: 'SET_VAULT_PASSWORD'; payload: string }
+  | { type: 'SET_VAULT_CONFIRM'; payload: string }
+  | { type: 'SET_VAULT_ERROR'; payload: string }
+  | { type: 'SET_VAULT_LOADING'; payload: boolean }
+  | { type: 'SET_FORM'; payload: UserProfile }
+  | { type: 'SET_FORM_FIELD'; payload: { field: string; value: string } };
+
+function makeInitialSettingsState(profile: UserProfile): SettingsState {
+  return {
+    saved: false,
+    apiKeys: {},
+    apiKeyStatuses: {},
+    showKeys: {},
+    apiKeysSaved: false,
+    vaultExists: false,
+    vaultUnlocked: false,
+    vaultPassword: '',
+    vaultConfirm: '',
+    vaultError: '',
+    vaultLoading: false,
+    form: { ...profile },
+  };
+}
+
+function settingsReducer(state: SettingsState, action: SettingsAction): SettingsState {
+  switch (action.type) {
+    case 'SET_SAVED':
+      return { ...state, saved: action.payload };
+    case 'SET_API_KEYS':
+      return { ...state, apiKeys: action.payload };
+    case 'SET_API_KEY':
+      return { ...state, apiKeys: { ...state.apiKeys, [action.payload.key]: action.payload.value } };
+    case 'SET_API_KEY_STATUSES':
+      return { ...state, apiKeyStatuses: action.payload };
+    case 'TOGGLE_SHOW_KEY':
+      return { ...state, showKeys: { ...state.showKeys, [action.payload]: !state.showKeys[action.payload] } };
+    case 'SET_API_KEYS_SAVED':
+      return { ...state, apiKeysSaved: action.payload };
+    case 'SET_VAULT_EXISTS':
+      return { ...state, vaultExists: action.payload };
+    case 'SET_VAULT_UNLOCKED':
+      return { ...state, vaultUnlocked: action.payload };
+    case 'SET_VAULT_PASSWORD':
+      return { ...state, vaultPassword: action.payload };
+    case 'SET_VAULT_CONFIRM':
+      return { ...state, vaultConfirm: action.payload };
+    case 'SET_VAULT_ERROR':
+      return { ...state, vaultError: action.payload };
+    case 'SET_VAULT_LOADING':
+      return { ...state, vaultLoading: action.payload };
+    case 'SET_FORM':
+      return { ...state, form: action.payload };
+    case 'SET_FORM_FIELD':
+      return { ...state, form: { ...state.form, [action.payload.field]: action.payload.value } };
+    default:
+      return state;
+  }
+}
+
 export function SettingsPage() {
   const { profile, updateProfile, resetProfile } = useUserProfile();
   const { user, isAuthenticated, tier, loginWithGoogle, logout, loading: authLoading } = useAuth();
   const { currency, setCurrency } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [saved, setSaved] = useState(false);
+  const [state, dispatch] = useReducer(settingsReducer, profile, makeInitialSettingsState);
 
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [apiKeyStatuses, setApiKeyStatuses] = useState<Record<string, boolean>>({});
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [apiKeysSaved, setApiKeysSaved] = useState(false);
-
-  // Stronghold vault state
-  const [vaultExists, setVaultExists] = useState(false);
-  const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [vaultPassword, setVaultPassword] = useState('');
-  const [vaultConfirm, setVaultConfirm] = useState('');
-  const [vaultError, setVaultError] = useState('');
-  const [vaultLoading, setVaultLoading] = useState(false);
+  const {
+    saved,
+    apiKeys,
+    apiKeyStatuses,
+    showKeys,
+    apiKeysSaved,
+    vaultExists,
+    vaultUnlocked,
+    vaultPassword,
+    vaultConfirm,
+    vaultError,
+    vaultLoading,
+    form,
+  } = state;
 
   useEffect(() => {
-    invoke<Record<string, boolean>>('get_api_key_statuses')
-      .then(setApiKeyStatuses)
+    invokeWithResilience<Record<string, boolean>>('get_api_key_statuses')
+      .then(statuses => dispatch({ type: 'SET_API_KEY_STATUSES', payload: statuses }))
       .catch(() => {});
-    invoke<boolean>('vault_exists').then(setVaultExists).catch(() => {});
-    invoke<boolean>('vault_is_unlocked').then(setVaultUnlocked).catch(() => {});
+    invoke<boolean>('vault_exists')
+      .then(exists => dispatch({ type: 'SET_VAULT_EXISTS', payload: exists }))
+      .catch(() => {});
+    invoke<boolean>('vault_is_unlocked')
+      .then(unlocked => dispatch({ type: 'SET_VAULT_UNLOCKED', payload: unlocked }))
+      .catch(() => {});
   }, []);
 
-  const [form, setForm] = useState({ ...profile });
-
   const handleChange = useCallback((field: string, value: string) => {
-    setForm(prev => ({ ...prev, [field]: value }));
+    dispatch({ type: 'SET_FORM_FIELD', payload: { field, value } });
   }, []);
 
   const handleSave = useCallback(() => {
     updateProfile(form);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    dispatch({ type: 'SET_SAVED', payload: true });
+    setTimeout(() => dispatch({ type: 'SET_SAVED', payload: false }), 2000);
   }, [form, updateProfile]);
 
   const handleAvatarClick = useCallback(() => {
@@ -76,39 +166,39 @@ export function SettingsPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      setForm(prev => ({ ...prev, avatarUrl: result }));
+      dispatch({ type: 'SET_FORM_FIELD', payload: { field: 'avatarUrl', value: result } });
     };
     reader.readAsDataURL(file);
   }, []);
 
   const handleRemoveAvatar = useCallback(() => {
-    setForm(prev => ({ ...prev, avatarUrl: '' }));
+    dispatch({ type: 'SET_FORM_FIELD', payload: { field: 'avatarUrl', value: '' } });
   }, []);
 
   const handleSaveApiKeys = useCallback(async () => {
     try {
-      await invoke('save_api_keys', { keys: apiKeys });
-      const updated = await invoke<Record<string, boolean>>('get_api_key_statuses');
-      setApiKeyStatuses(updated);
-      setApiKeys({});
-      setApiKeysSaved(true);
-      setTimeout(() => setApiKeysSaved(false), 2000);
+      await invokeWithResilience('save_api_keys', { keys: apiKeys });
+      const updated = await invokeWithResilience<Record<string, boolean>>('get_api_key_statuses');
+      dispatch({ type: 'SET_API_KEY_STATUSES', payload: updated });
+      dispatch({ type: 'SET_API_KEYS', payload: {} });
+      dispatch({ type: 'SET_API_KEYS_SAVED', payload: true });
+      setTimeout(() => dispatch({ type: 'SET_API_KEYS_SAVED', payload: false }), 2000);
     } catch {
       // silent
     }
   }, [apiKeys]);
 
   const handleVaultSetup = useCallback(async () => {
-    setVaultError('');
+    dispatch({ type: 'SET_VAULT_ERROR', payload: '' });
     if (vaultPassword.length < 8) {
-      setVaultError('Password must be at least 8 characters');
+      dispatch({ type: 'SET_VAULT_ERROR', payload: 'Password must be at least 8 characters' });
       return;
     }
     if (vaultPassword !== vaultConfirm) {
-      setVaultError('Passwords do not match');
+      dispatch({ type: 'SET_VAULT_ERROR', payload: 'Passwords do not match' });
       return;
     }
-    setVaultLoading(true);
+    dispatch({ type: 'SET_VAULT_LOADING', payload: true });
     try {
       // Get vault path and initialize Stronghold via JS API
       const vaultPath = await invoke<string>('vault_get_path');
@@ -125,32 +215,32 @@ export function SettingsPage() {
       await stronghold.save();
       await invoke('vault_set_unlocked');
 
-      setVaultExists(true);
-      setVaultUnlocked(true);
-      setVaultPassword('');
-      setVaultConfirm('');
+      dispatch({ type: 'SET_VAULT_EXISTS', payload: true });
+      dispatch({ type: 'SET_VAULT_UNLOCKED', payload: true });
+      dispatch({ type: 'SET_VAULT_PASSWORD', payload: '' });
+      dispatch({ type: 'SET_VAULT_CONFIRM', payload: '' });
     } catch (e) {
-      setVaultError(e instanceof Error ? e.message : String(e));
+      dispatch({ type: 'SET_VAULT_ERROR', payload: e instanceof Error ? e.message : String(e) });
     } finally {
-      setVaultLoading(false);
+      dispatch({ type: 'SET_VAULT_LOADING', payload: false });
     }
   }, [vaultPassword, vaultConfirm]);
 
   const handleVaultUnlock = useCallback(async () => {
-    setVaultError('');
-    setVaultLoading(true);
+    dispatch({ type: 'SET_VAULT_ERROR', payload: '' });
+    dispatch({ type: 'SET_VAULT_LOADING', payload: true });
     try {
       const vaultPath = await invoke<string>('vault_get_path');
       const { Stronghold } = await import('@tauri-apps/plugin-stronghold');
       await Stronghold.load(vaultPath, vaultPassword);
       await invoke('vault_set_unlocked');
-      setVaultUnlocked(true);
-      setVaultPassword('');
+      dispatch({ type: 'SET_VAULT_UNLOCKED', payload: true });
+      dispatch({ type: 'SET_VAULT_PASSWORD', payload: '' });
     } catch (e) {
-      setVaultError('Wrong password or corrupt vault');
+      dispatch({ type: 'SET_VAULT_ERROR', payload: 'Wrong password or corrupt vault' });
       log.error('Vault unlock failed', e);
     } finally {
-      setVaultLoading(false);
+      dispatch({ type: 'SET_VAULT_LOADING', payload: false });
     }
   }, [vaultPassword]);
 
@@ -161,24 +251,27 @@ export function SettingsPage() {
       const stronghold = await Stronghold.load(vaultPath, '');
       await stronghold.unload();
       await invoke('vault_set_locked');
-      setVaultUnlocked(false);
+      dispatch({ type: 'SET_VAULT_UNLOCKED', payload: false });
     } catch {
       await invoke('vault_set_locked');
-      setVaultUnlocked(false);
+      dispatch({ type: 'SET_VAULT_UNLOCKED', payload: false });
     }
   }, []);
 
   const handleReset = useCallback(() => {
     resetProfile();
-    setForm({
-      displayName: 'Investor',
-      email: '',
-      avatarUrl: '',
-      accountType: 'personal' as AccountType,
-      bio: '',
-      company: '',
-      location: '',
-      website: '',
+    dispatch({
+      type: 'SET_FORM',
+      payload: {
+        displayName: 'Investor',
+        email: '',
+        avatarUrl: '',
+        accountType: 'personal' as AccountType,
+        bio: '',
+        company: '',
+        location: '',
+        website: '',
+      },
     });
   }, [resetProfile]);
 
@@ -436,7 +529,7 @@ export function SettingsPage() {
                     id="vaultUnlockPw"
                     type="password"
                     value={vaultPassword}
-                    onChange={e => setVaultPassword(e.target.value)}
+                    onChange={e => dispatch({ type: 'SET_VAULT_PASSWORD', payload: e.target.value })}
                     placeholder="Enter vault password"
                     style={{ flex: 1 }}
                     onKeyDown={e => e.key === 'Enter' && handleVaultUnlock()}
@@ -456,7 +549,7 @@ export function SettingsPage() {
                   id="vaultNewPw"
                   type="password"
                   value={vaultPassword}
-                  onChange={e => setVaultPassword(e.target.value)}
+                  onChange={e => dispatch({ type: 'SET_VAULT_PASSWORD', payload: e.target.value })}
                   placeholder="At least 8 characters"
                 />
               </div>
@@ -466,7 +559,7 @@ export function SettingsPage() {
                   id="vaultConfirmPw"
                   type="password"
                   value={vaultConfirm}
-                  onChange={e => setVaultConfirm(e.target.value)}
+                  onChange={e => dispatch({ type: 'SET_VAULT_CONFIRM', payload: e.target.value })}
                   placeholder="Confirm password"
                   onKeyDown={e => e.key === 'Enter' && handleVaultSetup()}
                 />
@@ -498,14 +591,14 @@ export function SettingsPage() {
                 <input
                   type={showKeys[key] ? 'text' : 'password'}
                   value={apiKeys[key] ?? ''}
-                  onChange={e => setApiKeys(prev => ({ ...prev, [key]: e.target.value }))}
+                  onChange={e => dispatch({ type: 'SET_API_KEY', payload: { key, value: e.target.value } })}
                   placeholder={apiKeyStatuses[key] ? '●●●●●●●● (configured)' : placeholder}
                   style={{ flex: 1 }}
                 />
                 <button
                   type="button"
                   className="btn-small"
-                  onClick={() => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }))}
+                  onClick={() => dispatch({ type: 'TOGGLE_SHOW_KEY', payload: key })}
                   aria-label={showKeys[key] ? 'Hide' : 'Show'}
                 >
                   {showKeys[key] ? <EyeOff size={14} /> : <Eye size={14} />}
