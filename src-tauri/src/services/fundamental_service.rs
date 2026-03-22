@@ -74,7 +74,8 @@ pub struct FundamentalDataService {
 impl FundamentalDataService {
     /// Create new service
     pub fn new() -> Self {
-        let alpha_vantage_key = std::env::var("ALPHA_VANTAGE_API_KEY").or_else(|_| std::env::var("VITE_ALPHAVANTAGE_API_KEY")).ok();
+        use crate::core::encrypted_env::get_env_var;
+        let alpha_vantage_key = get_env_var("ALPHA_VANTAGE_API_KEY");
         
         Self {
             client: Client::builder()
@@ -371,7 +372,7 @@ mod tests {
     #[test]
     fn test_new_does_not_panic_and_has_no_av_key_when_env_absent() {
         // Make sure the env var is not set for this test.
-        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+        std::env::remove_var("ALPHA_VANTAGE_API_KEY");
 
         let svc = FundamentalDataService::new();
         assert!(
@@ -441,7 +442,7 @@ mod tests {
     // ---------------------------------------------------------------------------
     #[tokio::test]
     async fn test_cache_fresh_entry_is_within_ttl() {
-        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+        std::env::remove_var("ALPHA_VANTAGE_API_KEY");
         let svc = FundamentalDataService::new();
 
         let metrics = FundamentalMetrics {
@@ -504,7 +505,7 @@ mod tests {
     // ---------------------------------------------------------------------------
     #[test]
     fn test_default_creates_service_equivalent_to_new() {
-        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+        std::env::remove_var("ALPHA_VANTAGE_API_KEY");
 
         let from_new = FundamentalDataService::new();
         let from_default = FundamentalDataService::default();
@@ -526,7 +527,7 @@ mod tests {
     // ---------------------------------------------------------------------------
     #[test]
     fn test_cache_ttl_is_48_hours() {
-        std::env::remove_var("VITE_ALPHAVANTAGE_API_KEY");
+        std::env::remove_var("ALPHA_VANTAGE_API_KEY");
         let svc = FundamentalDataService::new();
         assert_eq!(
             svc.cache_ttl.as_secs(),

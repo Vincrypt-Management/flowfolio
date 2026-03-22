@@ -13,7 +13,7 @@ fn main() {
                 Err(e) => eprintln!("[ERROR] [main] Failed to load .env: {:?}", e),
             }
             // Verify key env vars
-            eprintln!("[DEBUG] [main] OPENROUTER_API_KEY present: {}", std::env::var("OPENROUTER_API_KEY").or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY")).is_ok());
+            eprintln!("[DEBUG] [main] OPENROUTER_API_KEY present: {}", std::env::var("OPENROUTER_API_KEY").is_ok());
         } else {
             eprintln!("[WARN] [main] .env file not found at {:?}, trying current dir", env_path);
             dotenvy::dotenv().ok();

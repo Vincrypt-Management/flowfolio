@@ -84,10 +84,10 @@ pub struct AlpacaService {
 impl AlpacaService {
     /// Create new Alpaca service
     pub fn new() -> Self {
-        let api_key = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).ok();
-        let api_secret = std::env::var("ALPACA_SECRET_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_SECRET")).ok();
-        let is_paper = std::env::var("ALPACA_PAPER_TRADING")
-            .or_else(|_| std::env::var("VITE_ALPACA_PAPER_TRADING"))
+        use crate::core::encrypted_env::get_env_var;
+        let api_key = get_env_var("ALPACA_API_KEY");
+        let api_secret = get_env_var("ALPACA_SECRET_KEY");
+        let is_paper = get_env_var("ALPACA_PAPER_TRADING")
             .map(|v| v == "true")
             .unwrap_or(true); // Default to paper trading for safety
 
@@ -252,22 +252,22 @@ mod tests {
 
     #[test]
     fn is_configured_returns_false_without_env_vars() {
-        std::env::remove_var("VITE_ALPACA_API_KEY");
-        std::env::remove_var("VITE_ALPACA_API_SECRET");
+        std::env::remove_var("ALPACA_API_KEY");
+        std::env::remove_var("ALPACA_SECRET_KEY");
         let svc = AlpacaService::new();
         assert!(!svc.is_configured());
     }
 
     #[test]
     fn is_paper_defaults_to_true_when_env_var_absent() {
-        std::env::remove_var("VITE_ALPACA_PAPER_TRADING");
+        std::env::remove_var("ALPACA_PAPER_TRADING");
         let svc = AlpacaService::new();
         assert!(svc.is_paper);
     }
 
     #[test]
     fn base_url_returns_paper_url_when_is_paper_true() {
-        std::env::remove_var("VITE_ALPACA_PAPER_TRADING");
+        std::env::remove_var("ALPACA_PAPER_TRADING");
         let svc = AlpacaService::new();
         assert_eq!(svc.base_url(), "https://paper-api.alpaca.markets");
     }

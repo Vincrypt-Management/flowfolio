@@ -63,13 +63,12 @@ pub struct OpenRouterService {
 impl OpenRouterService {
     /// Create new OpenRouter service
     pub fn new() -> Self {
-        let api_key = std::env::var("OPENROUTER_API_KEY").or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY")).ok();
-        let api_url = std::env::var("OPENROUTER_API_URL")
-            .or_else(|_| std::env::var("VITE_OPENROUTER_API_URL"))
-            .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
-        let default_model = std::env::var("DEFAULT_LLM_MODEL")
-            .or_else(|_| std::env::var("VITE_DEFAULT_LLM_MODEL"))
-            .unwrap_or_else(|_| "anthropic/claude-3-sonnet-20240229".to_string());
+        use crate::core::encrypted_env::get_env_var;
+        let api_key = get_env_var("OPENROUTER_API_KEY");
+        let api_url = get_env_var("OPENROUTER_API_URL")
+            .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
+        let default_model = get_env_var("DEFAULT_LLM_MODEL")
+            .unwrap_or_else(|| "anthropic/claude-3-sonnet-20240229".to_string());
 
         // Debug: Log API key status
         eprintln!("[DEBUG] [openrouter] API key configured: {}", api_key.is_some());
@@ -101,7 +100,7 @@ impl OpenRouterService {
         max_tokens: Option<u32>,
     ) -> Result<String, String> {
         let api_key = self.api_key.as_ref()
-            .ok_or_else(|| "OpenRouter API key not configured. Set OPENROUTER_API_KEY (or VITE_OPENROUTER_API_KEY) in .env file.".to_string())?;
+            .ok_or_else(|| "OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env file.".to_string())?;
 
         // Validate API key format (should start with sk-)
         if !api_key.starts_with("sk-") {
@@ -142,7 +141,7 @@ impl OpenRouterService {
             
             // Provide more helpful error messages
             let user_error = match status.as_u16() {
-                401 => "Invalid API key. Please check your OPENROUTER_API_KEY (or VITE_OPENROUTER_API_KEY).".to_string(),
+                401 => "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string(),
                 402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
                 429 => "Rate limited. Please wait a moment and try again.".to_string(),
                 500..=599 => format!("OpenRouter server error ({}). The service may be temporarily unavailable.", status),
@@ -303,21 +302,21 @@ mod tests {
     #[test]
     fn is_configured_returns_false_when_no_env_var() {
         // Ensure the env var is absent for this test
-        std::env::remove_var("VITE_OPENROUTER_API_KEY");
+        std::env::remove_var("OPENROUTER_API_KEY");
         let svc = OpenRouterService::new();
         assert!(!svc.is_configured());
     }
 
     #[test]
     fn default_api_url_is_openrouter() {
-        std::env::remove_var("VITE_OPENROUTER_API_URL");
+        std::env::remove_var("OPENROUTER_API_URL");
         let svc = OpenRouterService::new();
         assert_eq!(svc.api_url, "https://openrouter.ai/api/v1");
     }
 
     #[test]
     fn default_model_is_claude_sonnet() {
-        std::env::remove_var("VITE_DEFAULT_LLM_MODEL");
+        std::env::remove_var("DEFAULT_LLM_MODEL");
         let svc = OpenRouterService::new();
         assert_eq!(svc.default_model, "anthropic/claude-3-sonnet-20240229");
     }

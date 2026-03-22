@@ -18,10 +18,11 @@ pub struct MarketDataService {
 impl MarketDataService {
     pub fn new() -> Self {
         // Read API keys from environment
-        let alpaca_key = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).ok();
-        let alpaca_secret = std::env::var("ALPACA_SECRET_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_SECRET")).ok();
-        let polygon_key = std::env::var("POLYGON_API_KEY").or_else(|_| std::env::var("VITE_POLYGON_API_KEY")).ok();
-        let alphavantage_key = std::env::var("ALPHA_VANTAGE_API_KEY").or_else(|_| std::env::var("VITE_ALPHAVANTAGE_API_KEY")).ok();
+        use crate::core::encrypted_env::get_env_var;
+        let alpaca_key = get_env_var("ALPACA_API_KEY");
+        let alpaca_secret = get_env_var("ALPACA_SECRET_KEY");
+        let polygon_key = get_env_var("POLYGON_API_KEY");
+        let alphavantage_key = get_env_var("ALPHA_VANTAGE_API_KEY");
         
         eprintln!("[INFO] [market_data] API Keys status:");
         eprintln!("[INFO] [market_data]   Polygon: {}", if polygon_key.is_some() { "configured" } else { "not configured" });

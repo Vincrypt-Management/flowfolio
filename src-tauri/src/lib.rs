@@ -1446,11 +1446,12 @@ async fn test_data_connection() -> Result<serde_json::Value, String> {
     let cache_stats = service.get_cache_stats().await;
     
     // Check API keys
-    let alpaca_configured = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).is_ok();
-    let finnhub_configured = std::env::var("FINNHUB_API_KEY").or_else(|_| std::env::var("VITE_FINNHUB_API_KEY")).is_ok();
-    let fmp_configured = std::env::var("FMP_API_KEY").or_else(|_| std::env::var("VITE_FMP_API_KEY")).is_ok();
-    let polygon_configured = std::env::var("POLYGON_API_KEY").or_else(|_| std::env::var("VITE_POLYGON_API_KEY")).is_ok();
-    let alphavantage_configured = std::env::var("ALPHA_VANTAGE_API_KEY").or_else(|_| std::env::var("VITE_ALPHAVANTAGE_API_KEY")).is_ok();
+    use crate::core::encrypted_env::get_env_var;
+    let alpaca_configured = get_env_var("ALPACA_API_KEY").is_some();
+    let finnhub_configured = get_env_var("FINNHUB_API_KEY").is_some();
+    let fmp_configured = get_env_var("FMP_API_KEY").is_some();
+    let polygon_configured = get_env_var("POLYGON_API_KEY").is_some();
+    let alphavantage_configured = get_env_var("ALPHA_VANTAGE_API_KEY").is_some();
     
     let result = json!({
         "status": if price > 0.0 { "connected" } else { "failed" },
@@ -2786,9 +2787,8 @@ async fn ai_chat_stream(
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
 
-    let api_key = std::env::var("OPENROUTER_API_KEY")
-        .or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY"))
-        .map_err(|_| "OpenRouter API key not configured".to_string())?;
+    let api_key = crate::core::encrypted_env::get_env_var("OPENROUTER_API_KEY")
+        .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
     let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".to_string());
     let client = reqwest::Client::new();
