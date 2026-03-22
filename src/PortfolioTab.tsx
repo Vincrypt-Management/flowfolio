@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useReducer, useEffect, useCallback, useMemo } from "react";
 import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from './services/apiClient';
 import { YearlyReviewComponent } from "./components/YearlyReview";
@@ -9,7 +9,8 @@ import { DividendTracker } from './components/DividendTracker';
 import { TaxLotView } from './components/TaxLotView';
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
-import { parseBrokerCSV, ParsedHolding } from './shared/utils/csvParser';
+import { parseBrokerCSV } from './shared/utils/csvParser';
+import type { ParsedHolding } from './shared/utils/csvParser';
 import { PersistedHolding as Holding } from './hooks/useAppState';
 import { Upload } from 'lucide-react';
 
@@ -87,6 +88,140 @@ interface PortfolioTabProps {
   onPortfolioChange?: (holdings: Holding[], cash: number) => void;
 }
 
+// --- PortfolioTab useReducer ---
+
+interface PortfolioUIState {
+  rebalanceThreshold: number;
+  maxPosition: number;
+  cashBuffer: number;
+  showRebalanceHistory: boolean;
+  showPerformance: boolean;
+  showTransactions: boolean;
+  showDividends: boolean;
+  showTaxLots: boolean;
+  contribution: string;
+  isLoading: boolean;
+  newSymbol: string;
+  newShares: string;
+  newCostBasis: string;
+  newTargetPct: string;
+  cashAmount: string;
+  showImport: boolean;
+  importPreview: ParsedHolding[];
+  importBroker: string;
+  importSkipped: Set<number>;
+  importErrors: string[];
+  allocationMethod: 'equal_weight' | 'score_weighted';
+}
+
+type PortfolioAction =
+  | { type: 'SET_REBALANCE_THRESHOLD'; value: number }
+  | { type: 'SET_MAX_POSITION'; value: number }
+  | { type: 'SET_CASH_BUFFER'; value: number }
+  | { type: 'TOGGLE_REBALANCE_HISTORY' }
+  | { type: 'TOGGLE_PERFORMANCE' }
+  | { type: 'TOGGLE_TRANSACTIONS' }
+  | { type: 'TOGGLE_DIVIDENDS' }
+  | { type: 'TOGGLE_TAX_LOTS' }
+  | { type: 'SET_CONTRIBUTION'; value: string }
+  | { type: 'SET_IS_LOADING'; value: boolean }
+  | { type: 'SET_NEW_SYMBOL'; value: string }
+  | { type: 'SET_NEW_SHARES'; value: string }
+  | { type: 'SET_NEW_COST_BASIS'; value: string }
+  | { type: 'SET_NEW_TARGET_PCT'; value: string }
+  | { type: 'SET_CASH_AMOUNT'; value: string }
+  | { type: 'RESET_NEW_HOLDING' }
+  | { type: 'RESET_CASH_AMOUNT' }
+  | { type: 'TOGGLE_SHOW_IMPORT' }
+  | { type: 'SET_IMPORT_PREVIEW'; holdings: ParsedHolding[]; broker: string; errors: string[] }
+  | { type: 'TOGGLE_IMPORT_SKIP'; index: number }
+  | { type: 'CLEAR_IMPORT' }
+  | { type: 'SET_ALLOCATION_METHOD'; value: 'equal_weight' | 'score_weighted' };
+
+const initialPortfolioUIState: PortfolioUIState = {
+  rebalanceThreshold: 5.0,
+  maxPosition: 25.0,
+  cashBuffer: 5.0,
+  showRebalanceHistory: false,
+  showPerformance: true,
+  showTransactions: false,
+  showDividends: false,
+  showTaxLots: false,
+  contribution: "1000",
+  isLoading: false,
+  newSymbol: "",
+  newShares: "",
+  newCostBasis: "",
+  newTargetPct: "",
+  cashAmount: "",
+  showImport: false,
+  importPreview: [],
+  importBroker: '',
+  importSkipped: new Set(),
+  importErrors: [],
+  allocationMethod: 'equal_weight',
+};
+
+function portfolioReducer(state: PortfolioUIState, action: PortfolioAction): PortfolioUIState {
+  switch (action.type) {
+    case 'SET_REBALANCE_THRESHOLD':
+      return { ...state, rebalanceThreshold: action.value };
+    case 'SET_MAX_POSITION':
+      return { ...state, maxPosition: action.value };
+    case 'SET_CASH_BUFFER':
+      return { ...state, cashBuffer: action.value };
+    case 'TOGGLE_REBALANCE_HISTORY':
+      return { ...state, showRebalanceHistory: !state.showRebalanceHistory };
+    case 'TOGGLE_PERFORMANCE':
+      return { ...state, showPerformance: !state.showPerformance };
+    case 'TOGGLE_TRANSACTIONS':
+      return { ...state, showTransactions: !state.showTransactions };
+    case 'TOGGLE_DIVIDENDS':
+      return { ...state, showDividends: !state.showDividends };
+    case 'TOGGLE_TAX_LOTS':
+      return { ...state, showTaxLots: !state.showTaxLots };
+    case 'SET_CONTRIBUTION':
+      return { ...state, contribution: action.value };
+    case 'SET_IS_LOADING':
+      return { ...state, isLoading: action.value };
+    case 'SET_NEW_SYMBOL':
+      return { ...state, newSymbol: action.value };
+    case 'SET_NEW_SHARES':
+      return { ...state, newShares: action.value };
+    case 'SET_NEW_COST_BASIS':
+      return { ...state, newCostBasis: action.value };
+    case 'SET_NEW_TARGET_PCT':
+      return { ...state, newTargetPct: action.value };
+    case 'SET_CASH_AMOUNT':
+      return { ...state, cashAmount: action.value };
+    case 'RESET_NEW_HOLDING':
+      return { ...state, newSymbol: "", newShares: "", newCostBasis: "", newTargetPct: "" };
+    case 'RESET_CASH_AMOUNT':
+      return { ...state, cashAmount: "" };
+    case 'TOGGLE_SHOW_IMPORT':
+      return { ...state, showImport: !state.showImport };
+    case 'SET_IMPORT_PREVIEW':
+      return {
+        ...state,
+        importPreview: action.holdings,
+        importBroker: action.broker,
+        importErrors: action.errors,
+        importSkipped: new Set(),
+      };
+    case 'TOGGLE_IMPORT_SKIP': {
+      const next = new Set(state.importSkipped);
+      next.has(action.index) ? next.delete(action.index) : next.add(action.index);
+      return { ...state, importSkipped: next };
+    }
+    case 'CLEAR_IMPORT':
+      return { ...state, importPreview: [], showImport: false };
+    case 'SET_ALLOCATION_METHOD':
+      return { ...state, allocationMethod: action.value };
+    default:
+      return state;
+  }
+}
+
 export function PortfolioTab({
   onHoldingsChange,
   onAnalyze,
@@ -98,9 +233,7 @@ export function PortfolioTab({
 }: PortfolioTabProps = {}) {
   const { addToast } = useToast();
   const { isAdvanced } = useUserMode();
-  const [rebalanceThreshold, setRebalanceThreshold] = useState(5.0);
-  const [maxPosition, setMaxPosition] = useState(25.0);
-  const [cashBuffer, setCashBuffer] = useState(5.0);
+  const [ui, dispatch] = useReducer(portfolioReducer, initialPortfolioUIState);
   const [portfolio, setPortfolio] = useState<Portfolio>(() => {
     const holdings = initialHoldings ?? [];
     const cash = initialCash ?? 0.0;
@@ -114,31 +247,19 @@ export function PortfolioTab({
     };
   });
   const [allocationPlan, setAllocationPlan] = useState<AllocationPlan | null>(null);
-  const [allocationMethod, setAllocationMethod] = useState<'equal_weight' | 'score_weighted'>('equal_weight');
   const [buyList, setBuyList] = useState<BuyList | null>(null);
   const [rebalanceReport, setRebalanceReport] = useState<RebalanceReport | null>(null);
   const [rebalanceHistory, setRebalanceHistory] = useState<Array<{id: string; recorded_at: string; report: unknown}>>([]);
-  const [showRebalanceHistory, setShowRebalanceHistory] = useState(false);
-  const [showPerformance, setShowPerformance] = useState(true);
-  const [showTransactions, setShowTransactions] = useState(false);
-  const [showDividends, setShowDividends] = useState(false);
-  const [showTaxLots, setShowTaxLots] = useState(false);
-  const [contribution, setContribution] = useState<string>("1000");
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // Add holding form state
-  const [newSymbol, setNewSymbol] = useState("");
-  const [newShares, setNewShares] = useState("");
-  const [newCostBasis, setNewCostBasis] = useState("");
-  const [newTargetPct, setNewTargetPct] = useState("");
-  const [cashAmount, setCashAmount] = useState("");
 
-  // Broker import state
-  const [showImport, setShowImport] = useState(false);
-  const [importPreview, setImportPreview] = useState<ParsedHolding[]>([]);
-  const [importBroker, setImportBroker] = useState('');
-  const [importSkipped, setImportSkipped] = useState<Set<number>>(new Set());
-  const [importErrors, setImportErrors] = useState<string[]>([]);
+  // Destructure UI state for convenience
+  const {
+    rebalanceThreshold, maxPosition, cashBuffer,
+    showRebalanceHistory, showPerformance, showTransactions, showDividends, showTaxLots,
+    contribution, isLoading,
+    newSymbol, newShares, newCostBasis, newTargetPct, cashAmount,
+    showImport, importPreview, importBroker, importSkipped, importErrors,
+    allocationMethod,
+  } = ui;
 
   const isMountedRef = useIsMounted();
 
@@ -171,18 +292,18 @@ export function PortfolioTab({
       return;
     }
 
-    setIsLoading(true);
+    dispatch({ type: 'SET_IS_LOADING', value: true });
     try {
       // Fetch current price
       const price = await invokeWithResilience<number>("get_current_price_single", { symbol: newSymbol.toUpperCase() });
-      
+
       // Check if still mounted before updating state
       if (!isMountedRef.current) return;
-      
+
       const shares = parseFloat(newShares);
       const costBasis = newCostBasis ? parseFloat(newCostBasis) : price;
       const targetPct = newTargetPct ? parseFloat(newTargetPct) : 0;
-      
+
       const newHolding: Holding = {
         symbol: newSymbol.toUpperCase(),
         shares,
@@ -196,7 +317,7 @@ export function PortfolioTab({
 
       const updatedHoldings = [...portfolio.holdings, newHolding];
       const totalValue = updatedHoldings.reduce((sum, h) => sum + h.market_value, 0) + portfolio.cash;
-      
+
       // Recalculate percentages
       const holdingsWithPct = updatedHoldings.map(h => ({
         ...h,
@@ -214,17 +335,14 @@ export function PortfolioTab({
       notifyHoldingsChange(holdingsWithPct, totalValue);
 
       // Clear form
-      setNewSymbol("");
-      setNewShares("");
-      setNewCostBasis("");
-      setNewTargetPct("");
+      dispatch({ type: 'RESET_NEW_HOLDING' });
     } catch (error) {
       if (isMountedRef.current) {
         addToast("Error adding holding: " + (error instanceof Error ? error.message : String(error)), "error");
       }
     } finally {
       if (isMountedRef.current) {
-        setIsLoading(false);
+        dispatch({ type: 'SET_IS_LOADING', value: false });
       }
     }
   }
@@ -232,7 +350,7 @@ export function PortfolioTab({
   async function updatePrices() {
     if (portfolio.holdings.length === 0) return;
 
-    setIsLoading(true);
+    dispatch({ type: 'SET_IS_LOADING', value: true });
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
       const prices = await invokeWithResilience<Record<string, number>>("get_current_prices_batch", { symbols });
@@ -282,7 +400,7 @@ export function PortfolioTab({
       }
     } finally {
       if (isMountedRef.current) {
-        setIsLoading(false);
+        dispatch({ type: 'SET_IS_LOADING', value: false });
       }
     }
   }
@@ -327,7 +445,7 @@ export function PortfolioTab({
 
     notifyHoldingsChange(holdingsWithPct, totalValue);
 
-    setCashAmount("");
+    dispatch({ type: 'RESET_CASH_AMOUNT' });
   }
 
   async function generateBuyList() {
@@ -336,7 +454,7 @@ export function PortfolioTab({
       return;
     }
 
-    setIsLoading(true);
+    dispatch({ type: 'SET_IS_LOADING', value: true });
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
       const prices = await invokeWithResilience<Record<string, number>>("get_current_prices_batch", { symbols });
@@ -360,7 +478,7 @@ export function PortfolioTab({
       }
     } finally {
       if (isMountedRef.current) {
-        setIsLoading(false);
+        dispatch({ type: 'SET_IS_LOADING', value: false });
       }
     }
   }
@@ -371,7 +489,7 @@ export function PortfolioTab({
       return;
     }
 
-    setIsLoading(true);
+    dispatch({ type: 'SET_IS_LOADING', value: true });
     try {
       const report = await invokeWithResilience<RebalanceReport>("check_portfolio_rebalance", {
         portfolio,
@@ -399,7 +517,7 @@ export function PortfolioTab({
       }
     } finally {
       if (isMountedRef.current) {
-        setIsLoading(false);
+        dispatch({ type: 'SET_IS_LOADING', value: false });
       }
     }
   }
@@ -412,10 +530,10 @@ export function PortfolioTab({
 
     if (allocationMethod === 'score_weighted') {
       addToast("Score Weighted allocation requires running Rankings first. Scores are not available in this view — switching to Equal Weight.", "warning");
-      setAllocationMethod('equal_weight');
+      dispatch({ type: 'SET_ALLOCATION_METHOD', value: 'equal_weight' });
     }
 
-    setIsLoading(true);
+    dispatch({ type: 'SET_IS_LOADING', value: true });
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
 
@@ -434,7 +552,7 @@ export function PortfolioTab({
       }
     } finally {
       if (isMountedRef.current) {
-        setIsLoading(false);
+        dispatch({ type: 'SET_IS_LOADING', value: false });
       }
     }
   }
@@ -445,10 +563,7 @@ export function PortfolioTab({
     const reader = new FileReader();
     reader.onload = () => {
       const { holdings, broker, errors } = parseBrokerCSV(reader.result as string);
-      setImportPreview(holdings);
-      setImportBroker(broker);
-      setImportSkipped(new Set());
-      setImportErrors(errors);
+      dispatch({ type: 'SET_IMPORT_PREVIEW', holdings, broker, errors });
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -489,8 +604,7 @@ export function PortfolioTab({
       last_updated: new Date().toISOString(),
     });
 
-    setImportPreview([]);
-    setShowImport(false);
+    dispatch({ type: 'CLEAR_IMPORT' });
     addToast(`Imported ${toImport.length} holdings. Click "Refresh Prices" to update current prices.`, 'success');
   }, [importPreview, importSkipped, portfolio, addToast]);
 
@@ -511,15 +625,15 @@ export function PortfolioTab({
           <div className="form-row">
             <div className="form-group">
               <label>Rebalance Threshold (%)</label>
-              <input type="number" value={rebalanceThreshold} onChange={(e) => setRebalanceThreshold(parseFloat(e.target.value) || 0)} min={1} max={20} step={0.5} />
+              <input type="number" value={rebalanceThreshold} onChange={(e) => dispatch({ type: 'SET_REBALANCE_THRESHOLD', value: parseFloat(e.target.value) || 0 })} min={1} max={20} step={0.5} />
             </div>
             <div className="form-group">
               <label>Max Position Size (%)</label>
-              <input type="number" value={maxPosition} onChange={(e) => setMaxPosition(parseFloat(e.target.value) || 0)} min={5} max={50} step={1} />
+              <input type="number" value={maxPosition} onChange={(e) => dispatch({ type: 'SET_MAX_POSITION', value: parseFloat(e.target.value) || 0 })} min={5} max={50} step={1} />
             </div>
             <div className="form-group">
               <label>Cash Buffer (%)</label>
-              <input type="number" value={cashBuffer} onChange={(e) => setCashBuffer(parseFloat(e.target.value) || 0)} min={0} max={20} step={1} />
+              <input type="number" value={cashBuffer} onChange={(e) => dispatch({ type: 'SET_CASH_BUFFER', value: parseFloat(e.target.value) || 0 })} min={0} max={20} step={1} />
             </div>
           </div>
         </div>
@@ -529,7 +643,7 @@ export function PortfolioTab({
       <div className="card mb-lg">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ margin: 0 }}>Import from Broker</h3>
-          <button className="btn-small" onClick={() => setShowImport(s => !s)}>
+          <button className="btn-small" onClick={() => dispatch({ type: 'TOGGLE_SHOW_IMPORT' })}>
             {showImport ? 'Hide ▲' : 'Show ▼'}
           </button>
         </div>
@@ -567,11 +681,7 @@ export function PortfolioTab({
                             <input
                               type="checkbox"
                               checked={!importSkipped.has(i)}
-                              onChange={() => setImportSkipped(prev => {
-                                const next = new Set(prev);
-                                next.has(i) ? next.delete(i) : next.add(i);
-                                return next;
-                              })}
+                              onChange={() => dispatch({ type: 'TOGGLE_IMPORT_SKIP', index: i })}
                             />
                           </td>
                           <td className="font-bold">{h.symbol}</td>
@@ -606,7 +716,7 @@ export function PortfolioTab({
               <input
                 type="text"
                 value={newSymbol}
-                onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+                onChange={(e) => dispatch({ type: 'SET_NEW_SYMBOL', value: e.target.value.toUpperCase() })}
                 placeholder="e.g., AAPL"
               />
             </div>
@@ -615,7 +725,7 @@ export function PortfolioTab({
               <input
                 type="number"
                 value={newShares}
-                onChange={(e) => setNewShares(e.target.value)}
+                onChange={(e) => dispatch({ type: 'SET_NEW_SHARES', value: e.target.value })}
                 placeholder="10"
               />
             </div>
@@ -624,7 +734,7 @@ export function PortfolioTab({
               <input
                 type="number"
                 value={newCostBasis}
-                onChange={(e) => setNewCostBasis(e.target.value)}
+                onChange={(e) => dispatch({ type: 'SET_NEW_COST_BASIS', value: e.target.value })}
                 placeholder="Current price"
               />
             </div>
@@ -633,7 +743,7 @@ export function PortfolioTab({
               <input
                 type="number"
                 value={newTargetPct}
-                onChange={(e) => setNewTargetPct(e.target.value)}
+                onChange={(e) => dispatch({ type: 'SET_NEW_TARGET_PCT', value: e.target.value })}
                 placeholder="20"
               />
             </div>
@@ -647,7 +757,7 @@ export function PortfolioTab({
               <input
                 type="number"
                 value={cashAmount}
-                onChange={(e) => setCashAmount(e.target.value)}
+                onChange={(e) => dispatch({ type: 'SET_CASH_AMOUNT', value: e.target.value })}
                 placeholder="Enter cash amount"
               />
             </div>
@@ -745,7 +855,7 @@ export function PortfolioTab({
                       <label style={{ fontSize: '13px', marginBottom: '4px', display: 'block' }}>Allocation Method</label>
                       <select
                         value={allocationMethod}
-                        onChange={e => setAllocationMethod(e.target.value as 'equal_weight' | 'score_weighted')}
+                        onChange={e => dispatch({ type: 'SET_ALLOCATION_METHOD', value: e.target.value as 'equal_weight' | 'score_weighted' })}
                         className="form-select"
                         style={{ fontSize: '13px' }}
                       >
@@ -794,7 +904,7 @@ export function PortfolioTab({
                     <input
                       type="number"
                       value={contribution}
-                      onChange={(e) => setContribution(e.target.value)}
+                      onChange={(e) => dispatch({ type: 'SET_CONTRIBUTION', value: e.target.value })}
                       className="contribution-input"
                     />
                   </div>
@@ -889,7 +999,7 @@ export function PortfolioTab({
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0 }}>Rebalance History</h3>
-                <button className="btn-small" onClick={() => setShowRebalanceHistory(s => !s)}>
+                <button className="btn-small" onClick={() => dispatch({ type: 'TOGGLE_REBALANCE_HISTORY' })}>
                   {showRebalanceHistory ? 'Hide ▲' : `Show (${rebalanceHistory.length}) ▼`}
                 </button>
               </div>
@@ -910,7 +1020,7 @@ export function PortfolioTab({
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0 }}>Portfolio Performance</h3>
-                <button className="btn-small" onClick={() => setShowPerformance(s => !s)}>
+                <button className="btn-small" onClick={() => dispatch({ type: 'TOGGLE_PERFORMANCE' })}>
                   {showPerformance ? 'Hide ▲' : 'Show ▼'}
                 </button>
               </div>
@@ -930,7 +1040,7 @@ export function PortfolioTab({
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0 }}>Transaction History</h3>
-                <button className="btn-small" onClick={() => setShowTransactions(s => !s)}>
+                <button className="btn-small" onClick={() => dispatch({ type: 'TOGGLE_TRANSACTIONS' })}>
                   {showTransactions ? 'Hide ▲' : 'Show ▼'}
                 </button>
               </div>
@@ -947,7 +1057,7 @@ export function PortfolioTab({
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0 }}>Dividends</h3>
-                <button className="btn-small" onClick={() => setShowDividends(s => !s)}>
+                <button className="btn-small" onClick={() => dispatch({ type: 'TOGGLE_DIVIDENDS' })}>
                   {showDividends ? 'Hide ▲' : 'Show ▼'}
                 </button>
               </div>
@@ -964,7 +1074,7 @@ export function PortfolioTab({
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0 }}>Tax Lots</h3>
-                <button className="btn-small" onClick={() => setShowTaxLots(s => !s)}>
+                <button className="btn-small" onClick={() => dispatch({ type: 'TOGGLE_TAX_LOTS' })}>
                   {showTaxLots ? 'Hide ▲' : 'Show ▼'}
                 </button>
               </div>
