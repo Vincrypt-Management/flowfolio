@@ -187,8 +187,11 @@ impl BacktestEngine {
     }
 
     fn calculate_allocation(symbols: &[String], method: &str) -> HashMap<String, f64> {
+        if symbols.is_empty() {
+            return HashMap::new();
+        }
         let mut allocation = HashMap::new();
-        
+
         match method {
             "equal_weight" => {
                 let weight = 1.0 / symbols.len() as f64;

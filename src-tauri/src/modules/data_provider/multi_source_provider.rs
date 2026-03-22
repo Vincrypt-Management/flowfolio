@@ -375,7 +375,10 @@ impl MultiSourceProvider {
             .unwrap_or_default();
 
         // Fetch candles for historical data
-        let end_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let end_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(1_700_000_000);
         let start_time = end_time - (365 * 24 * 60 * 60);
         
         let candles_url = format!(
@@ -861,7 +864,10 @@ impl MultiSourceProvider {
             return Err("Yahoo rate limit exceeded".to_string());
         }
 
-        let end_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let end_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(1_700_000_000);
         let start_time = end_time - (365 * 24 * 60 * 60);
 
         let url = format!(

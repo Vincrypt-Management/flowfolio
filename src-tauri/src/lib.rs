@@ -47,6 +47,7 @@ use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
 use std::sync::atomic::{AtomicBool, Ordering};
+use crate::core::validation::{validate_symbol, validate_symbols};
 
 // Global service instances
 lazy_static::lazy_static! {
@@ -708,8 +709,9 @@ async fn score_symbols_batch(
     symbols: Vec<String>,
     config: ScoringConfig,
 ) -> Result<Vec<SymbolScore>, String> {
+    validate_symbols(&symbols)?;
     use modules::scoring::FactorScore;
-    
+
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     let mut scores = Vec::new();
     
@@ -1338,6 +1340,7 @@ fn export_journal_markdown(
 /// Get quantitative metrics for multiple symbols
 #[tauri::command]
 async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
+    validate_symbols(&symbols)?;
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     Ok(service.get_batch_quant_metrics(symbols).await)
 }
@@ -1346,8 +1349,9 @@ async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetric
 /// This eliminates heavy frontend calculations for better performance
 #[tauri::command]
 async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, String> {
+    validate_symbols(&symbols)?;
     use modules::quant_analysis::HistoricalPrice as QuantHistoricalPrice;
-    
+
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     
     // Fetch historical data for all symbols
@@ -1380,6 +1384,7 @@ async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, Strin
 /// Get current prices for multiple symbols
 #[tauri::command]
 async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String, f64>, String> {
+    validate_symbols(&symbols)?;
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     Ok(service.get_batch_prices(symbols).await)
 }
@@ -1387,6 +1392,7 @@ async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String
 /// Get single symbol quantitative metrics
 #[tauri::command]
 async fn get_quant_metrics_single(symbol: String) -> Result<QuantMetrics, String> {
+    validate_symbol(&symbol)?;
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     service.get_quant_metrics(&symbol).await
 }
@@ -1394,6 +1400,7 @@ async fn get_quant_metrics_single(symbol: String) -> Result<QuantMetrics, String
 /// Get single symbol current price
 #[tauri::command]
 async fn get_current_price_single(symbol: String) -> Result<f64, String> {
+    validate_symbol(&symbol)?;
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     service.get_current_price(&symbol).await
 }
@@ -2526,6 +2533,7 @@ fn assess_dividend_safety(fund: &FundamentalMetrics) -> Option<String> {
 /// Get historical price data for a symbol
 #[tauri::command]
 async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
+    validate_symbol(&symbol)?;
     let service = ENHANCED_MARKET_SERVICE.lock().await;
     let _days = days.unwrap_or(365);
 
@@ -3216,9 +3224,13 @@ pub fn run() {
         ])
         .setup(|app| {
             // Register Stronghold plugin with argon2 KDF
-            let salt_path = app.path().app_local_data_dir()
-                .expect("could not resolve app local data path")
-                .join("stronghold-salt.txt");
+            let salt_path = match app.path().app_local_data_dir() {
+                Ok(dir) => dir.join("stronghold-salt.txt"),
+                Err(e) => {
+                    eprintln!("[WARN] [app] Could not resolve app local data path: {e}");
+                    return Ok(());
+                }
+            };
             app.handle().plugin(
                 tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build()
             )?;
