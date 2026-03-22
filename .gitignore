@@ -62,3 +62,14 @@ out/
 .superpowers/
 dist-landing/
 test-results/
+
+# Release artifacts (hosted on GitHub Releases, not in git)
+release/
+*.apk
+*.aab
+*.dmg
+*.exe
+*.msi
+*.deb
+*.AppImage
+*.idsig
