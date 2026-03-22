@@ -33,35 +33,37 @@ use std::sync::atomic::AtomicBool;
 
 // ==================== GLOBAL STATE ====================
 
-lazy_static::lazy_static! {
-    pub(crate) static ref ENHANCED_MARKET_SERVICE: Arc<EnhancedMarketDataService> =
-        Arc::new(EnhancedMarketDataService::new_without_db());
+use once_cell::sync::Lazy;
 
-    pub(crate) static ref OPENROUTER_SERVICE: Arc<OpenRouterService> =
-        Arc::new(OpenRouterService::new());
+pub(crate) static ENHANCED_MARKET_SERVICE: Lazy<Arc<EnhancedMarketDataService>> =
+    Lazy::new(|| Arc::new(EnhancedMarketDataService::new_without_db()));
 
-    pub(crate) static ref ALPACA_SERVICE: Arc<AlpacaService> =
-        Arc::new(AlpacaService::new());
+pub(crate) static OPENROUTER_SERVICE: Lazy<Arc<OpenRouterService>> =
+    Lazy::new(|| Arc::new(OpenRouterService::new()));
 
-    pub(crate) static ref FUNDAMENTAL_SERVICE: Arc<FundamentalDataService> =
-        Arc::new(FundamentalDataService::new());
+pub(crate) static ALPACA_SERVICE: Lazy<Arc<AlpacaService>> =
+    Lazy::new(|| Arc::new(AlpacaService::new()));
 
-    pub(crate) static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> =
-        Arc::new(std::sync::atomic::AtomicBool::new(false));
+pub(crate) static FUNDAMENTAL_SERVICE: Lazy<Arc<FundamentalDataService>> =
+    Lazy::new(|| Arc::new(FundamentalDataService::new()));
 
-    pub(crate) static ref DB_POOL: Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>> =
-        Arc::new(Mutex::new(None));
+pub(crate) static DB_INITIALIZED: Lazy<Arc<std::sync::atomic::AtomicBool>> =
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
 
-    // In-memory plan storage
-    pub(crate) static ref SAVED_PLANS: Arc<Mutex<HashMap<String, VibePlanScript>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+pub(crate) static DB_POOL: Lazy<Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
-    /// Shared HTTP client — clone is cheap (shares the connection pool).
-    pub(crate) static ref HTTP_CLIENT: reqwest::Client = reqwest::Client::builder()
+// In-memory plan storage
+pub(crate) static SAVED_PLANS: Lazy<Arc<Mutex<HashMap<String, VibePlanScript>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+/// Shared HTTP client — clone is cheap (shares the connection pool).
+pub(crate) static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .expect("Failed to create shared HTTP client");
-}
+        .expect("Failed to create shared HTTP client")
+});
 
 /// Whether the Stronghold vault is currently unlocked.
 pub(crate) static VAULT_UNLOCKED: AtomicBool = AtomicBool::new(false);

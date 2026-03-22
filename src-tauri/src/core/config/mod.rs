@@ -135,9 +135,8 @@ impl AppConfig {
 }
 
 // Global application configuration
-lazy_static::lazy_static! {
-    pub static ref CONFIG: AppConfig = AppConfig::from_env();
-}
+use once_cell::sync::Lazy;
+pub static CONFIG: Lazy<AppConfig> = Lazy::new(AppConfig::from_env);
 
 #[cfg(test)]
 mod tests {

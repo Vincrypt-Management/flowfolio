@@ -336,9 +336,9 @@ impl HealthMonitor {
 }
 
 // Global health monitor instance
-lazy_static::lazy_static! {
-    pub static ref HEALTH_MONITOR: HealthMonitor = HealthMonitor::new(env!("CARGO_PKG_VERSION"));
-}
+use once_cell::sync::Lazy;
+pub static HEALTH_MONITOR: Lazy<HealthMonitor> =
+    Lazy::new(|| HealthMonitor::new(env!("CARGO_PKG_VERSION")));
 
 /// Macro for timing operations
 #[macro_export]

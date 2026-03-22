@@ -187,9 +187,8 @@ impl Default for ProgressManager {
 }
 
 // Global instance
-lazy_static::lazy_static! {
-    pub static ref PROGRESS_MANAGER: ProgressManager = ProgressManager::new();
-}
+use once_cell::sync::Lazy;
+pub static PROGRESS_MANAGER: Lazy<ProgressManager> = Lazy::new(ProgressManager::new);
 
 /// Helper to generate unique operation IDs
 pub fn generate_operation_id() -> String {
