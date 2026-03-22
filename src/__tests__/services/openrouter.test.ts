@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Mock @tauri-apps/api/core before the module loads.
-// In a non-Tauri test environment the invoke call throws, so isConfigured()
-// falls back to false — which is the behaviour we want to verify.
-vi.mock('@tauri-apps/api/core', () => ({
+// The openrouter service calls invokeWithResilience which ultimately calls
+// invoke() from ../../services/tauri. The global setup.ts mocks that module
+// with vi.fn() returning undefined (not throwing), so isConfigured() would
+// return undefined rather than false. Override the mock here to reject so the
+// catch block in isConfigured() returns false as intended.
+vi.mock('../../services/tauri', () => ({
   invoke: vi.fn().mockRejectedValue(new Error('Tauri not available in test environment')),
+  isTauriContext: vi.fn().mockReturnValue(false),
 }));
 
 // Import after mock is registered

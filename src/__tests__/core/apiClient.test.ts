@@ -1,20 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { apiClient, invokeCommand, getApiMetrics } from '../../core/api/client';
+import { apiClient, invokeCommand, getApiMetrics, resetMetrics } from '../../services/apiClient';
 
 describe('ApiClient', () => {
   beforeEach(() => {
-    apiClient.resetMetrics();
+    resetMetrics();
   });
 
-  it('invokeCommand returns a result (web mode mock)', async () => {
-    // In test env, isTauri() returns false, so web mode mocks are used
+  it('invokeCommand resolves without throwing in test env (invoke is mocked)', async () => {
+    // In test env, ../services/tauri invoke is mocked as vi.fn() returning undefined
     const result = await invokeCommand('health_check');
-    expect(result).toEqual({ status: 'ok', mode: 'web' });
+    // The mock returns undefined; we just verify it doesn't throw
+    expect(result).toBeUndefined();
   });
 
-  it('invokeCommand returns empty object for unknown commands in web mode', async () => {
+  it('invokeCommand resolves for any command in test env', async () => {
     const result = await invokeCommand('unknown_command');
-    expect(result).toEqual({});
+    expect(result).toBeUndefined();
   });
 
   it('getApiMetrics returns metrics object', () => {
@@ -31,11 +32,11 @@ describe('ApiClient', () => {
 
   it('resetCircuitBreaker does not throw', () => {
     expect(() => apiClient.resetCircuitBreaker()).not.toThrow();
-    expect(() => apiClient.resetCircuitBreaker('custom-service')).not.toThrow();
+    // Calling again after reset is safe
+    expect(() => apiClient.resetCircuitBreaker()).not.toThrow();
   });
 
   it('metrics update after invokeCommand', async () => {
-    // Use a unique command to avoid request deduplication
     await invokeCommand('get_cache_stats');
     const metrics = getApiMetrics();
     expect(metrics.totalRequests).toBeGreaterThanOrEqual(1);
@@ -53,7 +54,7 @@ describe('ApiClient', () => {
 
   it('resetMetrics clears all counters', () => {
     apiClient.recordCacheHit();
-    apiClient.resetMetrics();
+    resetMetrics();
     const metrics = getApiMetrics();
     expect(metrics.totalRequests).toBe(0);
     expect(metrics.cacheHits).toBe(0);

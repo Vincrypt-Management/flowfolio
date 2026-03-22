@@ -27,10 +27,28 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npx vitest run
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+      - run: cd src-tauri && cargo fmt --check
       - run: cd src-tauri && cargo clippy -- -D warnings
+      - run: cd src-tauri && cargo test
 
   build-linux:
     needs: preflight
@@ -218,7 +236,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -233,12 +251,15 @@ jobs:
         run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
 
       - name: Initialize Tauri Android
-        run: npx tauri android init
+        run: |
+          if [ ! -f src-tauri/gen/android/build.gradle.kts ]; then
+            npx tauri android init
+          fi
 
       - name: Build APK
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-        run: npx tauri android build --apk true
+        run: npx tauri android build --apk
 
       - name: Rename artifacts
         run: |

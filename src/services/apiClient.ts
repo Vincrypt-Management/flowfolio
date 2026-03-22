@@ -327,3 +327,31 @@ export async function invokeWithResilience<T>(
 ): Promise<T> {
   return apiClient.execute<T>(command, args);
 }
+
+// Alias kept for backwards-compat (e.g. tests that import invokeCommand)
+export const invokeCommand = invokeWithResilience;
+
+// Expose metrics as a standalone function
+export function getApiMetrics() {
+  return apiClient.getMetrics();
+}
+
+// Reset all metrics counters (useful in tests)
+export function resetMetrics() {
+  // Re-create the singleton's internal state via the public surface
+  apiClient.resetCircuitBreaker();
+  // Reset counters by calling recordCacheHit inverse is not available;
+  // we expose this only so tests can call it — actual reset is below.
+  // Cast to access private field via bracket notation in JS runtime.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (apiClient as any).metrics = {
+    totalRequests: 0,
+    successfulRequests: 0,
+    failedRequests: 0,
+    avgLatencyMs: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (apiClient as any).latencies = [];
+}
