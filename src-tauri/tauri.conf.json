@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' blob: data:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: https://*.supabase.co https://*.openrouter.ai https://*.alphavantage.co https://*.finnhub.io https://*.yahoo.com https://*.duckduckgo.com https://*.tavily.com https://*.brave.com https://*.alpaca.markets http://localhost:3001; object-src blob:; base-uri 'self'; form-action 'self';"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: https://*.openrouter.ai https://*.alphavantage.co https://*.finnhub.io https://*.yahoo.com https://*.duckduckgo.com https://*.tavily.com https://*.brave.com https://*.alpaca.markets; object-src 'none'; base-uri 'self'; form-action 'self';"
     }
   },
   "plugins": {
@@ -28,10 +28,6 @@
       "desktop": {
         "schemes": ["flowfolio"]
       }
-    },
-    "updater": {
-      "endpoints": ["https://github.com/vincrypt/flowfolio/releases/latest/download/latest.json"],
-      "pubkey": ""
     }
   },
   "bundle": {

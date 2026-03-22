@@ -3043,7 +3043,11 @@ async fn get_tax_loss_harvest_opportunities(
             }
         }
     }
-    opportunities.sort_by(|a, b| a["unrealized_loss"].as_f64().unwrap().partial_cmp(&b["unrealized_loss"].as_f64().unwrap()).unwrap());
+    opportunities.sort_by(|a, b| {
+        let a_val = a["unrealized_loss"].as_f64().unwrap_or(0.0);
+        let b_val = b["unrealized_loss"].as_f64().unwrap_or(0.0);
+        a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(opportunities)
 }
 
@@ -3085,7 +3089,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             health_check,
             get_default_plan,

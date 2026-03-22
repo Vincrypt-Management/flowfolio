@@ -16,15 +16,15 @@
     "fs:allow-exists",
     "store:default",
     "notification:default",
-    "updater:default",
     "stronghold:default",
     {
       "identifier": "fs:scope",
       "allow": [
-        "$HOME/**",
+        "$APPDATA/**",
+        "$APPCACHE/**",
+        "$APPLOCALDATA/**",
         "$DOWNLOAD/**",
-        "$DOCUMENT/**",
-        "$DESKTOP/**"
+        "$DOCUMENT/**"
       ]
     }
   ]
