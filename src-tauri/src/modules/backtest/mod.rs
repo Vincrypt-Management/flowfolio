@@ -211,34 +211,46 @@ impl BacktestEngine {
         allocation
     }
 
-    fn get_price_at_date(symbol: &str, _date: NaiveDate) -> f64 {
-        // Simplified: Use fixed prices for demo
-        // In production, would query actual historical data
-        match symbol {
-            "AAPL" => 150.0 + ((_date.month() % 12) as f64 * 2.5),
-            "MSFT" => 300.0 + ((_date.month() % 12) as f64 * 5.0),
-            "GOOGL" => 100.0 + ((_date.month() % 12) as f64 * 3.0),
-            "AMZN" => 120.0 + ((_date.month() % 12) as f64 * 4.0),
-            "META" => 350.0 + ((_date.month() % 12) as f64 * 8.0),
-            _ => 100.0,
-        }
+    fn get_price_at_date(
+        symbol: &str,
+        date: NaiveDate,
+        prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
+    ) -> f64 {
+        prices.get(symbol)
+            .and_then(|data| {
+                data.iter()
+                    .rev()
+                    .find(|(d, _)| *d <= date)
+                    .map(|(_, p)| *p)
+            })
+            .unwrap_or(100.0) // Fallback to $100 if no data
     }
 
-    fn calculate_portfolio_value(cash: f64, positions: &HashMap<String, f64>, date: NaiveDate) -> f64 {
+    fn calculate_portfolio_value(
+        cash: f64,
+        positions: &HashMap<String, f64>,
+        date: NaiveDate,
+        prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
+    ) -> f64 {
         let mut value = cash;
         for (symbol, shares) in positions {
-            let price = Self::get_price_at_date(symbol, date);
+            let price = Self::get_price_at_date(symbol, date, prices);
             value += shares * price;
         }
         value
     }
 
-    fn create_snapshot(date: NaiveDate, cash: f64, positions: &HashMap<String, f64>) -> PortfolioSnapshot {
+    fn create_snapshot(
+        date: NaiveDate,
+        cash: f64,
+        positions: &HashMap<String, f64>,
+        prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
+    ) -> PortfolioSnapshot {
         let mut position_snapshots = Vec::new();
         let mut total_value = cash;
 
         for (symbol, shares) in positions {
-            let price = Self::get_price_at_date(symbol, date);
+            let price = Self::get_price_at_date(symbol, date, prices);
             let value = shares * price;
             total_value += value;
             
@@ -744,6 +756,29 @@ mod tests {
     fn test_should_rebalance_yearly_true() {
         assert!(BacktestEngine::should_rebalance(12, "yearly"));
         assert!(BacktestEngine::should_rebalance(0, "yearly"));
+    }
+
+    // --- empty symbols guard ---
+
+    #[test]
+    fn test_empty_symbols_no_panic() {
+        // calculate_allocation with empty symbols must return an empty HashMap,
+        // not divide by zero or panic (guards the 1.0 / symbols.len() division).
+        let allocation = BacktestEngine::calculate_allocation(&[], "equal_weight");
+        assert!(allocation.is_empty(), "Expected empty HashMap for empty symbols");
+    }
+
+    #[test]
+    fn test_empty_symbols_run_backtest_no_panic() {
+        // A full backtest with no symbols should not panic and should
+        // produce a valid (zero-trade) result.
+        let config = BacktestConfig {
+            symbols: vec![],
+            ..default_config()
+        };
+        let result = BacktestEngine::run_backtest(config);
+        assert!(result.trades.is_empty(), "Expected no trades when symbols list is empty");
+        assert!(!result.timeline.is_empty(), "Timeline should still have an initial snapshot");
     }
 
     // --- calculate_allocation default case ---
