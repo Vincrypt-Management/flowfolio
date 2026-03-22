@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
 import { isTauriContext } from './services/tauri';
 import { useAuth } from './contexts/AuthContext';
-import { invoke } from "./services/tauri";
 import { invokeWithResilience } from './services/apiClient';
 import VibeStudio from "./components/VibeStudio";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -118,7 +117,7 @@ function App() {
 
   async function checkHealth() {
     try {
-      const health = await invoke<string>("health_check");
+      const health = await invokeWithResilience<string>("health_check");
       if (isMountedRef.current) {
         dispatch(actions.setStatus(health));
       }
@@ -131,7 +130,7 @@ function App() {
 
   async function loadTemplates() {
     try {
-      const templateList = await invoke<string[]>("list_templates");
+      const templateList = await invokeWithResilience<string[]>("list_templates");
       if (isMountedRef.current) {
         dispatch(actions.setTemplates(templateList));
       }
@@ -142,7 +141,7 @@ function App() {
 
   async function loadDefaultPlan() {
     try {
-      const defaultPlan = await invoke<VibePlan>("get_default_plan");
+      const defaultPlan = await invokeWithResilience<VibePlan>("get_default_plan");
       if (isMountedRef.current) {
         dispatch(actions.setPlan(defaultPlan));
       }
@@ -158,7 +157,7 @@ function App() {
 
   async function loadUniverses() {
     try {
-      const universeList = await invoke<Universe[]>("list_universes");
+      const universeList = await invokeWithResilience<Universe[]>("list_universes");
       if (isMountedRef.current) {
         dispatch(actions.setUniverses(universeList));
       }
@@ -169,7 +168,7 @@ function App() {
 
   async function loadSavedPlans() {
     try {
-      const plans = await invoke<string[]>("list_saved_plans");
+      const plans = await invokeWithResilience<string[]>("list_saved_plans");
       if (isMountedRef.current) {
         dispatch(actions.setSavedPlans(plans));
       }
@@ -183,7 +182,7 @@ function App() {
       dispatch(actions.setIsLoadingMarket(true));
     }
     try {
-      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols: DEFAULT_SYMBOLS });
+      const prices = await invokeWithResilience<Record<string, number>>("get_current_prices_batch", { symbols: DEFAULT_SYMBOLS });
       if (isMountedRef.current) {
         dispatch(actions.setMarketPrices(prices));
       }
@@ -204,7 +203,7 @@ function App() {
 
     try {
       const symbols = state.newUniverseSymbols.split(",").map(s => s.trim().toUpperCase()).filter(s => s);
-      const universe = await invoke<Universe>("create_universe", {
+      const universe = await invokeWithResilience<Universe>("create_universe", {
         name: state.newUniverseName,
         description: `Universe created on ${new Date().toLocaleDateString()}`,
         symbols
@@ -221,7 +220,7 @@ function App() {
 
   const deleteUniverse = useCallback(async (id: string) => {
     try {
-      await invoke("delete_universe", { id });
+      await invokeWithResilience("delete_universe", { id });
       if (isMountedRef.current) {
         dispatch(actions.universeDeleted(id));
       }
@@ -239,7 +238,7 @@ function App() {
     }
 
     try {
-      await invoke("save_plan", { plan: state.plan });
+      await invokeWithResilience("save_plan", { plan: state.plan });
       await loadSavedPlans();
       if (isMountedRef.current) {
         addToast("Plan saved successfully!", "success");
@@ -253,7 +252,7 @@ function App() {
 
   const exportData = useCallback(async () => {
     try {
-      const bundleJson = await invoke<string>("export_data_bundle", {
+      const bundleJson = await invokeWithResilience<string>("export_data_bundle", {
         plan: state.plan,
         journalEntries: []
       });
@@ -273,7 +272,7 @@ function App() {
 
     try {
       const text = await file.text();
-      const result = await invoke<{ success: boolean }>("import_data_bundle", { bundleJson: text });
+      const result = await invokeWithResilience<{ success: boolean }>("import_data_bundle", { bundleJson: text });
       if (result.success && isMountedRef.current) {
         addToast("Data imported successfully!", "success");
         await loadUniverses();
@@ -288,7 +287,7 @@ function App() {
 
   const loadTemplate = useCallback(async (templateName: string) => {
     try {
-      const template = await invoke<VibePlan>("get_template", { name: templateName });
+      const template = await invokeWithResilience<VibePlan>("get_template", { name: templateName });
       if (isMountedRef.current) {
         dispatch(actions.setPlan(template));
         dispatch(actions.setSelectedTemplate(templateName));
@@ -335,7 +334,7 @@ function App() {
 
   const loadPlan = useCallback(async (planName: string) => {
     try {
-      const loadedPlan = await invoke<VibePlan>("load_plan", { name: planName });
+      const loadedPlan = await invokeWithResilience<VibePlan>("load_plan", { name: planName });
       if (isMountedRef.current) {
         dispatch(actions.setPlan(loadedPlan));
         addToast("Plan loaded successfully!", "success");

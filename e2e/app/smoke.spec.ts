@@ -8,9 +8,8 @@ test.describe('App smoke tests', () => {
   test('app loads without crash', async ({ page }) => {
     // The app shell should mount — no fatal error boundary shown
     await expect(page.locator('body')).toBeVisible();
-    await expect(page.locator('.error-boundary')).not.toBeVisible().catch(() => {
-      // Element may not exist at all — that is also fine
-    });
+    // Error boundary should not be visible (count=0 handles element not existing)
+    await expect(page.locator('.error-boundary')).toHaveCount(0);
     // Root div rendered
     await expect(page.locator('#root')).not.toBeEmpty();
   });

@@ -17,6 +17,12 @@ vi.mock('../../services/auth', () => ({
   },
 }));
 
+// Mock tauri service — isTauriContext must return false so loginWithGoogle uses window.open
+vi.mock('../../services/tauri', () => ({
+  isTauriContext: vi.fn().mockReturnValue(false),
+  invoke: vi.fn().mockRejectedValue(new Error('Not in Tauri context')),
+}));
+
 // Mock @tauri-apps/plugin-opener
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
