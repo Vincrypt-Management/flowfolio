@@ -1559,6 +1559,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "rayon",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
