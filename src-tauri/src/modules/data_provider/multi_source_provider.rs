@@ -352,13 +352,12 @@ impl MultiSourceProvider {
             return Err("Finnhub rate limit exceeded".to_string());
         }
 
-        // Fetch quote
-        let quote_url = format!(
-            "https://finnhub.io/api/v1/quote?symbol={}&token={}",
-            symbol, api_key.trim()
-        );
+        // Fetch quote — API key in header to avoid leaking it in logs
+        let quote_url = format!("https://finnhub.io/api/v1/quote?symbol={}", symbol);
 
-        let response = self.client.get(&quote_url).send().await
+        let response = self.client.get(&quote_url)
+            .header("X-Finnhub-Token", api_key.trim())
+            .send().await
             .map_err(|e| format!("Finnhub request failed: {}", e))?;
 
         if !response.status().is_success() {
@@ -384,11 +383,13 @@ impl MultiSourceProvider {
         let start_time = end_time - (365 * 24 * 60 * 60);
         
         let candles_url = format!(
-            "https://finnhub.io/api/v1/stock/candle?symbol={}&resolution=D&from={}&to={}&token={}",
-            symbol, start_time, end_time, api_key.trim()
+            "https://finnhub.io/api/v1/stock/candle?symbol={}&resolution=D&from={}&to={}",
+            symbol, start_time, end_time
         );
 
-        let candles_response = self.client.get(&candles_url).send().await;
+        let candles_response = self.client.get(&candles_url)
+            .header("X-Finnhub-Token", api_key.trim())
+            .send().await;
         let historical = if let Ok(resp) = candles_response {
             if let Ok(candles_data) = resp.json::<Value>().await {
                 if candles_data.get("s").and_then(|s| s.as_str()) == Some("ok") {
