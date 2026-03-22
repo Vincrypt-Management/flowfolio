@@ -1,7 +1,8 @@
 {
   "name": "flowfolio",
-  "private": true,
-  "version": "0.3.2",
+  "private": false,
+  "version": "0.3.3",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",

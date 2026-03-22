@@ -8,6 +8,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![iOS](https://img.shields.io/badge/iOS-14+-000000?logo=apple)](https://developer.apple.com/)
 [![Android](https://img.shields.io/badge/Android-7.0+-3DDC84?logo=android)](https://developer.android.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
@@ -152,7 +153,7 @@ This application prioritizes your privacy and security:
 
 ## 📊 Project Status
 
-**Current Version:** 0.3.2
+**Current Version:** 0.3.3
 **Status:** ✅ Core Development Complete
 
 ### Completed Epics

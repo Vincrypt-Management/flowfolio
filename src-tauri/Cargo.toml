@@ -1,9 +1,10 @@
 [package]
 name = "flowfolio"
-version = "0.3.2"
+version = "0.3.3"
 description = "FlowFolio - AI-Powered Vibe-Based Investing"
 authors = ["evintleovonzko"]
 edition = "2021"
+license = "MIT"
 default-run = "flowfolio"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
