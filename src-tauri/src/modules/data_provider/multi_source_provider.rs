@@ -1,7 +1,6 @@
 // Multi-Source Data Provider
 // Aggregates data from multiple reliable sources with smart failover and caching
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -56,32 +55,31 @@ pub struct ProviderConfig {
 
 /// Multi-source data provider with intelligent failover
 pub struct MultiSourceProvider {
-    client: Client,
     // API Keys (prioritizing free tier providers)
     // Top tier - Unlimited/No key required
     alpaca_key: Option<String>,      // Unlimited free basic data
     alpaca_secret: Option<String>,
-    
+
     // High tier - Generous free limits
     finnhub_key: Option<String>,     // 60 calls/min free
     tiingo_key: Option<String>,      // 500 calls/hour free
     twelve_data_key: Option<String>, // 800 calls/day free
     fmp_key: Option<String>,         // 250 calls/day free
-    
+
     // Lower tier - Has paid tiers (use as fallback only)
     alphavantage_key: Option<String>, // 5 calls/min free, but has paid plans
     polygon_key: Option<String>,      // 5 calls/min free, but has paid plans
-    
+
     // In-memory cache with TTL
     quote_cache: Arc<DashMap<String, CacheEntry<StockQuote>>>,
     historical_cache: Arc<DashMap<String, CacheEntry<Vec<HistoricalPrice>>>>,
-    
+
     // Rate limiting
     rate_limits: Arc<DashMap<String, (u32, SystemTime)>>,
-    
+
     // Provider health tracking
     provider_health: Arc<DashMap<String, (u32, u32)>>, // (successes, failures)
-    
+
     // Cache TTL settings
     quote_cache_ttl: Duration,
     historical_cache_ttl: Duration,
@@ -114,12 +112,6 @@ impl MultiSourceProvider {
         );
 
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .pool_max_idle_per_host(10)
-                .pool_idle_timeout(Duration::from_secs(90))
-                .build()
-                .expect("Failed to create HTTP client"),
             alpaca_key,
             alpaca_secret,
             polygon_key,
@@ -251,7 +243,7 @@ impl MultiSourceProvider {
             symbol, start_date, end_date
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&bars_url)
             .header("APCA-API-KEY-ID", api_key.trim())
             .header("APCA-API-SECRET-KEY", api_secret.trim())
@@ -296,7 +288,7 @@ impl MultiSourceProvider {
             symbol, hist_start, hist_end
         );
 
-        let hist_response = self.client
+        let hist_response = crate::HTTP_CLIENT
             .get(&hist_url)
             .header("APCA-API-KEY-ID", api_key.trim())
             .header("APCA-API-SECRET-KEY", api_secret.trim())
@@ -355,7 +347,7 @@ impl MultiSourceProvider {
         // Fetch quote — API key in header to avoid leaking it in logs
         let quote_url = format!("https://finnhub.io/api/v1/quote?symbol={}", symbol);
 
-        let response = self.client.get(&quote_url)
+        let response = crate::HTTP_CLIENT.get(&quote_url)
             .header("X-Finnhub-Token", api_key.trim())
             .send().await
             .map_err(|e| format!("Finnhub request failed: {}", e))?;
@@ -387,7 +379,7 @@ impl MultiSourceProvider {
             symbol, start_time, end_time
         );
 
-        let candles_response = self.client.get(&candles_url)
+        let candles_response = crate::HTTP_CLIENT.get(&candles_url)
             .header("X-Finnhub-Token", api_key.trim())
             .send().await;
         let historical = if let Ok(resp) = candles_response {
@@ -458,7 +450,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let response = self.client.get(&quote_url).send().await
+        let response = crate::HTTP_CLIENT.get(&quote_url).send().await
             .map_err(|e| format!("FMP request failed: {}", e))?;
 
         if !response.status().is_success() {
@@ -484,7 +476,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let hist_response = self.client.get(&hist_url).send().await;
+        let hist_response = crate::HTTP_CLIENT.get(&hist_url).send().await;
         let historical = if let Ok(resp) = hist_response {
             if let Ok(hist_data) = resp.json::<Value>().await {
                 hist_data.get("historical")
@@ -534,7 +526,7 @@ impl MultiSourceProvider {
             symbol
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&iex_url)
             .header("Authorization", format!("Token {}", api_key.trim()))
             .send()
@@ -571,7 +563,7 @@ impl MultiSourceProvider {
             symbol, start_date, end_date
         );
 
-        let hist_response = self.client
+        let hist_response = crate::HTTP_CLIENT
             .get(&hist_url)
             .header("Authorization", format!("Token {}", api_key.trim()))
             .send()
@@ -624,7 +616,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let response = self.client.get(&quote_url).send().await
+        let response = crate::HTTP_CLIENT.get(&quote_url).send().await
             .map_err(|e| format!("Twelve Data request failed: {}", e))?;
 
         if !response.status().is_success() {
@@ -653,7 +645,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let ts_response = self.client.get(&ts_url).send().await;
+        let ts_response = crate::HTTP_CLIENT.get(&ts_url).send().await;
         let historical = if let Ok(resp) = ts_response {
             if let Ok(ts_data) = resp.json::<Value>().await {
                 ts_data.get("values")
@@ -703,7 +695,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let response = self.client.get(&quote_url).send().await
+        let response = crate::HTTP_CLIENT.get(&quote_url).send().await
             .map_err(|e| format!("Polygon request failed: {}", e))?;
 
         if !response.status().is_success() {
@@ -736,7 +728,7 @@ impl MultiSourceProvider {
             symbol, start_date, end_date, api_key.trim()
         );
 
-        let hist_response = self.client.get(&hist_url).send().await;
+        let hist_response = crate::HTTP_CLIENT.get(&hist_url).send().await;
         let historical = if let Ok(resp) = hist_response {
             if let Ok(hist_data) = resp.json::<Value>().await {
                 hist_data.get("results")
@@ -788,7 +780,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let response = self.client.get(&quote_url).send().await
+        let response = crate::HTTP_CLIENT.get(&quote_url).send().await
             .map_err(|e| format!("Alpha Vantage request failed: {}", e))?;
 
         if !response.status().is_success() {
@@ -820,7 +812,7 @@ impl MultiSourceProvider {
             symbol, api_key.trim()
         );
 
-        let ts_response = self.client.get(&ts_url).send().await;
+        let ts_response = crate::HTTP_CLIENT.get(&ts_url).send().await;
         let historical = if let Ok(resp) = ts_response {
             if let Ok(ts_data) = resp.json::<Value>().await {
                 ts_data.get("Time Series (Daily)")
@@ -880,7 +872,7 @@ impl MultiSourceProvider {
 
         tracing::debug!(symbol = %symbol, "Fetching data from Yahoo");
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
             .send()

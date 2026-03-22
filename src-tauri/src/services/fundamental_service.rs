@@ -2,7 +2,6 @@
 // Fetches company financials from Yahoo Finance and Alpha Vantage
 // Features: Caching, rate limiting, fallback providers
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -65,7 +64,6 @@ struct CacheEntry {
 
 /// Fundamental Data Service
 pub struct FundamentalDataService {
-    client: Client,
     alpha_vantage_key: Option<String>,
     cache: Arc<RwLock<HashMap<String, CacheEntry>>>,
     cache_ttl: Duration,
@@ -78,10 +76,6 @@ impl FundamentalDataService {
         let alpha_vantage_key = get_env_var("ALPHA_VANTAGE_API_KEY");
         
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .expect("Failed to create HTTP client"),
             alpha_vantage_key,
             cache: Arc::new(RwLock::new(HashMap::new())),
             cache_ttl: Duration::from_secs(48 * 60 * 60), // 48 hours
@@ -154,7 +148,7 @@ impl FundamentalDataService {
 
         tracing::debug!(symbol = %symbol, "Fetching fundamentals from Yahoo Finance");
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
             .send()
@@ -232,7 +226,7 @@ impl FundamentalDataService {
 
         tracing::debug!(symbol = %symbol, "Fetching fundamentals from Alpha Vantage");
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await

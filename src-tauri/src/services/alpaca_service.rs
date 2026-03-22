@@ -2,9 +2,7 @@
 // Securely handles Alpaca API requests through the Rust backend
 // Features: Account info, positions, paper/live trading support
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// Alpaca account information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,7 +73,6 @@ pub struct AlpacaOrder {
 
 /// Alpaca Trading Service
 pub struct AlpacaService {
-    client: Client,
     api_key: Option<String>,
     api_secret: Option<String>,
     is_paper: bool,
@@ -92,10 +89,6 @@ impl AlpacaService {
             .unwrap_or(true); // Default to paper trading for safety
 
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .expect("Failed to create HTTP client"),
             api_key,
             api_secret,
             is_paper,
@@ -125,7 +118,7 @@ impl AlpacaService {
 
         tracing::info!(mode = if self.is_paper { "paper" } else { "live" }, "Fetching Alpaca account info");
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(format!("{}/v2/account", self.base_url()))
             .header("APCA-API-KEY-ID", api_key)
             .header("APCA-API-SECRET-KEY", api_secret)
@@ -152,7 +145,7 @@ impl AlpacaService {
 
         tracing::info!("Fetching Alpaca positions");
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(format!("{}/v2/positions", self.base_url()))
             .header("APCA-API-KEY-ID", api_key)
             .header("APCA-API-SECRET-KEY", api_secret)
@@ -178,7 +171,7 @@ impl AlpacaService {
         let api_secret = self.api_secret.as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(format!("{}/v2/positions/{}", self.base_url(), symbol))
             .header("APCA-API-KEY-ID", api_key)
             .header("APCA-API-SECRET-KEY", api_secret)
@@ -208,7 +201,7 @@ impl AlpacaService {
             url = format!("{}?status={}", url, s);
         }
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("APCA-API-KEY-ID", api_key)
             .header("APCA-API-SECRET-KEY", api_secret)
@@ -275,7 +268,6 @@ mod tests {
     #[test]
     fn base_url_returns_live_url_when_is_paper_false() {
         let svc = AlpacaService {
-            client: reqwest::Client::new(),
             api_key: None,
             api_secret: None,
             is_paper: false,

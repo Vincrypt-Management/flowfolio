@@ -2,9 +2,7 @@
 // Securely proxies AI requests through the Rust backend
 // Features: Rate limiting, streaming support, response caching
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// OpenRouter message format
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +52,6 @@ pub struct OpenRouterUsage {
 
 /// OpenRouter API Service
 pub struct OpenRouterService {
-    client: Client,
     api_key: Option<String>,
     api_url: String,
     default_model: String,
@@ -76,10 +73,6 @@ impl OpenRouterService {
         tracing::debug!(model = %default_model, "OpenRouter default model");
 
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(120))
-                .build()
-                .expect("Failed to create HTTP client"),
             api_key,
             api_url,
             default_model,
@@ -119,7 +112,7 @@ impl OpenRouterService {
 
         tracing::info!(model = %model_name, max_tokens = ?request.max_tokens, "Sending chat request");
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .post(format!("{}/chat/completions", self.api_url))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")

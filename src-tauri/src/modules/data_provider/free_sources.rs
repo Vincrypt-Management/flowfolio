@@ -16,11 +16,10 @@
 // 10. World Bank       - Economic indicators
 // ============================================================================
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use super::multi_source_provider::{StockQuote, HistoricalPrice, MarketDataResult};
 
 /// Company fundamentals data
@@ -49,19 +48,11 @@ pub struct EconomicIndicator {
 }
 
 /// Free data sources that don't require API keys
-pub struct FreeDataProviders {
-    client: Client,
-}
+pub struct FreeDataProviders {}
 
 impl FreeDataProviders {
     pub fn new() -> Self {
-        Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(15))
-                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .build()
-                .expect("Failed to create HTTP client"),
-        }
+        Self {}
     }
 
     /// Get list of all available free sources
@@ -91,7 +82,7 @@ impl FreeDataProviders {
             symbol, start_time, end_time
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
@@ -184,7 +175,7 @@ impl FreeDataProviders {
             symbol
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
@@ -193,7 +184,7 @@ impl FreeDataProviders {
         if !response.status().is_success() {
             // Try NYSE
             let url_nyse = format!("https://www.google.com/finance/quote/{}:NYSE", symbol);
-            let response_nyse = self.client.get(&url_nyse).send().await
+            let response_nyse = crate::HTTP_CLIENT.get(&url_nyse).send().await
                 .map_err(|e| format!("Google Finance request failed: {}", e))?;
             
             if !response_nyse.status().is_success() {
@@ -216,7 +207,7 @@ impl FreeDataProviders {
             symbol.to_lowercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
@@ -274,7 +265,7 @@ impl FreeDataProviders {
             symbol.to_uppercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("Accept", "application/json")
             .send()
@@ -310,7 +301,7 @@ impl FreeDataProviders {
             symbol.to_uppercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
@@ -350,7 +341,7 @@ impl FreeDataProviders {
             symbol.to_uppercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("Accept", "application/json, text/plain, */*")
             .header("Origin", "https://www.nasdaq.com")
@@ -412,7 +403,7 @@ impl FreeDataProviders {
             symbol.to_uppercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("Accept", "application/json")
             .header("Origin", "https://www.nasdaq.com")
@@ -465,7 +456,7 @@ impl FreeDataProviders {
             symbol.to_uppercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .header("Accept", "application/json")
             .header("Domain-Id", "www")
@@ -511,7 +502,7 @@ impl FreeDataProviders {
         // First get CIK from ticker
         let tickers_url = "https://www.sec.gov/files/company_tickers.json";
         
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(tickers_url)
             .header("Accept", "application/json")
             .send()
@@ -542,7 +533,7 @@ impl FreeDataProviders {
             cik
         );
 
-        let facts_response = self.client
+        let facts_response = crate::HTTP_CLIENT
             .get(&facts_url)
             .header("Accept", "application/json")
             .header("User-Agent", "FlowFolio/1.0 (contact@example.com)")
@@ -594,7 +585,7 @@ impl FreeDataProviders {
             series_id
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
@@ -664,7 +655,7 @@ impl FreeDataProviders {
             symbol.to_uppercase()
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
@@ -716,7 +707,7 @@ impl FreeDataProviders {
             query
         );
 
-        let response = self.client
+        let response = crate::HTTP_CLIENT
             .get(&url)
             .send()
             .await
