@@ -22,7 +22,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
-.env.encrypted
+# .env.encrypted ships as PLACEHOLDER for open-source builds
+# Run `cd src-tauri && cargo run --bin encrypt-env` to encrypt your own .env
 
 # Claude Code local settings
 .claude/settings.local.json

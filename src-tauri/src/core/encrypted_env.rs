@@ -172,14 +172,34 @@ pub fn load_encrypted_env(_app_data_dir: Option<&std::path::Path>) -> Result<(),
 /// Decrypt the compile-time embedded encrypted env and store in `DECRYPTED_ENV`.
 ///
 /// Safe to call from any thread. Calling more than once returns an error.
+/// Gracefully handles decryption failure (placeholder file or different machine).
 pub fn load_embedded_env() -> Result<(), String> {
     let encrypted_content = EMBEDDED_ENCRYPTED_ENV.trim();
-    let vars = decrypt_env_file(encrypted_content)?;
-    let count = vars.len();
-    DECRYPTED_ENV
-        .set(vars)
-        .map_err(|_| "Encrypted env already loaded".to_string())?;
-    tracing::info!(count = count, "Loaded embedded encrypted env vars");
+
+    // Skip if placeholder or empty
+    if encrypted_content.is_empty() || encrypted_content == "PLACEHOLDER" {
+        tracing::info!("No encrypted env embedded — using process environment only. Run `cargo run --bin encrypt-env` to encrypt your .env file.");
+        DECRYPTED_ENV
+            .set(HashMap::new())
+            .map_err(|_| "Encrypted env already loaded".to_string())?;
+        return Ok(());
+    }
+
+    match decrypt_env_file(encrypted_content) {
+        Ok(vars) => {
+            let count = vars.len();
+            DECRYPTED_ENV
+                .set(vars)
+                .map_err(|_| "Encrypted env already loaded".to_string())?;
+            tracing::info!(count = count, "Loaded embedded encrypted env vars");
+        }
+        Err(e) => {
+            tracing::warn!("Could not decrypt embedded env (wrong machine or corrupted): {}. Using process environment only.", e);
+            DECRYPTED_ENV
+                .set(HashMap::new())
+                .map_err(|_| "Encrypted env already loaded".to_string())?;
+        }
+    }
     Ok(())
 }
 
