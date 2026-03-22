@@ -92,24 +92,6 @@ npm run tauri build
 # - Linux: src-tauri/target/release/bundle/appimage/
 ```
 
-### Mobile Development
-
-See [MOBILE_SETUP.md](MOBILE_SETUP.md) for detailed mobile setup instructions.
-
-```bash
-# Initialize mobile targets (one-time setup)
-npm run android:init    # Android
-npm run ios:init        # iOS (macOS only)
-
-# Run on mobile
-npm run android:dev     # Android device/emulator
-npm run ios:dev         # iOS simulator
-
-# Build for mobile
-npm run android:build   # Android APK/AAB
-npm run ios:build       # iOS IPA
-```
-
 ---
 
 ## 🔒 Security
@@ -123,26 +105,11 @@ This application prioritizes your privacy and security:
 - ✅ **Capability Restricted** - Minimal permissions model
 - ✅ **Auditable** - Run `./security_check.sh` to verify
 
-**See:** [SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md) for details.
-
 ---
 
 ## 📖 Documentation
 
-### Core Documentation
-- **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Current development status and roadmap
-- **[SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md)** - Security requirements and validation
-- **[BUILD_REPRODUCIBILITY.md](BUILD_REPRODUCIBILITY.md)** - Build instructions and signing
-- **[EPIC_H_COMPLETION.md](EPIC_H_COMPLETION.md)** - Security hardening report
-
-### Architecture & Quality
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and data flow diagrams
 - **[CODE_STANDARDS.md](CODE_STANDARDS.md)** - Coding standards and best practices
-- **[SECURITY.md](SECURITY.md)** - Security policy and vulnerability disclosure
-
-### QA Audit (January 2026)
-- **[QA_AUDIT_REPORT.md](QA_AUDIT_REPORT.md)** - Comprehensive code quality audit findings
-- **[AUDIT_FIXES_CHECKLIST.md](AUDIT_FIXES_CHECKLIST.md)** - Actionable fix checklist with progress tracking
 
 ---
 
@@ -185,7 +152,7 @@ This application prioritizes your privacy and security:
 
 ## 📊 Project Status
 
-**Current Version:** 0.1.0 MLP  
+**Current Version:** 0.3.2
 **Status:** ✅ Core Development Complete
 
 ### Completed Epics
@@ -199,7 +166,6 @@ This application prioritizes your privacy and security:
 - ✅ **Epic G** - Backtest lab
 - ✅ **Epic H** - Packaging + hardening
 
-**See:** [PROJECT_STATUS.md](PROJECT_STATUS.md) for detailed progress.
 
 ---
 
