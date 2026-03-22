@@ -57,7 +57,7 @@ export function parseBrokerCSV(text: string): ParseResult {
 
   const rawLines = text.split(/\r?\n/).filter(l => l.trim());
 
-  let headerIdx = rawLines.findIndex(l => l.toLowerCase().includes('symbol'));
+  const headerIdx = rawLines.findIndex(l => l.toLowerCase().includes('symbol'));
   if (headerIdx === -1) return { holdings, broker: 'Unknown', errors: ['No header row found'] };
 
   const headers = parseCSVLine(rawLines[headerIdx]).map(h => h.replace(/^"|"$/g, '').trim());

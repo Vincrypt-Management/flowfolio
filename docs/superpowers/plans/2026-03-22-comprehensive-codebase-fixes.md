@@ -1,1925 +1,1065 @@
-# Comprehensive Codebase Fixes Implementation Plan
+# Comprehensive Codebase Fixes — Round 2
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix all critical security vulnerabilities, architectural issues, code quality problems, testing gaps, and incomplete features identified in the comprehensive code review.
+**Goal:** Fix all critical, high, and medium priority issues identified in the full-stack codebase audit — covering CI, git hygiene, dead code removal, deduplication, error handling, performance, and frontend quality.
 
-**Architecture:** Six phases executed sequentially — security fixes first (they block everything), then architecture cleanup, developer experience, code standards compliance, testing, and feature completion. Each phase produces independently committable, working software.
+**Architecture:** Four phases of independent fixes: (1) CI & git cleanup, (2) Rust backend quality, (3) Frontend deduplication & quality, (4) Build & config optimization. Each task is self-contained and produces a working build.
 
-**Tech Stack:** Rust (Tauri 2), React 19, TypeScript, SQLite, tracing, ESLint, Vitest
+**Tech Stack:** Rust, TypeScript/React, Tauri 2, Vite 7, GitHub Actions, SQLite
 
 ---
 
-## Phase 1: Security Fixes
+## Phase 1: CI, Git Hygiene & Critical Fixes
 
-### Task 1: Remove Hardcoded Encryption Keys — Use Machine-Derived Key
+### Task 1: Add test steps to CI preflight + Rust cache
 
 **Files:**
-- Modify: `src-tauri/src/core/encrypted_env.rs:21-31`
-- Modify: `src-tauri/src/core/encrypted_env.rs:38-59` (encrypt_string)
-- Modify: `src-tauri/src/core/encrypted_env.rs:63-89` (decrypt_string)
-- Modify: `src-tauri/src/core/encrypted_env.rs:161-174` (load_embedded_env)
+- Modify: `.github/workflows/release.yml` (preflight job, lines 15-27)
 
-**Context:** The current implementation uses hardcoded static AES and ChaCha20 keys/nonces embedded in the binary. Anyone who extracts the binary can decrypt `.env.encrypted`. The dual-layer encryption with static keys provides zero actual security.
+- [ ] **Step 0: Verify all tests pass locally first**
 
-**Approach:** Replace with a single-layer AES-256-GCM using a key derived at runtime from a machine-specific identifier (hostname + username hash) via PBKDF2. Random nonces stored alongside the ciphertext. This is obfuscation-grade (appropriate for a desktop app where the user owns the machine), but honestly documented as such.
+Run:
+```bash
+cd /Users/evintleovonzko/Documents/Works/vincrypt/flowfolio
+npx vitest run 2>&1 | tail -5
+cd src-tauri && cargo test 2>&1 | tail -5
+```
+Expected: Both pass. If vitest has failures, fix them before adding to CI (or use `npx vitest run --passWithNoTests` in CI).
 
-- [ ] **Step 1: Update module documentation to be honest about security level**
+- [ ] **Step 1: Add cargo test and npm test to preflight job, plus Rust cache**
 
-Replace the module doc comment at the top of `src-tauri/src/core/encrypted_env.rs`:
+In `.github/workflows/release.yml`, replace the `preflight` job with:
 
-```rust
-//! Encrypted Environment Variables — Obfuscation Layer
-//!
-//! This module provides obfuscated storage of environment variables for release
-//! builds. API keys are encrypted using AES-256-GCM with a machine-derived key.
-//!
-//! IMPORTANT: This is NOT cryptographically secure against a determined attacker
-//! with access to the binary and the same machine. It prevents casual inspection
-//! of the binary and protects against accidental key leakage in logs/screenshots.
-//!
-//! For true secret protection, use the Stronghold vault (requires master password).
-//!
-//! In debug mode, plain .env files are used for convenience.
-//! In release mode, the encrypted payload is embedded at compile time.
+```yaml
+  preflight:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx vitest run
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+      - run: cd src-tauri && cargo fmt --check
+      - run: cd src-tauri && cargo clippy -- -D warnings
+      - run: cd src-tauri && cargo test
 ```
 
-- [ ] **Step 2: Replace static keys with machine-derived key**
+- [ ] **Step 2: Fix Android build flags**
 
-Remove the four `const` lines (AES_KEY, CHACHA_KEY, AES_NONCE, CHACHA_NONCE). Replace with a key derivation function:
-
-```rust
-use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
-    Aes256Gcm, Nonce, AeadCore,
-};
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use std::collections::HashMap;
-
-/// Derive an encryption key from machine-specific identifiers.
-/// This is obfuscation-grade — not secure against local attackers.
-fn derive_machine_key() -> [u8; 32] {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let hostname = hostname::get()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "flowfolio-default".to_string());
-
-    let username = whoami::username();
-
-    let mut hasher = DefaultHasher::new();
-    format!("flowfolio-env-key-{}-{}", hostname, username).hash(&mut hasher);
-    let seed = hasher.finish();
-
-    // Stretch the seed into 32 bytes using repeated hashing
-    let mut key = [0u8; 32];
-    for i in 0..4 {
-        let mut h = DefaultHasher::new();
-        (seed, i as u64).hash(&mut h);
-        let chunk = h.finish().to_le_bytes();
-        key[i * 8..(i + 1) * 8].copy_from_slice(&chunk);
-    }
-    key
-}
+In the same file, in the `build-android` job, change:
+```yaml
+      - name: Initialize Tauri Android
+        run: |
+          if [ ! -f src-tauri/gen/android/build.gradle.kts ]; then
+            npx tauri android init
+          fi
 ```
 
-- [ ] **Step 3: Update encrypt_string to use random nonces**
-
-```rust
-/// Encrypt a string using AES-256-GCM with a machine-derived key.
-/// The random 12-byte nonce is prepended to the ciphertext.
-pub fn encrypt_string(plaintext: &str) -> Result<String, String> {
-    let key = derive_machine_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
-
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let ciphertext = cipher
-        .encrypt(&nonce, plaintext.as_bytes())
-        .map_err(|e| format!("Encryption failed: {}", e))?;
-
-    // Prepend nonce to ciphertext
-    let mut combined = nonce.to_vec();
-    combined.extend_from_slice(&ciphertext);
-    Ok(BASE64.encode(&combined))
-}
+And change `--apk true` to `--apk`:
+```yaml
+      - name: Build APK
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: npx tauri android build --apk
 ```
 
-- [ ] **Step 4: Update decrypt_string to extract nonce from ciphertext**
-
-```rust
-/// Decrypt a base64-encoded AES-256-GCM encrypted string.
-/// Expects the 12-byte nonce prepended to the ciphertext.
-pub fn decrypt_string(encrypted: &str) -> Result<String, String> {
-    let combined = BASE64.decode(encrypted)
-        .map_err(|e| format!("Base64 decode failed: {}", e))?;
-
-    if combined.len() < 12 {
-        return Err("Encrypted data too short (missing nonce)".to_string());
-    }
-
-    let (nonce_bytes, ciphertext) = combined.split_at(12);
-    let nonce = Nonce::from_slice(nonce_bytes);
-
-    let key = derive_machine_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
-
-    let plaintext = cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|e| format!("Decryption failed: {}", e))?;
-
-    String::from_utf8(plaintext)
-        .map_err(|e| format!("UTF-8 conversion failed: {}", e))
-}
+Also remove unnecessary x86 targets from the `targets:` line:
+```yaml
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
 ```
 
-- [ ] **Step 5: Remove chacha20poly1305 dependency**
+- [ ] **Step 3: Run CI lint locally to verify YAML is valid**
 
-In `src-tauri/Cargo.toml`, remove the line:
-```
-chacha20poly1305 = "0.10"
-```
+Run: `cd /Users/evintleovonzko/Documents/Works/vincrypt/flowfolio && cat .github/workflows/release.yml | head -5`
+Expected: valid YAML
 
-Add `whoami` crate (cross-platform, supports all targets including mobile):
-```toml
-whoami = "1.5"
-```
-
-Note: Do NOT use the `hostname` crate as it lacks Android/iOS support. Use `whoami::fallible::hostname()` instead which is cross-platform. Update `derive_machine_key()` accordingly:
-```rust
-fn derive_machine_key() -> [u8; 32] {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let hostname = whoami::fallible::hostname()
-        .unwrap_or_else(|_| "flowfolio-default".to_string());
-    let username = whoami::username();
-    // ... rest unchanged
-}
-```
-
-Remove the `use chacha20poly1305` import from `encrypted_env.rs`.
-
-- [ ] **Step 6: Fix `std::env::set_var` unsoundness in `load_embedded_env`**
-
-Replace the unsafe `set_var` loop with a safe approach that stores vars in a `HashMap` and provides a lookup function:
-
-```rust
-use once_cell::sync::OnceCell;
-
-/// Decrypted environment variables (set once at startup)
-static DECRYPTED_ENV: OnceCell<HashMap<String, String>> = OnceCell::new();
-
-/// Get a decrypted env var by key (checks DECRYPTED_ENV first, then std::env)
-pub fn get_env_var(key: &str) -> Option<String> {
-    DECRYPTED_ENV
-        .get()
-        .and_then(|vars| vars.get(key).cloned())
-        .or_else(|| std::env::var(key).ok())
-}
-
-/// Decrypt the compile-time embedded encrypted env and store in memory
-pub fn load_embedded_env() -> Result<(), String> {
-    let encrypted_content = EMBEDDED_ENCRYPTED_ENV.trim();
-    let vars = decrypt_env_file(encrypted_content)?;
-    let count = vars.len();
-
-    DECRYPTED_ENV.set(vars).map_err(|_| "Encrypted env already loaded".to_string())?;
-
-    eprintln!(
-        "[INFO] [env] Loaded {} embedded encrypted env vars",
-        count
-    );
-    Ok(())
-}
-```
-
-- [ ] **Step 7: Update encrypt_env.rs binary to use library functions**
-
-The `src-tauri/src/bin/encrypt_env.rs` has its own standalone copy of all encryption logic with the old static keys. It MUST be updated to call the library functions, otherwise it will produce ciphertext incompatible with the updated library.
-
-Replace the entire file content:
-
-```rust
-//! FlowFolio Environment Encryptor
-//!
-//! CLI tool to encrypt .env files for release builds.
-//! Uses AES-256-GCM with machine-derived key.
-//!
-//! Usage:
-//!     cargo run --bin encrypt-env [input_file] [output_file]
-
-use flowfolio_lib::core::encrypted_env::{encrypt_string, decrypt_string};
-use std::path::Path;
-
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    let default_input = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join(".env");
-    let default_output = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join(".env.encrypted");
-
-    let input_path = if args.len() > 1 { Path::new(&args[1]).to_path_buf() } else { default_input };
-    let output_path = if args.len() > 2 { Path::new(&args[2]).to_path_buf() } else { default_output };
-
-    println!("FlowFolio Environment Encryptor");
-    println!("================================");
-    println!("Security: AES-256-GCM with machine-derived key");
-    println!();
-
-    if !input_path.exists() {
-        eprintln!("Error: Input file '{}' not found", input_path.display());
-        std::process::exit(1);
-    }
-
-    let plaintext = std::fs::read_to_string(&input_path).unwrap_or_else(|e| {
-        eprintln!("Error reading input file: {}", e);
-        std::process::exit(1);
-    });
-
-    println!("Input:  {} ({} bytes)", input_path.display(), plaintext.len());
-
-    let encrypted = encrypt_string(&plaintext).unwrap_or_else(|e| {
-        eprintln!("Encryption failed: {}", e);
-        std::process::exit(1);
-    });
-
-    std::fs::write(&output_path, &encrypted).unwrap_or_else(|e| {
-        eprintln!("Error writing output file: {}", e);
-        std::process::exit(1);
-    });
-
-    println!("Output: {} ({} bytes)", output_path.display(), encrypted.len());
-    println!();
-
-    println!("Verifying encryption...");
-    let decrypted = decrypt_string(&encrypted).unwrap_or_else(|e| {
-        eprintln!("Verification FAILED: {}", e);
-        std::process::exit(1);
-    });
-
-    if decrypted == plaintext {
-        println!("Verification successful - decryption matches original");
-    } else {
-        eprintln!("Verification FAILED - decryption does not match!");
-        std::process::exit(1);
-    }
-}
-```
-
-**IMPORTANT:** For this to work, `encrypt_string` and `decrypt_string` must be `pub` in `core::encrypted_env` and `core` must be `pub mod core;` in `lib.rs` (it already is at line 13).
-
-Run: `cd src-tauri && cargo check --bin encrypt-env`
-Expected: Compiles successfully
-
-- [ ] **Step 8: Update tests**
-
-Update the test module in `encrypted_env.rs` to remove references to the old dual-layer scheme:
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_encrypt_decrypt_roundtrip() {
-        let original = "API_KEY=secret123\nOTHER=value456";
-        let encrypted = encrypt_string(original).unwrap();
-        let decrypted = decrypt_string(&encrypted).unwrap();
-        assert_eq!(original, decrypted);
-    }
-
-    #[test]
-    fn test_parse_env_content() {
-        let content = "# Comment\nAPI_KEY=secret123\nQUOTED=\"quoted value\"\n";
-        let vars = parse_env_content(content).unwrap();
-        assert_eq!(vars.get("API_KEY"), Some(&"secret123".to_string()));
-        assert_eq!(vars.get("QUOTED"), Some(&"quoted value".to_string()));
-    }
-
-    #[test]
-    fn test_decrypt_too_short() {
-        let result = decrypt_string(&BASE64.encode(&[0u8; 5]));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("too short"));
-    }
-
-    #[test]
-    fn test_get_env_var_fallback() {
-        // Before loading, should fall back to std::env
-        std::env::set_var("TEST_FLOWFOLIO_VAR", "test_value");
-        assert_eq!(get_env_var("TEST_FLOWFOLIO_VAR"), Some("test_value".to_string()));
-        std::env::remove_var("TEST_FLOWFOLIO_VAR");
-    }
-}
-```
-
-- [ ] **Step 9: Run tests and verify**
-
-Run: `cd src-tauri && cargo test core::encrypted_env -- --nocapture`
-Expected: All tests pass
-
-- [ ] **Step 10: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src-tauri/src/core/encrypted_env.rs src-tauri/Cargo.toml
-git commit -m "security: replace hardcoded encryption keys with machine-derived key
-
-Remove static AES/ChaCha keys and nonces from binary. Use AES-256-GCM
-with machine-derived key and random nonces. Fix std::env::set_var
-unsoundness by storing decrypted vars in OnceCell. Honestly document
-this as obfuscation-grade, not cryptographic security."
+git add .github/workflows/release.yml
+git commit -m "ci: add cargo test, npm test, fmt check, and Rust cache to preflight"
 ```
 
 ---
 
-### Task 2: Remove VITE_ Prefix from API Keys
+### Task 2: Remove binary artifacts from git and fix .gitignore
 
 **Files:**
-- Modify: `.env.example:19-67` (remove VITE_ prefixed keys)
-- Modify: `src-tauri/src/modules/data_provider/multi_source_provider.rs:93-100`
-- Modify: `src-tauri/src/services/openrouter_service.rs:66-72`
-- Modify: `src-tauri/src/lib.rs:1449-1453` (diagnostics check)
-- Modify: `src-tauri/src/lib.rs:2789-2791` (ai_chat_stream)
+- Modify: `.gitignore`
+- Remove tracked: `flowfolio-release.apk`, `release/`
 
-**Context:** All API keys use `VITE_` prefix which causes Vite to embed them in the frontend JS bundle. The Rust backend reads them with `std::env::var("VITE_*")` fallbacks. The non-VITE versions already exist as primary in `.env.example` lines 5-13 but the VITE_ versions remain as fallbacks everywhere.
+- [ ] **Step 1: Add release artifacts to .gitignore**
 
-- [ ] **Step 1: Remove all VITE_ fallbacks from multi_source_provider.rs**
-
-In `src-tauri/src/modules/data_provider/multi_source_provider.rs`, lines 93-100, change each line from:
-```rust
-let alpaca_key = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).ok();
-```
-to:
-```rust
-let alpaca_key = std::env::var("ALPACA_API_KEY").ok();
-```
-
-Apply to all 8 provider keys (alpaca_key, alpaca_secret, polygon_key, alphavantage_key, finnhub_key, fmp_key, tiingo_key, twelve_data_key).
-
-**REQUIRED:** Task 1 must be completed first. Use `get_env_var` from Task 1:
-```rust
-use crate::core::encrypted_env::get_env_var;
-let alpaca_key = get_env_var("ALPACA_API_KEY");
-```
-
-- [ ] **Step 2: Remove VITE_ fallbacks from openrouter_service.rs**
-
-In `src-tauri/src/services/openrouter_service.rs`, lines 66-72, change:
-```rust
-let api_key = std::env::var("OPENROUTER_API_KEY").or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY")).ok();
-let api_url = std::env::var("OPENROUTER_API_URL")
-    .or_else(|_| std::env::var("VITE_OPENROUTER_API_URL"))
-    .unwrap_or_else(|_| "https://openrouter.ai/api/v1".to_string());
-let default_model = std::env::var("DEFAULT_LLM_MODEL")
-    .or_else(|_| std::env::var("VITE_DEFAULT_LLM_MODEL"))
-    .unwrap_or_else(|_| "anthropic/claude-3-sonnet-20240229".to_string());
-```
-to:
-```rust
-let api_key = get_env_var("OPENROUTER_API_KEY");
-let api_url = get_env_var("OPENROUTER_API_URL")
-    .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
-let default_model = get_env_var("DEFAULT_LLM_MODEL")
-    .unwrap_or_else(|| "anthropic/claude-3-sonnet-20240229".to_string());
-```
-
-- [ ] **Step 3: Remove VITE_ fallbacks from lib.rs diagnostics**
-
-In `src-tauri/src/lib.rs`, lines 1449-1453, change each:
-```rust
-let alpaca_configured = std::env::var("ALPACA_API_KEY").or_else(|_| std::env::var("VITE_ALPACA_API_KEY")).is_ok();
-```
-to:
-```rust
-let alpaca_configured = get_env_var("ALPACA_API_KEY").is_some();
-```
-
-- [ ] **Step 4: Fix ai_chat_stream in lib.rs**
-
-At line 2789-2791:
-```rust
-let api_key = std::env::var("OPENROUTER_API_KEY")
-    .or_else(|_| std::env::var("VITE_OPENROUTER_API_KEY"))
-    .map_err(|_| "OpenRouter API key not configured".to_string())?;
-```
-Change to:
-```rust
-let api_key = get_env_var("OPENROUTER_API_KEY")
-    .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
-```
-
-- [ ] **Step 5: Clean up .env.example — remove VITE_ API key entries**
-
-Remove lines 19-67 (all `VITE_*_API_KEY` entries). Keep only the non-prefixed keys at lines 5-13 and the non-secret `VITE_` config entries (APP_NAME, APP_VERSION, DEFAULT_LLM_MODEL, etc.):
+Append to `.gitignore`:
 
 ```
-# Backend API keys (read by Rust backend only — never embedded in JS bundle)
-ALPACA_API_KEY=
-ALPACA_SECRET_KEY=
-FINNHUB_API_KEY=
-FMP_API_KEY=
-TIINGO_API_KEY=
-TWELVE_DATA_API_KEY=
-POLYGON_API_KEY=
-ALPHA_VANTAGE_API_KEY=
-OPENROUTER_API_KEY=
-OPENROUTER_API_URL=https://openrouter.ai/api/v1
-
-# Application Configuration (safe to embed — not secrets)
-VITE_APP_NAME=Flowfolio
-VITE_APP_VERSION=1.0.0
-VITE_DEFAULT_LLM_MODEL=anthropic/claude-3-sonnet-20240229
+# Release artifacts (hosted on GitHub Releases, not in git)
+release/
+*.apk
+*.aab
+*.dmg
+*.exe
+*.msi
+*.deb
+*.AppImage
+*.idsig
 ```
 
-- [ ] **Step 6: Search for any remaining VITE_ key references in Rust**
-
-Run: `cd src-tauri && grep -rn "VITE_.*API_KEY\|VITE_.*SECRET" src/`
-Expected: No matches (all removed)
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 2: Remove tracked binary artifacts**
 
 ```bash
-git add .env.example src-tauri/src/modules/data_provider/multi_source_provider.rs src-tauri/src/services/openrouter_service.rs src-tauri/src/lib.rs
-git commit -m "security: remove VITE_ prefix from all API keys
-
-API keys with VITE_ prefix get embedded in the frontend JS bundle by
-Vite, exposing them to anyone who inspects the app. All Rust backend
-code now reads non-prefixed env vars only via get_env_var()."
+git rm --cached flowfolio-release.apk
+git rm -r --cached release/
 ```
 
----
+Note: This removes them from git tracking but keeps local copies. The files are already on GitHub Releases.
 
-### Task 3: Fix Updater Public Key and CSP
-
-**Files:**
-- Modify: `src-tauri/tauri.conf.json:23,32-35`
-- Modify: `src-tauri/capabilities/default.json:23-28`
-
-- [ ] **Step 1: Fix CSP — remove supabase, localhost, and object-src blob:**
-
-In `src-tauri/tauri.conf.json`, line 23, update the CSP:
-
-```json
-"csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.openrouter.ai https://*.alphavantage.co https://*.finnhub.io https://*.yahoo.com https://*.duckduckgo.com https://*.tavily.com https://*.brave.com https://*.alpaca.markets; object-src 'none'; base-uri 'self'; form-action 'self';"
-```
-
-Changes:
-- Removed `blob: data:` from `default-src`
-- Removed `https://*.supabase.co` (not used)
-- Removed `http://localhost:3001` (dev-only)
-- Changed `object-src blob:` to `object-src 'none'`
-
-- [ ] **Step 2: Disable updater until a real pubkey is generated**
-
-In `src-tauri/tauri.conf.json`, remove the updater plugin config (lines 32-35):
-
-```json
-"plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": ["flowfolio"]
-      }
-    }
-  },
-```
-
-Also remove `tauri_plugin_updater::Builder::new().build()` from `lib.rs` line 3088 and `"updater:default"` from `capabilities/default.json` line 19.
-
-When ready to ship auto-updates, generate a key pair with `tauri signer generate -w ~/.tauri/flowfolio.key` and add the pubkey back.
-
-- [ ] **Step 3: Scope filesystem permissions**
-
-In `src-tauri/capabilities/default.json`, replace the fs:scope:
-
-```json
-{
-    "identifier": "fs:scope",
-    "allow": [
-        "$APPDATA/**",
-        "$APPCACHE/**",
-        "$APPLOCALDATA/**",
-        "$DOWNLOAD/**",
-        "$DOCUMENT/**"
-    ]
-}
-```
-
-Removes `$HOME/**` (entire home directory) and `$DESKTOP/**` (unnecessary). Adds `$APPDATA`, `$APPCACHE`, `$APPLOCALDATA` for the app's own data.
-
-- [ ] **Step 4: Run cargo check to verify config changes don't break the build**
-
-Run: `cd src-tauri && cargo check`
-Expected: Compiles successfully
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src-tauri/tauri.conf.json src-tauri/capabilities/default.json src-tauri/src/lib.rs
-git commit -m "security: fix CSP, disable unsigned updater, scope filesystem
-
-Remove supabase and localhost from CSP. Change object-src to 'none'.
-Disable updater plugin until a real signing key is generated. Restrict
-fs:scope from \$HOME/** to app-specific directories only."
+git add .gitignore
+git commit -m "chore: remove binary artifacts from git, add to .gitignore"
 ```
 
 ---
 
-### Task 4: Fix Production .unwrap() Panics
+### Task 3: Remove dead Rust modules and clean up domain layer
 
 **Files:**
-- Modify: `src-tauri/src/lib.rs:3046` (tax loss sort)
-- Modify: `src-tauri/src/lib.rs:3216-3218` (setup expect)
-- Modify: `src-tauri/src/modules/data_provider/multi_source_provider.rs:377` (SystemTime unwrap)
+- Modify: `src-tauri/src/modules/mod.rs`
+- Delete: `src-tauri/src/modules/worker_pool/mod.rs` (and directory)
+- Delete: `src-tauri/src/modules/cache/mod.rs` (and directory)
+- Delete: `src-tauri/src/modules/security/mod.rs` (and directory)
+- Delete: `src-tauri/src/modules/data_provider/sync_service.rs`
+- Delete: `src-tauri/src/modules/data_provider/optimized_client.rs`
+- Modify: `src-tauri/src/modules/data_provider/mod.rs` (remove sync_service and optimized_client declarations)
+- Delete: `src-tauri/src/domain/` (entire directory — pure unused re-exports)
+- Modify: `src-tauri/src/lib.rs` (remove `mod domain;` declaration)
 
-- [ ] **Step 1: Fix tax loss harvest sort**
+- [ ] **Step 1: Verify modules are truly unused**
 
-Replace line 3046:
-```rust
-opportunities.sort_by(|a, b| a["unrealized_loss"].as_f64().unwrap().partial_cmp(&b["unrealized_loss"].as_f64().unwrap()).unwrap());
-```
-with:
-```rust
-opportunities.sort_by(|a, b| {
-    let a_val = a["unrealized_loss"].as_f64().unwrap_or(0.0);
-    let b_val = b["unrealized_loss"].as_f64().unwrap_or(0.0);
-    a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
-});
-```
-
-- [ ] **Step 2: Fix setup expect**
-
-Replace lines 3216-3218:
-```rust
-let salt_path = app.path().app_local_data_dir()
-    .expect("could not resolve app local data path")
-    .join("stronghold-salt.txt");
-```
-with:
-```rust
-let salt_path = match app.path().app_local_data_dir() {
-    Ok(dir) => dir.join("stronghold-salt.txt"),
-    Err(e) => {
-        eprintln!("[WARN] [app] Could not resolve app local data path: {e}");
-        return Ok(());
-    }
-};
+Run these greps and confirm no results (each must return empty):
+```bash
+cd src-tauri
+grep -r "worker_pool\|WorkerPool" src/ --include="*.rs" | grep -v "mod.rs" | grep -v "#\[allow"
+grep -r "modules::cache\|CacheManager" src/ --include="*.rs" | grep -v "mod.rs" | grep -v "#\[allow"
+grep -r "modules::security\|store_api_key\b\|retrieve_api_key" src/ --include="*.rs" | grep -v "mod.rs" | grep -v "security/mod.rs"
+grep -r "DataSyncService\|sync_service" src/ --include="*.rs" | grep -v "mod.rs" | grep -v "sync_service.rs"
+grep -r "OptimizedDataClient\|optimized_client" src/ --include="*.rs" | grep -v "mod.rs" | grep -v "optimized_client.rs"
+grep -r "crate::domain" src/ --include="*.rs" | grep -v "domain/"
 ```
 
-- [ ] **Step 3: Fix SystemTime unwrap in Finnhub provider**
+Expected: No results for any (confirming they are dead code).
 
-Replace `multi_source_provider.rs` line 377:
-```rust
-let end_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-```
-with:
-```rust
-let end_time = SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .map(|d| d.as_secs())
-    .unwrap_or(1_700_000_000); // Fallback: ~Nov 2023 (reasonable default)
-```
-
-Note: Do NOT use `Duration::from_secs(0)` as fallback — it would make `start_time = 0 - 1_year` which overflows. A known reasonable timestamp is safer.
-
-- [ ] **Step 4: Verify no other production unwraps remain**
-
-Run: `cd src-tauri && grep -n '\.unwrap()' src/lib.rs | grep -v '#\[cfg(test)\]' | grep -v 'mod tests' | head -20`
-
-Check that remaining unwraps are either in test code or on infallible operations (like `NonZeroU32::new(1).unwrap()`).
-
-- [ ] **Step 5: Run tests**
-
-Run: `cd src-tauri && cargo test -- --nocapture`
-Expected: All tests pass
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 2: Remove dead module files**
 
 ```bash
-git add src-tauri/src/lib.rs src-tauri/src/modules/data_provider/multi_source_provider.rs
-git commit -m "security: replace production .unwrap() calls with safe alternatives
-
-Fix panic risks in tax loss harvest sort, app setup, and Finnhub
-SystemTime calculation. All now use unwrap_or or match for graceful
-error handling."
+cd src-tauri
+rm -f src/modules/worker_pool/mod.rs && rmdir src/modules/worker_pool
+rm -f src/modules/cache/mod.rs && rmdir src/modules/cache
+rm -f src/modules/security/mod.rs && rmdir src/modules/security
+rm -f src/modules/data_provider/sync_service.rs
+rm -f src/modules/data_provider/optimized_client.rs
+rm -rf src/domain/
 ```
 
----
+- [ ] **Step 3: Update modules/mod.rs — remove dead module declarations and all #[allow(dead_code)] blankets**
 
-### Task 5: Add Ticker Symbol Input Validation
-
-**Files:**
-- Create: `src-tauri/src/core/validation.rs`
-- Modify: `src-tauri/src/core/mod.rs` (add validation module)
-- Modify: `src-tauri/src/lib.rs` (add validation to key commands)
-
-- [ ] **Step 1: Add regex to Cargo.toml and create validation module**
-
-First add `regex = "1.11"` to `src-tauri/Cargo.toml` dependencies, then create the file:
+Replace `src-tauri/src/modules/mod.rs` with:
 
 ```rust
-// src-tauri/src/core/validation.rs
-
-use once_cell::sync::Lazy;
-use regex::Regex;
-
-static SYMBOL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[A-Z0-9.\-]{1,10}$").expect("invalid regex")
-});
-
-/// Validate a ticker symbol. Allows uppercase letters, digits, dots, hyphens. 1-10 chars.
-pub fn validate_symbol(symbol: &str) -> Result<(), String> {
-    let symbol = symbol.trim();
-    if symbol.is_empty() {
-        return Err("Symbol cannot be empty".to_string());
-    }
-    if !SYMBOL_RE.is_match(symbol) {
-        return Err(format!(
-            "Invalid symbol '{}': must be 1-10 uppercase alphanumeric characters",
-            symbol
-        ));
-    }
-    Ok(())
-}
-
-/// Validate a list of symbols
-pub fn validate_symbols(symbols: &[String]) -> Result<(), String> {
-    for s in symbols {
-        validate_symbol(s)?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_valid_symbols() {
-        assert!(validate_symbol("AAPL").is_ok());
-        assert!(validate_symbol("BRK.B").is_ok());
-        assert!(validate_symbol("SPY").is_ok());
-        assert!(validate_symbol("X").is_ok());
-    }
-
-    #[test]
-    fn test_invalid_symbols() {
-        assert!(validate_symbol("").is_err());
-        assert!(validate_symbol("aapl").is_err()); // lowercase
-        assert!(validate_symbol("TOOLONGSYMBOL").is_err()); // >10 chars
-        assert!(validate_symbol("AAPL/../hack").is_err()); // path traversal
-        assert!(validate_symbol("A%00B").is_err()); // null byte
-    }
-}
-```
-
-- [ ] **Step 2: Register module in core/mod.rs**
-
-Add `pub mod validation;` to `src-tauri/src/core/mod.rs`.
-
-- [ ] **Step 3: Add validation to key Tauri commands in lib.rs**
-
-Add `use crate::core::validation::validate_symbol;` at the imports.
-
-Add validation at the start of commands that take symbol parameters, e.g. in `score_symbols_batch`, `get_quant_metrics_batch`, `get_current_prices` (wherever symbols are received from the frontend). Example:
-
-```rust
-for symbol in &symbols {
-    validate_symbol(symbol)?;
-}
-```
-
-- [ ] **Step 4: Run tests**
-
-Run: `cd src-tauri && cargo test core::validation -- --nocapture`
-Expected: All tests pass
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src-tauri/src/core/validation.rs src-tauri/src/core/mod.rs src-tauri/Cargo.toml src-tauri/src/lib.rs
-git commit -m "security: add ticker symbol input validation
-
-Validate symbol format (uppercase alphanumeric, 1-10 chars) before
-passing to API URL construction. Prevents path traversal injection
-via crafted symbol names."
-```
-
----
-
-## Phase 2: Architecture Core
-
-### Task 6: Remove Outer Mutex from ENHANCED_MARKET_SERVICE
-
-**Files:**
-- Modify: `src-tauri/src/lib.rs:46,52-54` (change type from `Arc<Mutex<T>>` to `Arc<T>`)
-- Modify: `src-tauri/src/lib.rs` (all ~19 `.lock().await` call sites)
-- Modify: `src-tauri/src/services/enhanced_market_service.rs` (ensure methods take `&self` not `&mut self`)
-
-**Context:** `EnhancedMarketDataService` already uses `Arc<RwLock<HashMap>>` and `Arc<DashMap>` internally for thread safety. The outer `Mutex` serializes all market data commands behind a single lock, including across network I/O await points (up to 30s timeouts). This kills all concurrency.
-
-- [ ] **Step 1: Verify EnhancedMarketDataService methods use &self**
-
-Read `src-tauri/src/services/enhanced_market_service.rs` and confirm all public methods take `&self`, not `&mut self`. If any take `&mut self`, change them to `&self` using interior mutability.
-
-- [ ] **Step 2: Change global type to Arc (no Mutex)**
-
-In `lib.rs`, change:
-```rust
-static ref ENHANCED_MARKET_SERVICE: Arc<Mutex<EnhancedMarketDataService>> =
-    Arc::new(Mutex::new(EnhancedMarketDataService::new_without_db()));
-```
-to:
-```rust
-static ref ENHANCED_MARKET_SERVICE: Arc<EnhancedMarketDataService> =
-    Arc::new(EnhancedMarketDataService::new_without_db());
-```
-
-Remove the `use tokio::sync::Mutex;` import if no longer needed.
-
-- [ ] **Step 3: Replace all .lock().await with direct method calls**
-
-Search for `ENHANCED_MARKET_SERVICE.lock().await` — there are approximately 26 call sites (not 19). Replace each occurrence. For example:
-
-Before:
-```rust
-let service = ENHANCED_MARKET_SERVICE.lock().await;
-let result = service.get_current_price(&symbol).await;
-```
-
-After:
-```rust
-let result = ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await;
-```
-
-Run: `grep -c "ENHANCED_MARKET_SERVICE.lock()" src-tauri/src/lib.rs` to get exact count, then verify zero remain after changes.
-
-**IMPORTANT:** Do NOT remove the `use tokio::sync::Mutex;` import — it is still needed by `DB_POOL: Arc<Mutex<Option<Pool<Sqlite>>>>`. Only the `ENHANCED_MARKET_SERVICE` mutex is being removed.
-
-- [ ] **Step 4: Fix init_market_service_with_db**
-
-This function currently takes the mutex to set the DB pool. Change it to use an interior-mutable setter on the service:
-
-```rust
-async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
-    ENHANCED_MARKET_SERVICE.set_db_pool(pool.clone()).await;
-    // Store pool globally too
-    let mut db = DB_POOL.lock().await;
-    *db = Some(pool);
-    DB_INITIALIZED.store(true, Ordering::Release);
-}
-```
-
-This requires `EnhancedMarketDataService` to have an `async fn set_db_pool(&self, pool: Pool<Sqlite>)` method that sets via interior mutability (e.g., `RwLock<Option<Pool>>`).
-
-- [ ] **Step 5: Run tests and cargo check**
-
-Run: `cd src-tauri && cargo check && cargo test -- --nocapture`
-Expected: Compiles and all tests pass
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add src-tauri/src/lib.rs src-tauri/src/services/enhanced_market_service.rs
-git commit -m "perf: remove outer Mutex from ENHANCED_MARKET_SERVICE
-
-The service already uses interior mutability (RwLock, DashMap). The
-outer Tokio Mutex serialized all market data commands behind a single
-lock held across network I/O, killing concurrency. Now uses Arc<T>
-directly."
-```
-
----
-
-### Task 7: Delete Dead Code
-
-**Files:**
-- Delete: `src-tauri/src/services/market_data_service.rs`
-- Delete: `src/App_rankings.tsx`
-- Modify: `src-tauri/src/services/mod.rs` (remove market_data_service module)
-- Modify: `src-tauri/src/modules/export/mod.rs` (remove dead stubs or delete)
-- Modify: `src-tauri/src/domain/` (remove empty facade modules)
-
-- [ ] **Step 1: Delete market_data_service.rs**
-
-Verify it's unused: `grep -rn "market_data_service" src-tauri/src/ --include="*.rs" | grep -v "market_data_service.rs"`
-
-If only referenced in `services/mod.rs` as `#[allow(dead_code)] mod market_data_service;`, remove the module declaration and delete the file.
-
-- [ ] **Step 2: Delete App_rankings.tsx**
-
-Verify it's unused: `grep -rn "App_rankings" src/`
-
-If no imports, delete the file.
-
-- [ ] **Step 3: Clean up domain/ facades**
-
-Check each domain module (`market`, `analysis`, `portfolio`, `journal`). If they only contain `#[allow(unused_imports)] pub use crate::modules::*;` re-exports with no actual logic, delete the re-exports and leave only `pub mod` declarations or remove the module files entirely.
-
-- [ ] **Step 4: Clean up modules/export**
-
-If `ExportManager` is completely unimplemented (only `// TODO` stubs) and the actual export commands are inline in `lib.rs`, delete the `modules/export/` directory and its mod declaration.
-
-- [ ] **Step 5: Remove unused Cargo dependencies**
-
-Remove from Cargo.toml:
-```toml
-# Remove these unused crates
-metrics = "0.24"
-backoff = { version = "0.4", features = ["tokio"] }
-arc-swap = "1.7"
-lazy_static = "1.4"  # Replace with once_cell (already a dep)
-```
-
-Replace ALL `lazy_static!` macro usages with `once_cell::sync::Lazy`. The macro appears in these files:
-- `src-tauri/src/lib.rs` (2 blocks: line 52 and line 1755)
-- `src-tauri/src/core/config/mod.rs` (line 138)
-- `src-tauri/src/modules/progress.rs` (line 190)
-- `src-tauri/src/modules/health.rs` (line 339)
-
-ALL must be converted before removing the crate. Example conversion:
-
-```rust
-// Before (lazy_static)
-lazy_static::lazy_static! {
-    static ref ENHANCED_MARKET_SERVICE: Arc<EnhancedMarketDataService> =
-        Arc::new(EnhancedMarketDataService::new_without_db());
-}
-
-// After (once_cell)
-use once_cell::sync::Lazy;
-
-static ENHANCED_MARKET_SERVICE: Lazy<Arc<EnhancedMarketDataService>> =
-    Lazy::new(|| Arc::new(EnhancedMarketDataService::new_without_db()));
-```
-
-Run `grep -rn "lazy_static" src-tauri/src/` to verify zero references remain before removing the crate.
-
-- [ ] **Step 6: Run cargo check and tests**
-
-Run: `cd src-tauri && cargo check && cargo test`
-Expected: Compiles and all tests pass
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add -A
-git commit -m "chore: remove dead code and unused dependencies
-
-Delete superseded market_data_service.rs, dead App_rankings.tsx,
-empty domain facades, unimplemented ExportManager stubs. Remove
-unused crates (metrics, backoff, arc-swap, lazy_static)."
-```
-
----
-
-### Task 8: Replace eprintln! with tracing
-
-**Files:**
-- Modify: `src-tauri/src/lib.rs` (all `eprintln!` calls)
-- Modify: `src-tauri/src/services/enhanced_market_service.rs`
-- Modify: `src-tauri/src/services/openrouter_service.rs`
-- Modify: `src-tauri/src/modules/data_provider/multi_source_provider.rs`
-- Modify: `src-tauri/src/core/encrypted_env.rs`
-
-**Context:** The codebase has `tracing` and `tracing-subscriber` as dependencies but uses `eprintln!` everywhere (151 occurrences). The structured logging infrastructure exists but isn't used.
-
-- [ ] **Step 1: Initialize tracing subscriber in run()**
-
-In `lib.rs` `run()` function, before `tauri::Builder::default()`:
-
-```rust
-use tracing_subscriber::EnvFilter;
-
-// Use try_init to avoid panic if called multiple times (e.g., in tests)
-let _ = tracing_subscriber::fmt()
-    .with_env_filter(
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("flowfolio=info,warn"))
-    )
-    .with_target(true)
-    .try_init();
-```
-
-- [ ] **Step 2: Replace eprintln! with tracing macros across all files**
-
-Pattern replacements:
-- `eprintln!("[INFO] ...")` → `tracing::info!(...)`
-- `eprintln!("[WARN] ...")` → `tracing::warn!(...)`
-- `eprintln!("[ERROR] ...")` → `tracing::error!(...)`
-- `eprintln!("[DEBUG] ...")` → `tracing::debug!(...)`
-
-For structured fields, use tracing's key-value syntax:
-```rust
-// Before
-eprintln!("[INFO] [db] Initializing local cache database at: {}", db_path.display());
-// After
-tracing::info!(path = %db_path.display(), "Initializing local cache database");
-```
-
-Do this for all files: `lib.rs`, `enhanced_market_service.rs`, `openrouter_service.rs`, `multi_source_provider.rs`, `encrypted_env.rs`, and any others found with `grep -rn "eprintln!" src-tauri/src/`.
-
-- [ ] **Step 3: Ensure no API keys are logged**
-
-After replacement, search for any tracing calls that might log sensitive data:
-Run: `grep -n "tracing::.*api_key\|tracing::.*secret\|tracing::.*token" src-tauri/src/**/*.rs`
-Expected: No matches with actual key values (status-only logging like "configured" / "not configured" is fine)
-
-- [ ] **Step 4: Run cargo check**
-
-Run: `cd src-tauri && cargo check`
-Expected: Compiles successfully
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src-tauri/src/
-git commit -m "refactor: replace eprintln! with tracing structured logging
-
-Replace 151 eprintln! calls with tracing::{info,warn,error,debug}
-macros. Initialize tracing-subscriber with env filter. Enables
-log-level filtering at runtime via RUST_LOG env var."
-```
-
----
-
-### Task 9: Extract Tauri Commands from lib.rs into api/commands/
-
-**Files:**
-- Create/Modify: `src-tauri/src/api/commands/market.rs`
-- Create/Modify: `src-tauri/src/api/commands/portfolio.rs`
-- Create/Modify: `src-tauri/src/api/commands/backtest.rs`
-- Create/Modify: `src-tauri/src/api/commands/journal.rs`
-- Create/Modify: `src-tauri/src/api/commands/vibe.rs`
-- Create/Modify: `src-tauri/src/api/commands/settings.rs`
-- Create/Modify: `src-tauri/src/api/commands/ai.rs`
-- Modify: `src-tauri/src/api/commands/mod.rs`
-- Modify: `src-tauri/src/lib.rs` (slim down to just run() + registrations)
-
-**Context:** `lib.rs` is ~3,700 lines with ~70 Tauri commands. The `api/commands/` directory exists as stubs. This task moves commands into their domain modules.
-
-- [ ] **Step 1: Plan the command groupings**
-
-Group commands by domain:
-- **market**: `get_current_prices`, `get_historical_prices`, `get_quant_metrics_batch`, `get_provider_status`, `get_cache_stats`, `health_check`, `get_database_status`, `get_exchange_rate`, `get_fundamental_data`
-- **vibe**: `get_default_plan`, `list_templates`, `get_template`, `compile_plan`, `validate_plan`, `get_scoring_config`, `score_symbols_batch`
-- **portfolio**: `create_equal_weight_allocation`, `create_score_weighted_allocation`, `generate_monthly_buy_list`, `check_portfolio_rebalance`, `generate_yearly_review`, `generate_optimization_report`, `generate_optimization_report_live`, `save_generated_portfolio`, `load_generated_portfolio`, `list_saved_portfolios`, `delete_saved_portfolio`, `save_portfolio_snapshot`, `get_portfolio_snapshots`
-- **backtest**: `run_backtest_simulation`
-- **journal**: `create_journal_entry`, `log_strategy_change`, `log_trade_decision`, `log_rebalance_event`, `log_review_event`, `compare_plan_versions`, `filter_journal_entries`, `calculate_journal_stats`, `export_journal_markdown`
-- **settings**: `save_api_keys`, `load_api_keys`, `get_api_key_status`, `vault_exists`, `vault_is_unlocked`, `vault_unlock`, `vault_migrate_keys`, `export_data_bundle`, `import_data_bundle`, `send_price_alert_notification`
-- **ai**: `ai_is_configured`, `ai_chat`, `ai_chat_stream`
-- **dividends_tax**: `record_dividend`, `list_dividends`, `get_dividend_summary`, `create_tax_lot`, `list_tax_lots`, `get_tax_loss_harvest_opportunities`
-
-- [ ] **Step 2: Move commands module by module**
-
-For each group:
-1. Move the command functions from `lib.rs` to the appropriate `api/commands/{module}.rs`
-2. Add necessary imports at the top of each file
-3. Make functions `pub` so they can be re-exported
-4. Re-export from `api/commands/mod.rs`
-
-- [ ] **Step 3: Slim lib.rs to just setup and registration**
-
-`lib.rs` should contain only:
-- Module declarations
-- Global state (service instances, DB pool)
-- `init_local_database` function
-- `init_market_service_with_db` function
-- `run()` function with `.invoke_handler()`
-- Test module
-
-- [ ] **Step 4: Update mod.rs re-exports**
-
-In `api/commands/mod.rs`, re-export all command functions:
-```rust
-pub mod market;
-pub mod vibe;
+pub mod store;
+pub mod data_provider;
+pub mod rate_limiter;
+pub mod plan_compiler;
+pub mod scoring;
 pub mod portfolio;
 pub mod backtest;
 pub mod journal;
-pub mod settings;
-pub mod ai;
-pub mod dividends_tax;
+pub mod quant_analysis;
 
-pub use market::*;
-pub use vibe::*;
-pub use portfolio::*;
-pub use backtest::*;
-pub use journal::*;
-pub use settings::*;
-pub use ai::*;
-pub use dividends_tax::*;
+// Infrastructure modules
+pub mod error;
+pub mod circuit_breaker;
+pub mod retry;
+pub mod health;
+pub mod progress;
 ```
 
-- [ ] **Step 5: Update invoke_handler registration**
+- [ ] **Step 4: Update data_provider/mod.rs — remove sync_service and optimized_client**
 
-In `lib.rs`, the `.invoke_handler()` macro should still work since functions are re-exported into scope via `use api::commands::*;`.
+Remove the `pub mod sync_service;` and `pub mod optimized_client;` lines from `src-tauri/src/modules/data_provider/mod.rs`.
 
-- [ ] **Step 6: Run cargo check and tests**
+- [ ] **Step 5: Remove `mod domain;` from lib.rs**
 
-Run: `cd src-tauri && cargo check && cargo test`
-Expected: Compiles and all tests pass
+In `src-tauri/src/lib.rs`, find and remove the line `mod domain;` (or `pub mod domain;`).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Verify build**
+
+Run: `cd src-tauri && cargo check 2>&1 | tail -10`
+Expected: Compiles successfully (warnings OK, no errors).
+
+- [ ] **Step 7: Run tests**
+
+Run: `cd src-tauri && cargo test 2>&1 | tail -5`
+Expected: All tests pass.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add -A src-tauri/src/modules/ src-tauri/src/lib.rs src-tauri/src/domain/
+git commit -m "refactor: remove dead modules (worker_pool, cache, security, sync_service, optimized_client, domain layer)"
+```
+
+---
+
+### Task 4: Remove unused deps and migrate lazy_static to once_cell
+
+**Files:**
+- Modify: `src-tauri/Cargo.toml`
+- Modify: `src-tauri/src/lib.rs`
+- Modify: All files using `lazy_static!` macro
+
+- [ ] **Step 1: Find all lazy_static usages**
+
+Run: `cd src-tauri && grep -rn "lazy_static" src/ --include="*.rs"`
+
+Expected files (verified):
+- `src/lib.rs` (line 38)
+- `src/core/config/mod.rs` (line 138)
+- `src/modules/health.rs` (line 339)
+- `src/modules/progress.rs` (line 190)
+
+- [ ] **Step 2: In each file, replace `lazy_static! { ... }` with `once_cell::sync::Lazy`**
+
+Pattern change:
+```rust
+// Before:
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref FOO: Type = expression;
+}
+
+// After:
+use once_cell::sync::Lazy;
+static FOO: Lazy<Type> = Lazy::new(|| expression);
+```
+
+In `lib.rs`:
+```rust
+use once_cell::sync::Lazy;
+
+pub(crate) static DB_POOL: Lazy<Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
+
+pub(crate) static SAVED_PLANS: Lazy<Arc<Mutex<HashMap<String, VibePlanScript>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+pub(crate) static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("Failed to create shared HTTP client")
+});
+```
+
+Apply the same pattern to all other files:
+
+In `src/core/config/mod.rs` (line 138), `src/modules/health.rs` (line 339), and `src/modules/progress.rs` (line 190): replace `lazy_static::lazy_static! { static ref FOO: T = expr; }` with `static FOO: Lazy<T> = Lazy::new(|| expr);` and add `use once_cell::sync::Lazy;`.
+
+Also remove any `use lazy_static::lazy_static;` imports from all files.
+
+- [ ] **Step 3: Remove lazy_static from Cargo.toml and remove tauri-plugin-updater**
+
+In `src-tauri/Cargo.toml`, remove:
+```toml
+lazy_static = "1.4"
+tauri-plugin-updater = "2"
+```
+
+- [ ] **Step 4: Verify build + tests**
+
+Run: `cd src-tauri && cargo check && cargo test 2>&1 | tail -5`
+Expected: Compiles and all tests pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/src/
+git commit -m "refactor: migrate lazy_static to once_cell::sync::Lazy, remove unused deps"
+```
+
+---
+
+### Task 5: Consolidate HTTP clients to shared HTTP_CLIENT
+
+**Files:**
+- Modify: `src-tauri/src/services/openrouter_service.rs`
+- Modify: `src-tauri/src/services/alpaca_service.rs`
+- Modify: `src-tauri/src/services/fundamental_service.rs`
+- Modify: `src-tauri/src/modules/data_provider/multi_source_provider.rs`
+- Modify: `src-tauri/src/modules/data_provider/free_sources.rs`
+
+- [ ] **Step 1: In each service, remove the private client field and use crate::HTTP_CLIENT**
+
+For each of the 5 files:
+
+1. Remove the `client: reqwest::Client` (or `client: Client`) field from the struct definition
+2. Remove the `Client::builder()...build().expect(...)` from the constructor (replace with nothing — don't construct a client)
+3. Replace all `self.client` references with `crate::HTTP_CLIENT.clone()` or `(*crate::HTTP_CLIENT)` depending on context. For most `reqwest` calls, `crate::HTTP_CLIENT.get(url)` works directly since `Lazy<Client>` derefs to `Client`.
+
+Example transformation for `openrouter_service.rs`:
+```rust
+// Before:
+pub struct OpenRouterService {
+    client: reqwest::Client,
+    base_url: String,
+}
+impl OpenRouterService {
+    pub fn new() -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(...)
+            .build()
+            .expect("...");
+        Self { client, base_url: "...".to_string() }
+    }
+    async fn call_api(&self, ...) {
+        let response = self.client.post(&url)...
+    }
+}
+
+// After:
+pub struct OpenRouterService {
+    base_url: String,
+}
+impl OpenRouterService {
+    pub fn new() -> Self {
+        Self { base_url: "...".to_string() }
+    }
+    async fn call_api(&self, ...) {
+        let response = crate::HTTP_CLIENT.post(&url)...
+    }
+}
+```
+
+- [ ] **Step 2: Check if infrastructure/http/mod.rs is now dead**
+
+If `src-tauri/src/infrastructure/http/mod.rs` only provides HTTP client construction that is no longer used, remove it and its `mod` declaration.
+
+- [ ] **Step 3: Verify build + tests**
+
+Run: `cd src-tauri && cargo check && cargo test 2>&1 | tail -5`
+Expected: Compiles and all tests pass.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src-tauri/src/
-git commit -m "refactor: extract Tauri commands from lib.rs into api/commands/
-
-Move ~70 command handlers from 3700-line lib.rs into domain-grouped
-modules: market, vibe, portfolio, backtest, journal, settings, ai,
-dividends_tax. lib.rs now contains only setup and registration."
+git commit -m "perf: consolidate 7 HTTP clients into shared HTTP_CLIENT"
 ```
 
 ---
 
-### Task 10: Implement SQLite Migration System
+### Task 6: Fix partial_cmp().unwrap() NaN panics in production code
 
 **Files:**
-- Create: `src-tauri/src/infrastructure/database/migrations.rs`
-- Modify: `src-tauri/src/infrastructure/database/mod.rs`
-- Modify: `src-tauri/src/lib.rs` (init_local_database)
+- Modify: `src-tauri/src/modules/scoring/mod.rs:175`
 
-- [ ] **Step 1: Create the initial migration SQL file first (needed at compile time)**
+- [ ] **Step 1: Fix the unwrap**
 
-Create `src-tauri/src/infrastructure/database/sql/001_initial.sql` containing all the `CREATE TABLE IF NOT EXISTS` statements currently in `lib.rs init_local_database`.
-
-- [ ] **Step 2: Add `pub mod migrations;` to `infrastructure/database/mod.rs`**
-
-The file currently only contains a comment. Replace with:
+At line 175, change:
 ```rust
-// Infrastructure Database
-pub mod migrations;
+sorted_factors.sort_by(|a, b| b.contribution.partial_cmp(&a.contribution).unwrap());
+```
+To:
+```rust
+sorted_factors.sort_by(|a, b| b.contribution.partial_cmp(&a.contribution).unwrap_or(std::cmp::Ordering::Equal));
 ```
 
-- [ ] **Step 3: Create migrations table and runner**
+- [ ] **Step 2: Verify build + tests**
 
+Run: `cd src-tauri && cargo check && cargo test 2>&1 | tail -5`
+Expected: All tests pass.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src-tauri/src/modules/scoring/mod.rs
+git commit -m "fix: handle NaN in partial_cmp sort to prevent panics"
+```
+
+---
+
+### Task 7: Parallelize sequential network calls in get_detailed_ticker_analysis
+
+**Files:**
+- Modify: `src-tauri/src/api/commands/market.rs:286-290`
+
+- [ ] **Step 1: Replace sequential awaits with tokio::join!**
+
+Change lines 287-290:
 ```rust
-// src-tauri/src/infrastructure/database/migrations.rs
+    let quant_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await;
+    let price_result = ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await;
 
-use sqlx::{Pool, Sqlite};
+    let fundamentals_result = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await;
+```
 
-struct Migration {
-    version: i64,
-    description: &'static str,
-    sql: &'static str,
+To:
+```rust
+    let (quant_result, price_result, fundamentals_result) = tokio::join!(
+        ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol),
+        ENHANCED_MARKET_SERVICE.get_current_price(&symbol),
+        FUNDAMENTAL_SERVICE.get_fundamentals(&symbol),
+    );
+```
+
+- [ ] **Step 2: Verify build + tests**
+
+Run: `cd src-tauri && cargo check && cargo test 2>&1 | tail -5`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src-tauri/src/api/commands/market.rs
+git commit -m "perf: parallelize network calls in get_detailed_ticker_analysis"
+```
+
+---
+
+### Task 8: Fix _days parameter silently ignored + remove dead code in App/BacktestTab
+
+**Files:**
+- Modify: `src-tauri/src/api/commands/market.rs:172-176`
+- Modify: `src/App.tsx`
+- Modify: `src/BacktestTab.tsx`
+
+- [ ] **Step 1: Fix _days parameter in Rust**
+
+In `api/commands/market.rs`, change:
+```rust
+    let _days = days.unwrap_or(365);
+
+    match ENHANCED_MARKET_SERVICE.get_historical_prices(&symbol).await {
+        Ok(prices) => {
+            let result: Vec<serde_json::Value> = prices.into_iter()
+```
+
+To:
+```rust
+    let days = days.unwrap_or(365);
+
+    match ENHANCED_MARKET_SERVICE.get_historical_prices(&symbol).await {
+        Ok(prices) => {
+            // Truncate to requested number of days
+            let truncated: Vec<_> = if prices.len() > days {
+                prices[prices.len() - days..].to_vec()
+            } else {
+                prices
+            };
+            let result: Vec<serde_json::Value> = truncated.into_iter()
+```
+
+- [ ] **Step 2: Remove loadCacheStats from App.tsx**
+
+Remove the `loadCacheStats` function (lines ~154-157) and any calls to it in useEffect.
+
+- [ ] **Step 3: Remove dead BacktestTab state variables**
+
+In `src/BacktestTab.tsx`, remove:
+```typescript
+const [benchmarkSymbol, setBenchmarkSymbol] = useState("SPY");
+const [riskFreeRate, setRiskFreeRate] = useState(4.0);
+const [transactionCost, setTransactionCost] = useState(0.0);
+```
+
+Also remove the corresponding JSX inputs in the advanced settings panel that reference `benchmarkSymbol`, `riskFreeRate`, and `transactionCost`. Keep the `showAdvanced` toggle and any other advanced settings that are actually used.
+
+- [ ] **Step 4: Verify both Rust and TS compile**
+
+Run:
+```bash
+cd src-tauri && cargo check
+cd .. && npx tsc --noEmit
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src-tauri/src/api/commands/market.rs src/App.tsx src/BacktestTab.tsx
+git commit -m "fix: respect days param in historical prices, remove dead code in App/BacktestTab"
+```
+
+---
+
+## Phase 2: Frontend Deduplication & Quality
+
+### Task 9: Deduplicate formatCurrency — use shared import everywhere
+
+**Files:**
+- Modify: `src/BacktestTab.tsx`
+- Modify: `src/components/TaxLotView.tsx`
+- Modify: `src/components/DividendTracker.tsx`
+- Modify: `src/components/PortfolioOptimizer.tsx`
+- Modify: `src/components/TickerAnalysis.tsx`
+- Modify: `src/components/TransactionHistory.tsx`
+- Modify: `src/components/PortfolioPerformanceChart.tsx`
+
+- [ ] **Step 1: In each of the 7 files, delete the local formatCurrency definition and add an import**
+
+The canonical `formatCurrency(value, currency?, locale?)` from `src/shared/utils/index.ts` accepts `(number, string='USD', string='en-US')` and uses `minimumFractionDigits: 2, maximumFractionDigits: 2`.
+
+In each file:
+1. Add `import { formatCurrency } from '../shared/utils';  // adjust relative path per file location` at the top
+2. Delete the local `function formatCurrency(...)` or `const formatCurrency = (...)` definition
+
+For files where the local version uses `maximumFractionDigits: 0` (like `BacktestTab.tsx`), replace those specific calls with inline `Intl.NumberFormat` or create a `formatCurrencyCompact` in shared/utils that uses 0 decimal places. Do NOT redefine `formatCurrency` locally.
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit 2>&1 | tail -5`
+Expected: Clean.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/BacktestTab.tsx src/components/TaxLotView.tsx src/components/DividendTracker.tsx src/components/PortfolioOptimizer.tsx src/components/TickerAnalysis.tsx src/components/TransactionHistory.tsx src/components/PortfolioPerformanceChart.tsx src/shared/utils/index.ts
+git commit -m "refactor: deduplicate formatCurrency — single import from shared/utils"
+```
+
+---
+
+### Task 10: Deduplicate Holding and Universe interfaces
+
+**Files:**
+- Modify: `src/shared/types/index.ts` (canonical Holding)
+- Modify: `src/PortfolioTab.tsx`
+- Modify: `src/components/ExposureChart.tsx`
+- Modify: `src/components/RiskDashboard.tsx`
+- Modify: `src/components/ScenarioAnalysis.tsx`
+- Modify: `src/features/universe/UniverseTab.tsx`
+- Modify: `src/components/WatchlistTab.tsx`
+
+- [ ] **Step 1: Check all Holding variants and create a superset**
+
+Read the 5 `Holding` definitions. The canonical (`shared/types`) uses camelCase. If `PortfolioTab.tsx` uses different field names from the backend, create a `PortfolioHolding` that matches the backend shape and keep it in `PortfolioTab.tsx` or `shared/types`.
+
+For the components that just need `{ symbol, shares, currentPrice, value, weight? }`, the canonical `Holding` should work.
+
+Update `src/shared/types/index.ts` Holding to include optional fields used by some components:
+```typescript
+export interface Holding {
+  symbol: string;
+  shares: number;
+  averageCost: number;
+  currentPrice: number;
+  value: number;
+  gain: number;
+  gainPercent: number;
+  weight?: number;
+  targetPct?: number;
+}
+```
+
+- [ ] **Step 2: Replace local Holding definitions with import**
+
+In `ExposureChart.tsx`, `RiskDashboard.tsx`, `ScenarioAnalysis.tsx`: remove local `interface Holding` and add `import { Holding } from '../shared/types';  // adjust relative path per file location`.
+
+For `PortfolioTab.tsx`, if it uses snake_case fields from the Rust backend, keep its own `PortfolioHolding` interface or rename the canonical fields. The important thing is to not have 5 separate definitions.
+
+- [ ] **Step 3: Deduplicate Universe interface**
+
+In `src/features/universe/UniverseTab.tsx` and `src/components/WatchlistTab.tsx`, remove local `interface Universe` and add:
+```typescript
+import { Universe } from '../hooks/useAppState';  // adjust relative path per file location
+```
+
+- [ ] **Step 4: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit 2>&1 | tail -5`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/shared/types/index.ts src/PortfolioTab.tsx src/components/ExposureChart.tsx src/components/RiskDashboard.tsx src/components/ScenarioAnalysis.tsx src/features/universe/UniverseTab.tsx src/components/WatchlistTab.tsx
+git commit -m "refactor: deduplicate Holding and Universe interfaces"
+```
+
+---
+
+### Task 11: Extract useIsMounted hook
+
+**Files:**
+- Create: `src/hooks/useIsMounted.ts`
+- Modify: `src/App.tsx`, `src/PortfolioTab.tsx`, `src/BacktestTab.tsx`, `src/JournalTab.tsx`, `src/components/VibeStudio.tsx`, `src/components/SavedPortfoliosTab.tsx`, `src/components/PortfolioOptimizer.tsx`, `src/components/WatchlistTab.tsx`, `src/components/TickerAnalysis.tsx`
+
+- [ ] **Step 1: Create the hook**
+
+Create `src/hooks/useIsMounted.ts`:
+
+```typescript
+import { useRef, useEffect } from 'react';
+
+/**
+ * Returns a ref that tracks whether the component is currently mounted.
+ * Use to guard async state updates after unmount.
+ */
+export function useIsMounted() {
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  return isMountedRef;
+}
+```
+
+- [ ] **Step 2: In each of the 9 files, replace the inline pattern with the hook**
+
+In each file, replace:
+```typescript
+const isMountedRef = useRef(true);
+
+useEffect(() => {
+  isMountedRef.current = true;
+  return () => {
+    isMountedRef.current = false;
+  };
+}, []);
+```
+
+With:
+```typescript
+import { useIsMounted } from '../hooks/useIsMounted';  // adjust relative path per file location
+
+// Inside the component:
+const isMountedRef = useIsMounted();
+```
+
+Also remove the now-unused `useRef` import if no other refs are used in that file. All existing `isMountedRef.current` checks remain unchanged.
+
+- [ ] **Step 3: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit 2>&1 | tail -5`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/hooks/useIsMounted.ts src/App.tsx src/PortfolioTab.tsx src/BacktestTab.tsx src/JournalTab.tsx src/components/VibeStudio.tsx src/components/SavedPortfoliosTab.tsx src/components/PortfolioOptimizer.tsx src/components/WatchlistTab.tsx src/components/TickerAnalysis.tsx
+git commit -m "refactor: extract useIsMounted hook, replace 9 duplicated patterns"
+```
+
+---
+
+### Task 12: Replace inline file download with saveFile utility in VibeStudio
+
+**Files:**
+- Modify: `src/components/VibeStudio.tsx`
+
+- [ ] **Step 1: Import saveFile and replace both inline download patterns**
+
+Add import:
+```typescript
+import { saveFile } from '../shared/utils/fileSystem';  // adjust relative path per file location
+```
+
+Replace the JSON export block (~lines 610-619):
+```typescript
+// Before:
+const blob = new Blob([dataStr], { type: 'application/json' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = fileName;
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+URL.revokeObjectURL(url);
+
+// After:
+await saveFile(dataStr, fileName, 'application/json');
+```
+
+Replace the CSV export block (~lines 772-780) similarly:
+```typescript
+await saveFile(csvContent, fileName, 'text/csv');
+```
+
+Make the containing functions `async` if not already.
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit 2>&1 | tail -5`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/VibeStudio.tsx
+git commit -m "refactor: use saveFile utility instead of inline download pattern"
+```
+
+---
+
+### Task 13: Migrate PortfolioTab from 26 useState to useReducer
+
+**Files:**
+- Modify: `src/PortfolioTab.tsx`
+
+- [ ] **Step 1: Read the full component to understand all state variables**
+
+Read `src/PortfolioTab.tsx` fully to catalog all 26 `useState` calls and their usage patterns.
+
+- [ ] **Step 2: Define state interface and reducer**
+
+Add before the component:
+
+```typescript
+interface PortfolioLocalState {
+  showPerformance: boolean;
+  showTransactions: boolean;
+  showDividends: boolean;
+  showTaxLots: boolean;
+  showRebalanceHistory: boolean;
+  showImport: boolean;
+  importPreview: unknown | null;
+  importBroker: string;
+  importSkipped: unknown[];
+  importErrors: string[];
+  newSymbol: string;
+  newShares: string;
+  newCostBasis: string;
+  newTargetPct: string;
+  cashAmount: string;
+  rebalanceThreshold: number;
+  maxPosition: number;
+  cashBuffer: number;
+  selectedView: string;
+  isLoading: boolean;
+  error: string | null;
 }
 
-const MIGRATIONS: &[Migration] = &[
-    Migration {
-        version: 1,
-        description: "Initial schema",
-        sql: include_str!("sql/001_initial.sql"),
-    },
-    // Future migrations go here
+type PortfolioAction =
+  | { type: 'TOGGLE_PANEL'; panel: string }
+  | { type: 'SET_FIELD'; field: string; value: unknown }
+  | { type: 'RESET_NEW_HOLDING' }
+  | { type: 'SET_IMPORT'; preview: unknown | null; skipped: unknown[]; errors: string[] };
+
+function portfolioReducer(state: PortfolioLocalState, action: PortfolioAction): PortfolioLocalState {
+  switch (action.type) {
+    case 'TOGGLE_PANEL':
+      return { ...state, [action.panel]: !state[action.panel as keyof PortfolioLocalState] };
+    case 'SET_FIELD':
+      return { ...state, [action.field]: action.value };
+    case 'RESET_NEW_HOLDING':
+      return { ...state, newSymbol: '', newShares: '', newCostBasis: '', newTargetPct: '' };
+    case 'SET_IMPORT':
+      return { ...state, importPreview: action.preview, importSkipped: action.skipped, importErrors: action.errors };
+    default:
+      return state;
+  }
+}
+```
+
+Note: The actual types for `importPreview`, `importSkipped`, etc. should match whatever types are used in the component. Read the file to determine the exact types.
+
+- [ ] **Step 3: Replace useState calls with useReducer**
+
+Replace all `const [foo, setFoo] = useState(...)` with the reducer, and update all setter calls to use `dispatch()`.
+
+- [ ] **Step 4: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit 2>&1 | tail -5`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/PortfolioTab.tsx
+git commit -m "refactor: migrate PortfolioTab from 26 useState to useReducer"
+```
+
+---
+
+### Task 14: Add React.memo to large frequently-rendered components
+
+**Files:**
+- Modify: `src/components/Dashboard.tsx`
+- Modify: `src/components/AlertsPanel.tsx`
+- Modify: `src/components/ScenarioAnalysis.tsx`
+- Modify: `src/components/RiskDashboard.tsx`
+- Modify: `src/components/WatchlistTab.tsx`
+- Modify: `src/components/ComparisonMode.tsx`
+- Modify: `src/components/RebalanceScheduler.tsx`
+
+- [ ] **Step 1: Wrap each component's default export with React.memo**
+
+For each file, wrap the export. If the file looks like:
+```typescript
+export default function Dashboard(props: Props) { ... }
+```
+
+Change to:
+```typescript
+import { memo } from 'react';
+
+function Dashboard(props: Props) { ... }
+
+export default memo(Dashboard);
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run: `npx tsc --noEmit 2>&1 | tail -5`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/components/Dashboard.tsx src/components/AlertsPanel.tsx src/components/ScenarioAnalysis.tsx src/components/RiskDashboard.tsx src/components/WatchlistTab.tsx src/components/ComparisonMode.tsx src/components/RebalanceScheduler.tsx
+git commit -m "perf: wrap 7 large components with React.memo"
+```
+
+---
+
+## Phase 3: Rust Backend Quality
+
+### Task 15: Remove blanket #[allow(dead_code)] and clean up surfaced dead code
+
+**Files:**
+- Modify: `src-tauri/src/modules/mod.rs` (verify clean after Task 3)
+- Modify: `src-tauri/src/services/enhanced_market_service.rs` (remove dead fields/methods)
+- Modify: `src-tauri/src/services/db_cache.rs` (remove unused structs/methods)
+- Modify: `src-tauri/src/core/logging/mod.rs` (remove unused as_str)
+
+- [ ] **Step 1: Build and catalog actual dead code warnings**
+
+Run: `cd src-tauri && cargo check 2>&1 | grep "warning:"`
+
+- [ ] **Step 2: For each dead code warning, remove the dead item**
+
+Expected items to remove:
+- `EnhancedMarketDataService::new()` if not called anywhere
+- `retry_executor` field in `EnhancedMarketDataService` if never read
+- `get_full_market_data()` method and `FullMarketData` struct
+- `FundamentalService::has_alpha_vantage()` if unused
+- `LogLevel::as_str()` if unused
+- `CachedFundamentals`, `CachedSentiment`, `CachedAnalystRating` structs and their getter/setter methods in `db_cache.rs` if unused
+- `fundamentals_ttl_hours` field in `DatabaseCacheService` if unused
+
+For each: grep to confirm it's unused, then remove it.
+
+- [ ] **Step 3: Verify build + tests**
+
+Run: `cd src-tauri && cargo check && cargo test 2>&1 | tail -10`
+Expected: Significantly fewer warnings. All tests pass.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src-tauri/src/
+git commit -m "refactor: remove dead code surfaced by removing #[allow(dead_code)] blankets"
+```
+
+---
+
+### Task 16: Deduplicate ETF arrays and move shared types out of lib.rs
+
+**Files:**
+- Modify: `src-tauri/src/api/commands/market.rs:528-565`
+- Create: `src-tauri/src/shared_types.rs`
+- Modify: `src-tauri/src/lib.rs`
+
+- [ ] **Step 1: Extract shared bond ETF list as a constant**
+
+In `api/commands/market.rs`, above the two functions, add:
+
+```rust
+const BOND_ETFS: &[&str] = &[
+    "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
+    "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
+    "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
+    "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
 ];
-
-pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
-    // Create migrations tracking table
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS _migrations (
-            version INTEGER PRIMARY KEY,
-            description TEXT NOT NULL,
-            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )"
-    )
-    .execute(pool)
-    .await
-    .map_err(|e| format!("Failed to create migrations table: {e}"))?;
-
-    // Get current version
-    let current: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) FROM _migrations")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| format!("Failed to get migration version: {e}"))?;
-
-    // Apply pending migrations
-    for migration in MIGRATIONS {
-        if migration.version > current {
-            tracing::info!(version = migration.version, desc = migration.description, "Applying migration");
-            sqlx::query(migration.sql)
-                .execute(pool)
-                .await
-                .map_err(|e| format!("Migration {} failed: {e}", migration.version))?;
-
-            sqlx::query("INSERT INTO _migrations (version, description) VALUES (?, ?)")
-                .bind(migration.version)
-                .bind(migration.description)
-                .execute(pool)
-                .await
-                .map_err(|e| format!("Failed to record migration {}: {e}", migration.version))?;
-        }
-    }
-
-    tracing::info!(version = MIGRATIONS.last().map(|m| m.version).unwrap_or(0), "Database up to date");
-    Ok(())
-}
 ```
 
-- [ ] **Step 4: Wire migrations into init_local_database**
+In `is_bond_etf_symbol`, use `BOND_ETFS` instead of the inline array.
 
-Replace the inline `CREATE TABLE` statements in `lib.rs init_local_database` with:
+In `is_etf_symbol`, keep the full `etf_patterns` array (which includes both bond and equity ETFs) but note the bond subset is now in `BOND_ETFS` for the `is_bond_etf_symbol` function.
+
+- [ ] **Step 2: Move shared types from lib.rs to shared_types.rs**
+
+Create `src-tauri/src/shared_types.rs` with `PriceAlert`, `RebalanceSchedule`, `Universe`, `ExportBundle` (moved from `lib.rs` lines 82-133).
+
+In `lib.rs`, replace the type definitions block with:
 ```rust
-crate::infrastructure::database::migrations::run_migrations(&pool).await?;
+mod shared_types;
+pub use shared_types::*;
 ```
 
-- [ ] **Step 5: Run cargo check and test**
+- [ ] **Step 3: Verify build + tests**
 
-Run: `cd src-tauri && cargo check && cargo test`
-Expected: Compiles and passes
+Run: `cd src-tauri && cargo check && cargo test 2>&1 | tail -5`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src-tauri/src/infrastructure/database/
-git commit -m "feat: implement SQLite migration system
-
-Replace inline CREATE TABLE statements with versioned migration files.
-Track applied migrations in _migrations table. Future schema changes
-go in numbered SQL files and auto-apply on startup."
+git add src-tauri/src/shared_types.rs src-tauri/src/lib.rs src-tauri/src/api/commands/market.rs
+git commit -m "refactor: deduplicate ETF arrays, move shared types out of lib.rs"
 ```
 
 ---
 
-## Phase 3: Developer Experience
+## Phase 4: Build & Config Optimization
 
-### Task 11: Add ESLint + Prettier
+### Task 17: Configure Vite manual chunks for code splitting
 
 **Files:**
-- Create: `eslint.config.js`
-- Create: `.prettierrc`
-- Modify: `package.json` (add devDependencies and scripts)
+- Modify: `vite.config.ts`
 
-- [ ] **Step 1: Install ESLint and Prettier**
+- [ ] **Step 1: Replace manualChunks: undefined with proper chunk splitting**
 
-```bash
-npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks eslint-plugin-react-refresh prettier
+In `vite.config.ts`, replace:
+```typescript
+rollupOptions: {
+  output: {
+    manualChunks: undefined,
+  },
+},
 ```
 
-- [ ] **Step 2: Create ESLint config**
-
-Create `eslint.config.js`:
-
-```javascript
-import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import reactHooks from 'eslint-plugin-react-hooks';
-import reactRefresh from 'eslint-plugin-react-refresh';
-
-export default tseslint.config(
-  { ignores: ['dist', 'src-tauri', 'node_modules', 'src/landing'] },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    plugins: {
-      'react-hooks': reactHooks,
-      'react-refresh': reactRefresh,
-    },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
-      'react-hooks/exhaustive-deps': 'warn',
+With:
+```typescript
+rollupOptions: {
+  output: {
+    manualChunks: {
+      'vendor-react': ['react', 'react-dom'],
+      'vendor-charts': ['recharts'],
+      'vendor-icons': ['lucide-react'],
+      'vendor-pdf': ['jspdf', 'html2canvas'],
     },
   },
-);
+},
 ```
 
-- [ ] **Step 3: Create Prettier config**
+- [ ] **Step 2: Build and check chunk sizes**
 
-Create `.prettierrc`:
-```json
-{
-  "semi": true,
-  "singleQuote": true,
-  "trailingComma": "es5",
-  "printWidth": 100,
-  "tabWidth": 2
-}
-```
+Run: `npm run build 2>&1 | tail -20`
+Expected: Multiple chunks instead of one 1.5MB bundle.
 
-- [ ] **Step 4: Add lint scripts to package.json**
-
-```json
-"lint": "tsc --noEmit && eslint src/",
-"lint:fix": "eslint src/ --fix && prettier --write src/",
-"format": "prettier --write src/"
-```
-
-- [ ] **Step 5: Commit (do not auto-fix yet — separate commit)**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add eslint.config.js .prettierrc package.json package-lock.json
-git commit -m "chore: add ESLint and Prettier configuration
-
-Configure ESLint with TypeScript, React hooks, and no-explicit-any
-rules. Add Prettier for consistent formatting."
+git add vite.config.ts
+git commit -m "perf: enable Vite code splitting — split vendor chunks from 1.5MB monolith"
 ```
 
 ---
 
-### Task 12: Fix Dependency Placement
+### Task 18: Update README version and fix broken doc links
+
+**Files:**
+- Modify: `README.md`
+
+- [ ] **Step 1: Read README.md**
+
+Read the full file to find version references and broken links.
+
+- [ ] **Step 2: Update version**
+
+Change `Current Version: 0.1.0 MLP` (or similar) to `Current Version: 0.3.2`.
+
+- [ ] **Step 3: Remove or fix broken doc links**
+
+Remove links to files excluded by `.gitignore`:
+- `MOBILE_SETUP.md`, `BUILD_REPRODUCIBILITY.md`, `EPIC_H_COMPLETION.md`, `ARCHITECTURE.md`, `SECURITY.md`, `QA_AUDIT_REPORT.md`, `AUDIT_FIXES_CHECKLIST.md`, `PROJECT_STATUS.md`, `SECURITY_CHECKLIST.md`
+
+Either remove the references entirely or replace them with inline descriptions.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add README.md
+git commit -m "docs: update README version to 0.3.2, remove broken doc links"
+```
+
+---
+
+### Task 19: Remove unused devDependencies
 
 **Files:**
 - Modify: `package.json`
 
-- [ ] **Step 1: Move test/build tools to devDependencies**
+- [ ] **Step 1: Remove ts-node and bare playwright**
 
-Move from `dependencies` to `devDependencies`:
-- `@playwright/test`
-- `playwright`
-- `@remotion/cli`
-- `@remotion/media`
-- `@remotion/media-utils`
-- `@remotion/player`
-- `remotion`
-- `dotenv-cli`
+```bash
+npm uninstall ts-node playwright
+```
 
-Also remove unused deps:
-- `better-sqlite3` (not imported anywhere in frontend)
-- `@types/better-sqlite3`
-- `axios` (not imported anywhere)
+- [ ] **Step 2: Verify playwright still works without bare package**
 
-- [ ] **Step 2: Run npm install to verify**
+Run: `npx playwright test --list 2>&1 | head -5`
+Expected: Lists test files without errors. If it fails, re-add `playwright` and only remove `ts-node`.
 
-Run: `npm install`
-Expected: Installs successfully
+- [ ] **Step 3: Verify install and build**
 
-- [ ] **Step 3: Commit**
+Run: `npm install && npx tsc --noEmit 2>&1 | tail -5`
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add package.json package-lock.json
-git commit -m "chore: move test/build deps to devDependencies, remove unused
-
-Move playwright, remotion, dotenv-cli to devDependencies. Remove
-unused better-sqlite3 and axios."
+git commit -m "chore: remove unused devDeps (ts-node, bare playwright)"
 ```
 
 ---
 
-### Task 13: Add CI Pre-flight Job
+## Verification
 
-**Files:**
-- Modify: `.github/workflows/release.yml`
+After all tasks are complete:
 
-- [ ] **Step 1: Add pre-flight job before build matrix**
-
-Add a new job at the beginning of the workflow:
-
-```yaml
-preflight:
-  runs-on: ubuntu-22.04
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: 20
-        cache: npm
-    - run: npm ci
-    - run: npm run lint
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        components: clippy
-    - run: cd src-tauri && cargo clippy -- -D warnings
-```
-
-Add `needs: preflight` to all build jobs.
-
-- [ ] **Step 2: Commit**
-
+- [ ] **Final Step 1: Full Rust build + test**
 ```bash
-git add .github/workflows/
-git commit -m "ci: add pre-flight type-check and clippy job
-
-Run tsc --noEmit and cargo clippy before expensive platform builds
-to catch errors early."
+cd src-tauri && cargo check && cargo test
 ```
 
----
-
-### Task 14: Fix Rust Release Profile
-
-**Files:**
-- Modify: `src-tauri/Cargo.toml:79-84`
-
-- [ ] **Step 1: Change opt-level from "s" to 3**
-
-```toml
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true
-opt-level = 3     # Optimize for speed (financial calculations benefit)
-panic = "abort"
-```
-
-- [ ] **Step 2: Commit**
-
+- [ ] **Final Step 2: Full frontend build + test**
 ```bash
-git add src-tauri/Cargo.toml
-git commit -m "perf: optimize release build for speed over size
-
-Change opt-level from 's' (size) to 3 (speed). Desktop app is not
-size-constrained; financial calculations and backtest simulations
-benefit from faster codegen."
+npm run lint && npx vitest run && npm run build
 ```
 
----
-
-## Phase 4: Code Standards Compliance
-
-### Task 15: Replace Direct invoke with invokeWithResilience
-
-**Files:**
-- Modify: `src/PortfolioTab.tsx` (lines 163, 224, 328, 333, 362, 372, 376, 393, 408)
-- Modify: `src/services/fundamentalData.ts:5`
-- Modify: `src/services/openrouter.ts:2`
-- Modify: `src/components/DataSourcesPage.tsx:2`
-- Modify: `src/components/AlertsPanel.tsx`
-- Modify: `src/components/RebalanceScheduler.tsx`
-- Modify: `src/components/SettingsPage.tsx`
-- Modify: `src/components/WatchlistTab.tsx`
-- Modify: `src/components/SavedPortfoliosTab.tsx`
-- Modify: `src/JournalTab.tsx`
-- Modify: `src/BacktestTab.tsx`
-- Modify: `src/components/TickerAnalysis.tsx`
-- Modify: `src/components/Dashboard.tsx`
-- Modify: `src/components/RiskDashboard.tsx`
-- Modify: `src/components/YearlyReview.tsx`
-- Modify: `src/components/PortfolioOptimizer.tsx`
-- Modify: `src/components/ComparisonMode.tsx`
-- Modify: `src/components/VibeStudio.tsx`
-
-- [ ] **Step 1: Identify all direct invoke imports**
-
-Run: `grep -rn "from.*@tauri-apps/api/core\|from.*services/tauri" src/ --include="*.ts" --include="*.tsx" | grep -v node_modules | grep -v __tests__`
-
-- [ ] **Step 2: Replace each import and call site**
-
-For each file, change:
-```typescript
-import { invoke } from '@tauri-apps/api/core';
-// or
-import { invoke } from '../services/tauri';
-```
-to:
-```typescript
-import { invokeWithResilience } from '@/services/apiClient';
-```
-
-And each `invoke('command', { args })` to `invokeWithResilience('command', { args })`.
-
-Note: Some commands may intentionally bypass resilience (e.g., `vault_unlock` which should fail fast). Keep those as-is and add a comment explaining why.
-
-- [ ] **Step 3: Consolidate the two API clients**
-
-Delete `src/core/api/client.ts` and update any imports to use `src/services/apiClient.ts` instead. Merge any unique features (feature-flag config) from `core/api/client.ts` into `services/apiClient.ts`.
-
-- [ ] **Step 4: Commit**
-
+- [ ] **Final Step 3: Verify bundle size improved**
 ```bash
-git add src/
-git commit -m "fix: replace direct invoke with invokeWithResilience
-
-Ensure all Tauri IPC calls go through the resilient API client with
-circuit breaker, retry, and deduplication. Consolidate duplicate
-API client implementations."
+ls -lh dist/assets/*.js
 ```
+Expected: Multiple JS chunks, largest under 500KB.
 
----
-
-### Task 16: Add useReducer for Complex State Components
-
-**Files:**
-- Modify: `src/components/VibeStudio.tsx`
-- Modify: `src/components/SettingsPage.tsx`
-
-- [ ] **Step 1: Refactor VibeStudio to use useReducer**
-
-Extract the 14+ `useState` calls into a reducer:
-
-```typescript
-type VibeStudioState = {
-  isGenerating: boolean;
-  generatedPortfolio: GeneratedPortfolio | null;
-  chatMessages: ChatMessage[];
-  inputMessage: string;
-  selectedModel: string;
-  // ... etc
-};
-
-type VibeStudioAction =
-  | { type: 'SET_GENERATING'; payload: boolean }
-  | { type: 'SET_PORTFOLIO'; payload: GeneratedPortfolio | null }
-  | { type: 'ADD_MESSAGE'; payload: ChatMessage }
-  | { type: 'SET_INPUT'; payload: string }
-  // ... etc;
-
-function vibeStudioReducer(state: VibeStudioState, action: VibeStudioAction): VibeStudioState {
-  switch (action.type) {
-    case 'SET_GENERATING': return { ...state, isGenerating: action.payload };
-    // ... etc
-  }
-}
-```
-
-- [ ] **Step 2: Refactor SettingsPage similarly**
-
-Extract the 9 `useState` calls into a reducer.
-
-- [ ] **Step 3: Commit**
-
+- [ ] **Final Step 4: Git log review**
 ```bash
-git add src/components/VibeStudio.tsx src/components/SettingsPage.tsx
-git commit -m "refactor: use useReducer for complex component state
-
-Replace 14+ useState calls in VibeStudio and 9 in SettingsPage with
-useReducer per CODE_STANDARDS.md guidance for 4+ related states."
+git log --oneline -25
 ```
-
----
-
-### Task 17: Add Per-Tab ErrorBoundary and Fix JSON.parse Safety
-
-**Files:**
-- Create: `src/components/TabErrorBoundary.tsx`
-- Modify: `src/App.tsx` (wrap each tab)
-- Verify: `src/shared/utils/index.ts:192-198` (deepClone already has try-catch — no change needed)
-
-- [ ] **Step 1: Create TabErrorBoundary component**
-
-```typescript
-import React, { Component, ReactNode } from 'react';
-
-interface Props {
-  tabName: string;
-  children: ReactNode;
-}
-
-interface State {
-  hasError: boolean;
-  error: Error | null;
-}
-
-export class TabErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: '2rem', textAlign: 'center' }}>
-          <h3>{this.props.tabName} encountered an error</h3>
-          <p>{this.state.error?.message}</p>
-          <button onClick={() => this.setState({ hasError: false, error: null })}>
-            Try Again
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-```
-
-- [ ] **Step 2: Wrap each tab in App.tsx**
-
-```tsx
-{state.activeTab === 'portfolio' && (
-  <TabErrorBoundary tabName="Portfolio">
-    <Suspense fallback={<Loading />}>
-      <PortfolioTab />
-    </Suspense>
-  </TabErrorBoundary>
-)}
-```
-
-Apply to all tabs.
-
-- [ ] **Step 3: Verify deepClone already has try-catch (no change needed)**
-
-`src/shared/utils/index.ts` lines 192-198 already wraps `JSON.parse` in try-catch. No change needed here. Instead, search for other unguarded `JSON.parse` calls in production code:
-
-Run: `grep -rn "JSON.parse" src/ --include="*.ts" --include="*.tsx" | grep -v __tests__ | grep -v node_modules`
-
-Fix any instances not wrapped in try-catch (particularly in `src/services/portfolioAgent.ts`, `src/components/AlertsPanel.tsx`, `src/components/RebalanceScheduler.tsx`, `src/contexts/UserProfileContext.tsx`).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/components/TabErrorBoundary.tsx src/App.tsx src/shared/utils/index.ts
-git commit -m "fix: add per-tab ErrorBoundary, wrap unsafe JSON.parse
-
-Each tab now has its own error boundary — a crash in one tab doesn't
-kill the entire app. Fix unguarded JSON.parse in deepClone utility."
-```
-
----
-
-### Task 18: Add Effect Cleanup and Fix useEffect Patterns
-
-**Files:**
-- Modify: `src/components/AlertsPanel.tsx:155-170`
-- Modify: `src/components/RebalanceScheduler.tsx:184-220`
-- Modify: `src/JournalTab.tsx:49-53`
-
-- [ ] **Step 1: Add mounted guard to AlertsPanel migration effect**
-
-```typescript
-useEffect(() => {
-  let mounted = true;
-  if (/* migration condition */) {
-    Promise.all(/* ... */).then((result) => {
-      if (mounted) setAlerts(result);
-    });
-  }
-  return () => { mounted = false; };
-}, []);
-```
-
-- [ ] **Step 2: Same for RebalanceScheduler migration effects**
-
-Add `mounted` guard to both `useEffect` blocks at lines 184-202 and 205-220.
-
-- [ ] **Step 3: Fix JournalTab floating promise**
-
-```typescript
-useEffect(() => {
-  let mounted = true;
-  if (entries.length > 0) {
-    calculateStats().then(() => {
-      // stats are set inside calculateStats
-    }).catch((err) => {
-      if (mounted) logger.error('Failed to calculate stats', err);
-    });
-  }
-  return () => { mounted = false; };
-}, [entries]);
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/components/AlertsPanel.tsx src/components/RebalanceScheduler.tsx src/JournalTab.tsx
-git commit -m "fix: add effect cleanup and mounted guards
-
-Add mounted guards to async effects in AlertsPanel, RebalanceScheduler,
-and JournalTab to prevent state updates after unmount."
-```
-
----
-
-## Phase 5: Testing
-
-### Task 19: Add Rust Integration Tests for Key Commands
-
-**Files:**
-- Create: `src-tauri/tests/commands_test.rs` (or add to existing test modules)
-
-- [ ] **Step 1: Add test for validate_symbol**
-
-Already done in Task 5.
-
-- [ ] **Step 2: Add test for backtest division-by-zero edge case**
-
-In `src-tauri/src/modules/backtest/mod.rs`, add guard:
-
-```rust
-fn calculate_allocation(symbols: &[String], /* ... */) -> Vec<(String, f64)> {
-    if symbols.is_empty() {
-        return vec![];
-    }
-    let weight = 1.0 / symbols.len() as f64;
-    // ...
-}
-```
-
-Test:
-```rust
-#[test]
-fn test_empty_symbols_no_panic() {
-    let result = calculate_allocation(&[], /* ... */);
-    assert!(result.is_empty());
-}
-```
-
-- [ ] **Step 3: Add test for tax loss sort with missing fields**
-
-```rust
-#[test]
-fn test_tax_loss_sort_handles_missing_fields() {
-    let mut opportunities = vec![
-        json!({"symbol": "AAPL", "unrealized_loss": -500.0}),
-        json!({"symbol": "MSFT"}), // missing unrealized_loss
-    ];
-    // Should not panic
-    opportunities.sort_by(|a, b| {
-        let a_val = a["unrealized_loss"].as_f64().unwrap_or(0.0);
-        let b_val = b["unrealized_loss"].as_f64().unwrap_or(0.0);
-        a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
-    });
-}
-```
-
-- [ ] **Step 4: Run tests**
-
-Run: `cd src-tauri && cargo test -- --nocapture`
-Expected: All tests pass
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src-tauri/
-git commit -m "test: add integration tests for edge cases
-
-Test division-by-zero in backtest, missing fields in tax loss sort,
-symbol validation. Cover critical crash paths."
-```
-
----
-
-### Task 20: Add Frontend Tests for Financial Calculations
-
-**Files:**
-- Create: `src/__tests__/shared/calculations-edge-cases.test.ts`
-
-- [ ] **Step 1: Write edge case tests**
-
-```typescript
-import { describe, it, expect } from 'vitest';
-// Import calculation functions from src/shared/utils/calculations.ts
-
-describe('Financial calculation edge cases', () => {
-  it('handles zero prices without NaN', () => {
-    // Test return calculations with price = 0
-  });
-
-  it('handles negative returns correctly', () => {
-    // Test with negative price changes
-  });
-
-  it('handles empty price arrays', () => {
-    // Test with [] input
-  });
-
-  it('handles single-element arrays', () => {
-    // Test with [100] input
-  });
-});
-```
-
-- [ ] **Step 2: Run tests**
-
-Run: `npm run test -- --run`
-Expected: All tests pass
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/__tests__/
-git commit -m "test: add edge case tests for financial calculations
-
-Cover zero prices, negative returns, empty arrays, single elements."
-```
-
----
-
-## Phase 6: Feature Completion
-
-### Task 21: Wire Real Historical Data into Backtest
-
-**Files:**
-- Modify: `src-tauri/src/modules/backtest/mod.rs:211-221`
-
-- [ ] **Step 1: Replace hardcoded get_price_at_date**
-
-The backtest engine should fetch real historical data via the market data service. Change the function to accept a price map:
-
-```rust
-/// Run backtest with real historical prices
-pub async fn run_backtest_with_data(
-    config: &BacktestConfig,
-    historical_prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
-) -> Result<BacktestResult, String> {
-    // Use historical_prices lookup instead of hardcoded values
-}
-
-fn get_price_at_date(
-    symbol: &str,
-    date: NaiveDate,
-    prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
-) -> Option<f64> {
-    prices.get(symbol).and_then(|data| {
-        // Find closest price on or before the date
-        data.iter()
-            .rev()
-            .find(|(d, _)| *d <= date)
-            .map(|(_, p)| *p)
-    })
-}
-```
-
-**IMPORTANT:** `get_price_at_date` is called by `calculate_portfolio_value` (line 224) and `create_snapshot` (line 233). Both callers must be updated to pass the `prices` HashMap. Update their signatures:
-
-```rust
-fn calculate_portfolio_value(
-    cash: f64,
-    positions: &HashMap<String, f64>,
-    date: NaiveDate,
-    prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
-) -> f64 {
-    let mut value = cash;
-    for (symbol, shares) in positions {
-        if let Some(price) = Self::get_price_at_date(symbol, date, prices) {
-            value += shares * price;
-        }
-    }
-    value
-}
-
-fn create_snapshot(
-    date: NaiveDate,
-    cash: f64,
-    positions: &HashMap<String, f64>,
-    prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
-) -> PortfolioSnapshot {
-    // ... same logic but pass `prices` to get_price_at_date
-}
-```
-
-Then propagate the `prices` parameter through all call sites within the backtest simulation loop.
-
-- [ ] **Step 2: Update the Tauri command to fetch historical data first**
-
-In the `run_backtest_simulation` command, fetch historical prices for all symbols in the config before running the simulation.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src-tauri/src/modules/backtest/
-git commit -m "feat: use real historical prices in backtest engine
-
-Replace hardcoded fake price data with actual historical prices
-fetched from market data providers. Backtest results now reflect
-real market conditions."
-```
-
----
-
-### Task 22: Persist Critical Tab State
-
-**Files:**
-- Modify: `src/hooks/useAppState.ts` (add portfolio holdings to global state)
-- Modify: `src/PortfolioTab.tsx` (use global state instead of local)
-
-- [ ] **Step 1: Add portfolio holdings to AppState**
-
-Add `holdings`, `portfolioName`, and related fields to the global `useReducer` state so they survive tab switches.
-
-- [ ] **Step 2: Update PortfolioTab to use global state**
-
-Replace local `useState` for holdings with `state.holdings` from `useAppState`.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/hooks/useAppState.ts src/PortfolioTab.tsx
-git commit -m "fix: persist portfolio holdings across tab switches
-
-Move portfolio holdings from local component state to global app
-state so data isn't lost when switching tabs."
-```
-
----
-
-### Task 23: Fix reqwest::Client Per-Request Creation
-
-**Files:**
-- Modify: `src-tauri/src/lib.rs` (ai_chat_stream, get_exchange_rate)
-
-- [ ] **Step 1: Add a shared reqwest::Client to global state**
-
-```rust
-static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .expect("Failed to create HTTP client")
-});
-```
-
-- [ ] **Step 2: Replace Client::new() with HTTP_CLIENT.clone()**
-
-In `ai_chat_stream` (line 2794) and `get_exchange_rate` (line 3055), replace:
-```rust
-let client = reqwest::Client::new();
-```
-with:
-```rust
-let client = HTTP_CLIENT.clone();  // Clone shares the underlying connection pool
-```
-
-Note: Use `.clone()` not `&*` — reqwest::Client::clone() is cheap (shares the connection pool via Arc), and a reference would cause lifetime issues in async blocks that move the client.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src-tauri/src/lib.rs
-git commit -m "perf: share reqwest::Client across commands
-
-Replace per-request Client::new() with a shared static client for
-connection pooling and DNS caching."
-```
-
----
-
-### Task 24: Fix DB_INITIALIZED Ordering and get_provider_status
-
-**Files:**
-- Modify: `src-tauri/src/lib.rs`
-
-- [ ] **Step 1: Change SeqCst to Acquire/Release**
-
-Line 3260:
-```rust
-let initialized = DB_INITIALIZED.load(Ordering::Acquire);
-```
-
-And wherever it's stored (after Task 6, in `init_market_service_with_db`):
-```rust
-DB_INITIALIZED.store(true, Ordering::Release);
-```
-
-- [ ] **Step 2: Fix get_provider_status to return real data**
-
-Replace the hardcoded response at line 681-688 with actual provider health data from `MultiSourceProvider`:
-
-```rust
-#[tauri::command]
-async fn get_provider_status() -> String {
-    let service = &*ENHANCED_MARKET_SERVICE;
-    service.get_provider_status_json().await
-}
-```
-
-Add a `get_provider_status_json` method to `EnhancedMarketDataService` that queries the `MultiSourceProvider`'s health map.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src-tauri/src/lib.rs src-tauri/src/services/enhanced_market_service.rs
-git commit -m "fix: use correct atomic ordering, return real provider status
-
-Change DB_INITIALIZED from SeqCst to Acquire/Release. Replace
-hardcoded get_provider_status with actual provider health data."
-```
-
----
-
-### Task 25: Move Finnhub API Key from URL to Header
-
-**Files:**
-- Modify: `src-tauri/src/modules/data_provider/multi_source_provider.rs:353-383`
-
-- [ ] **Step 1: Use Authorization header instead of query parameter**
-
-```rust
-let quote_url = format!("https://finnhub.io/api/v1/quote?symbol={}", symbol);
-
-let response = self.client
-    .get(&quote_url)
-    .header("X-Finnhub-Token", api_key.trim())
-    .send()
-    .await
-    .map_err(|e| format!("Finnhub request failed: {}", e))?;
-```
-
-Apply same change to the candles URL at line 380-383.
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add src-tauri/src/modules/data_provider/multi_source_provider.rs
-git commit -m "security: move Finnhub API key from URL to header
-
-Use X-Finnhub-Token header instead of query parameter to prevent
-API key from appearing in logs or browser history."
-```
-
----
-
-## Summary
-
-| Phase | Tasks | Focus |
-|-------|-------|-------|
-| 1 | 1-5 | Security: encryption, API keys, CSP, panics, validation |
-| 2 | 6-10 | Architecture: mutex removal, dead code, tracing, lib.rs split, migrations |
-| 3 | 11-14 | DX: ESLint, dependencies, CI, build profile |
-| 4 | 15-18 | Standards: invokeWithResilience, useReducer, ErrorBoundary, effects |
-| 5 | 19-20 | Testing: Rust integration tests, financial edge cases |
-| 6 | 21-25 | Features: backtest data, tab state, HTTP client, provider status, Finnhub |
+Expected: ~19 clean commits, each with a focused message.
