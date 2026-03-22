@@ -1,6 +1,4 @@
-pub mod sync_service;
 pub mod multi_source_provider;
-pub mod optimized_client;
 pub mod free_sources;
 
 pub use multi_source_provider::{MultiSourceProvider, HistoricalPrice};

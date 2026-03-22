@@ -3,16 +3,14 @@
 // Architecture:
 // - core/     : Configuration, errors, logging
 // - infrastructure/: HTTP, cache, database, resilience
-// - domain/   : Business logic (market, portfolio, analysis)
 // - api/      : Tauri command handlers
-// - modules/  : Legacy modules (being migrated)
+// - modules/  : Feature modules (data_provider, scoring, backtest, portfolio, etc.)
 // - services/ : Service layer
 
 mod modules;
 mod services;
 pub mod core;
 mod infrastructure;
-mod domain;
 mod api;
 
 use api::commands::*;
