@@ -172,7 +172,7 @@ impl ScoringEngine {
         
         // Sort factors by contribution (descending)
         let mut sorted_factors = factors.to_vec();
-        sorted_factors.sort_by(|a, b| b.contribution.partial_cmp(&a.contribution).unwrap());
+        sorted_factors.sort_by(|a, b| b.contribution.partial_cmp(&a.contribution).unwrap_or(std::cmp::Ordering::Equal));
         
         parts.push("Factor Breakdown:".to_string());
         for factor in &sorted_factors {
