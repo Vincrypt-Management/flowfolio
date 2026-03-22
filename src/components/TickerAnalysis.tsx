@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useIsMounted } from '../hooks/useIsMounted';
 import { invokeWithResilience } from '../services/apiClient';
 import {
   ResponsiveContainer,
@@ -171,7 +172,7 @@ export default function TickerAnalysis({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const isMountedRef = useRef(true);
+  const isMountedRef = useIsMounted();
   const reportGeneratedRef = useRef(false);
   
   const { 
@@ -185,13 +186,8 @@ export default function TickerAnalysis({
   } = useAnalysisReport();
 
   useEffect(() => {
-    isMountedRef.current = true;
     reportGeneratedRef.current = false;
     loadTickerData();
-    
-    return () => {
-      isMountedRef.current = false;
-    };
   }, [symbol]);
 
   // Auto-generate report when data is loaded

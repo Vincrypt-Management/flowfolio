@@ -3,7 +3,8 @@
  * Manages watchlists (universes) with symbol tracking, price display, and quick actions
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useIsMounted } from '../hooks/useIsMounted';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
@@ -42,7 +43,7 @@ interface SymbolPriceData {
 
 export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
   const { addToast } = useToast();
-  const isMountedRef = useRef(true);
+  const isMountedRef = useIsMounted();
 
   // Universe list state
   const [universes, setUniverses] = useState<Universe[]>([]);
@@ -79,12 +80,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
   }, [universes]);
 
   useEffect(() => {
-    isMountedRef.current = true;
     loadUniverses();
-
-    return () => {
-      isMountedRef.current = false;
-    };
   }, []);
 
   async function loadUniverses() {

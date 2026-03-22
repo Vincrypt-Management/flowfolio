@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
@@ -36,15 +37,7 @@ export function JournalTab() {
   });
   const [filterType, setFilterType] = useState<string>("all");
 
-  // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
-  
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const isMountedRef = useIsMounted();
 
   useEffect(() => {
     let mounted = true;

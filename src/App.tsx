@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
+import { useIsMounted } from './hooks/useIsMounted';
 import { isTauriContext } from './services/tauri';
 import { useAuth } from './contexts/AuthContext';
 import { invokeWithResilience } from './services/apiClient';
@@ -95,24 +96,18 @@ function App() {
       .catch(() => dispatch(actions.setOnboardingComplete(true)));
   }, [dispatch]);
 
-  // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+  const isMountedRef = useIsMounted();
 
   // Hidden file input for "Import Data" command palette action
   const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    isMountedRef.current = true;
     checkHealth();
     loadTemplates();
     loadDefaultPlan();
     loadUniverses();
     loadSavedPlans();
     loadMarketOverview();
-
-    return () => {
-      isMountedRef.current = false;
-    };
   }, []);
 
   async function checkHealth() {

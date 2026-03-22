@@ -3,7 +3,8 @@
  * Displays all saved portfolios with options to load, view, and delete
  */
 
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, memo } from 'react';
+import { useIsMounted } from '../hooks/useIsMounted';
 import { invokeWithResilience } from '../services/apiClient';
 import { GeneratedPortfolio } from '../services/portfolioAgent';
 import { useToast } from './Toast';
@@ -45,15 +46,10 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'name'>('newest');
   const [selectedPortfolio, setSelectedPortfolio] = useState<GeneratedPortfolio | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const isMountedRef = useRef(true);
+  const isMountedRef = useIsMounted();
 
   useEffect(() => {
-    isMountedRef.current = true;
     loadPortfolios();
-    
-    return () => {
-      isMountedRef.current = false;
-    };
   }, []);
 
   async function loadPortfolios() {

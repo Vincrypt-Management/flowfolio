@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useRef, memo } from "react";
+import { useState, useMemo, memo } from "react";
+import { useIsMounted } from '../hooks/useIsMounted';
 import { invokeWithResilience } from "../services/apiClient";
 import { formatCurrency } from '../shared/utils';
 import { useLiveProgress } from "../hooks/useLiveProgress";
@@ -144,15 +145,7 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
   // Live progress hook
   const { progress, reset: resetProgress } = useLiveProgress("optimization_progress");
 
-  // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
-  
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const isMountedRef = useIsMounted();
 
   async function generateReport() {
     if (holdings.length === 0) {

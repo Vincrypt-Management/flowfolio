@@ -1,4 +1,5 @@
 import { useReducer, useRef, useEffect, useMemo, memo } from "react";
+import { useIsMounted } from '../hooks/useIsMounted';
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage, streamChat } from "../services/openrouter";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
@@ -281,8 +282,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const quantDashboardRef = useRef<HTMLDivElement>(null);
   const tickerAnalysisRef = useRef<HTMLDivElement>(null);
   
-  // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+  const isMountedRef = useIsMounted();
 
   // Load saved conversations on mount
   useEffect(() => {
@@ -398,13 +398,6 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
     };
   }, [generatedPortfolio]);
   
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
   // Save current portfolio to local storage via backend
   const handleSavePortfolio = async () => {
     if (!generatedPortfolio) return;

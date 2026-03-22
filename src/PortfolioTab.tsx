@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from './services/apiClient';
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
@@ -139,15 +140,7 @@ export function PortfolioTab({
   const [importSkipped, setImportSkipped] = useState<Set<number>>(new Set());
   const [importErrors, setImportErrors] = useState<string[]>([]);
 
-  // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const isMountedRef = useIsMounted();
 
   // Persist portfolio holdings and name to global state whenever they change
   useEffect(() => {

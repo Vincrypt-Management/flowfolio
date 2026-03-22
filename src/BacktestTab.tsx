@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
@@ -124,15 +125,7 @@ export function BacktestTab() {
   const [selectedView, setSelectedView] = useState<"overview" | "timeline" | "trades">("overview");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [symbolInput, setSymbolInput] = useState("AAPL, MSFT, GOOGL");
-  // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
-  
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const isMountedRef = useIsMounted();
 
   async function runBacktest() {
     if (config.symbols.length === 0) {
