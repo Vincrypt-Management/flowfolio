@@ -71,9 +71,9 @@ impl OpenRouterService {
             .unwrap_or_else(|| "anthropic/claude-3-sonnet-20240229".to_string());
 
         // Debug: Log API key status
-        eprintln!("[DEBUG] [openrouter] API key configured: {}", api_key.is_some());
-        eprintln!("[DEBUG] [openrouter] API URL: {}", api_url);
-        eprintln!("[DEBUG] [openrouter] Default model: {}", default_model);
+        tracing::debug!(configured = api_key.is_some(), "OpenRouter API key status");
+        tracing::debug!(url = %api_url, "OpenRouter API URL");
+        tracing::debug!(model = %default_model, "OpenRouter default model");
 
         Self {
             client: Client::builder()
@@ -104,7 +104,7 @@ impl OpenRouterService {
 
         // Validate API key format (should start with sk-)
         if !api_key.starts_with("sk-") {
-            eprintln!("[WARN] [openrouter] API key may be invalid (doesn't start with sk-)");
+            tracing::warn!("OpenRouter API key may be invalid (doesn't start with sk-)");
         }
 
         let model_name = model.unwrap_or_else(|| self.default_model.clone());
@@ -117,8 +117,7 @@ impl OpenRouterService {
             stream: Some(false),
         };
 
-        eprintln!("[INFO] [openrouter] Sending chat request to model: {} (max_tokens: {:?})", 
-            model_name, request.max_tokens);
+        tracing::info!(model = %model_name, max_tokens = ?request.max_tokens, "Sending chat request");
 
         let response = self.client
             .post(format!("{}/chat/completions", self.api_url))
@@ -130,14 +129,14 @@ impl OpenRouterService {
             .send()
             .await
             .map_err(|e| {
-                eprintln!("[ERROR] [openrouter] Request failed: {}", e);
+                tracing::error!(error = %e, "OpenRouter request failed");
                 format!("Request failed: {}. Check your internet connection.", e)
             })?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            eprintln!("[ERROR] [openrouter] API error {}: {}", status, error_text);
+            tracing::error!(status = %status, body = %error_text, "OpenRouter API error");
             
             // Provide more helpful error messages
             let user_error = match status.as_u16() {
@@ -152,7 +151,7 @@ impl OpenRouterService {
 
         let result: OpenRouterResponse = response.json().await
             .map_err(|e| {
-                eprintln!("[ERROR] [openrouter] Failed to parse response: {}", e);
+                tracing::error!(error = %e, "Failed to parse OpenRouter response");
                 format!("Failed to parse AI response: {}", e)
             })?;
 
@@ -161,18 +160,17 @@ impl OpenRouterService {
             
             // Check for empty content
             if content.trim().is_empty() {
-                eprintln!("[WARN] [openrouter] Model returned empty content. Finish reason: {:?}", choice.finish_reason);
+                tracing::warn!(finish_reason = ?choice.finish_reason, "Model returned empty content");
                 return Err(format!(
                     "Model returned empty response. Finish reason: {:?}. This may indicate the model refused the request or hit a content filter.",
                     choice.finish_reason
                 ));
             }
             
-            eprintln!("[INFO] [openrouter] Response received, tokens used: {:?}, content length: {} chars", 
-                result.usage, content.len());
+            tracing::info!(tokens = ?result.usage, content_len = content.len(), "OpenRouter response received");
             Ok(content)
         } else {
-            eprintln!("[ERROR] [openrouter] No choices in response. Full response: {:?}", result);
+            tracing::error!(response = ?result, "No choices in OpenRouter response");
             Err("No response from model - no choices returned".to_string())
         }
     }

@@ -123,7 +123,7 @@ impl AlpacaService {
         let api_secret = self.api_secret.as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
-        eprintln!("[INFO] [alpaca] Fetching account info ({})", if self.is_paper { "paper" } else { "live" });
+        tracing::info!(mode = if self.is_paper { "paper" } else { "live" }, "Fetching Alpaca account info");
 
         let response = self.client
             .get(format!("{}/v2/account", self.base_url()))
@@ -150,7 +150,7 @@ impl AlpacaService {
         let api_secret = self.api_secret.as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
-        eprintln!("[INFO] [alpaca] Fetching positions");
+        tracing::info!("Fetching Alpaca positions");
 
         let response = self.client
             .get(format!("{}/v2/positions", self.base_url()))

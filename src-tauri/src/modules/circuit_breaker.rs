@@ -82,7 +82,7 @@ impl CircuitBreaker {
                     if opened_at.elapsed() >= self.config.open_duration {
                         *self.state.write() = CircuitState::HalfOpen;
                         self.success_count.store(0, Ordering::SeqCst);
-                        eprintln!("🔌 Circuit {} transitioning to HALF-OPEN", self.name);
+                        tracing::debug!(circuit = %self.name, "Circuit transitioning to HALF-OPEN");
                         return true;
                     }
                 }
@@ -108,7 +108,7 @@ impl CircuitBreaker {
                 if successes >= self.config.success_threshold {
                     *state = CircuitState::Closed;
                     self.failure_count.store(0, Ordering::SeqCst);
-                    eprintln!("[DEBUG] [circuit_breaker] Circuit {} CLOSED after recovery", self.name);
+                    tracing::debug!(circuit = %self.name, "Circuit CLOSED after recovery");
                 }
             }
             CircuitState::Open => {
@@ -131,7 +131,7 @@ impl CircuitBreaker {
                 if failures >= self.config.failure_threshold {
                     *state = CircuitState::Open;
                     *self.opened_at.write() = Some(Instant::now());
-                    eprintln!("⚡ Circuit {} OPENED after {} failures", self.name, failures);
+                    tracing::warn!(circuit = %self.name, failures = failures, "Circuit OPENED after failures");
                 }
             }
             CircuitState::HalfOpen => {
@@ -139,7 +139,7 @@ impl CircuitBreaker {
                 *state = CircuitState::Open;
                 *self.opened_at.write() = Some(Instant::now());
                 self.success_count.store(0, Ordering::SeqCst);
-                eprintln!("⚡ Circuit {} reopened from half-open", self.name);
+                tracing::warn!(circuit = %self.name, "Circuit reopened from half-open");
             }
             CircuitState::Open => {
                 // Already open, just update timestamp
@@ -170,7 +170,7 @@ impl CircuitBreaker {
         self.failure_count.store(0, Ordering::SeqCst);
         self.success_count.store(0, Ordering::SeqCst);
         *self.opened_at.write() = None;
-        eprintln!("🔄 Circuit {} manually reset", self.name);
+        tracing::info!(circuit = %self.name, "Circuit manually reset");
     }
 }
 

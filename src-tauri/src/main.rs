@@ -6,25 +6,25 @@ fn main() {
     #[cfg(debug_assertions)]
     {
         let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join(".env");
-        eprintln!("[DEBUG] [main] Looking for .env at: {:?}", env_path);
+        tracing::debug!(path = ?env_path, "Looking for .env");
         if env_path.exists() {
             match dotenvy::from_path(&env_path) {
-                Ok(_) => eprintln!("[INFO] [main] Loaded environment configuration from {:?}", env_path),
-                Err(e) => eprintln!("[ERROR] [main] Failed to load .env: {:?}", e),
+                Ok(_) => tracing::info!(path = ?env_path, "Loaded environment configuration"),
+                Err(e) => tracing::error!(path = ?env_path, error = ?e, "Failed to load .env"),
             }
             // Verify key env vars
-            eprintln!("[DEBUG] [main] OPENROUTER_API_KEY present: {}", std::env::var("OPENROUTER_API_KEY").is_ok());
+            tracing::debug!(present = std::env::var("OPENROUTER_API_KEY").is_ok(), "OPENROUTER_API_KEY status");
         } else {
-            eprintln!("[WARN] [main] .env file not found at {:?}, trying current dir", env_path);
+            tracing::warn!(path = ?env_path, "env file not found, trying current dir");
             dotenvy::dotenv().ok();
         }
     }
-    
+
     // In release mode, decrypt the embedded env payload (baked into binary at compile time)
     #[cfg(not(debug_assertions))]
     {
         if let Err(e) = flowfolio_lib::core::encrypted_env::load_embedded_env() {
-            eprintln!("[ERROR] [main] Failed to load embedded encrypted env: {}", e);
+            tracing::error!(error = %e, "Failed to load embedded encrypted env");
         }
     }
     

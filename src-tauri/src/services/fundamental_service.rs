@@ -103,7 +103,7 @@ impl FundamentalDataService {
             let cache = self.cache.read().await;
             if let Some(entry) = cache.get(&symbol) {
                 if entry.timestamp.elapsed() < self.cache_ttl {
-                    eprintln!("[DEBUG] [fundamentals] Cache hit for {}", symbol);
+                    tracing::debug!(symbol = %symbol, "Fundamentals cache hit");
                     return Ok(entry.data.clone());
                 }
             }
@@ -121,7 +121,7 @@ impl FundamentalDataService {
                 return Ok(data);
             }
             Err(e) => {
-                eprintln!("[WARN] [fundamentals] Yahoo Finance failed for {}: {}", symbol, e);
+                tracing::warn!(symbol = %symbol, error = %e, "Yahoo Finance fundamentals failed");
             }
         }
 
@@ -137,7 +137,7 @@ impl FundamentalDataService {
                     return Ok(data);
                 }
                 Err(e) => {
-                    eprintln!("[WARN] [fundamentals] Alpha Vantage failed for {}: {}", symbol, e);
+                    tracing::warn!(symbol = %symbol, error = %e, "Alpha Vantage fundamentals failed");
                 }
             }
         }
@@ -152,7 +152,7 @@ impl FundamentalDataService {
             symbol
         );
 
-        eprintln!("[DEBUG] [fundamentals] Fetching {} from Yahoo Finance", symbol);
+        tracing::debug!(symbol = %symbol, "Fetching fundamentals from Yahoo Finance");
 
         let response = self.client
             .get(&url)
@@ -230,7 +230,7 @@ impl FundamentalDataService {
             symbol, api_key
         );
 
-        eprintln!("[DEBUG] [fundamentals] Fetching {} from Alpha Vantage", symbol);
+        tracing::debug!(symbol = %symbol, "Fetching fundamentals from Alpha Vantage");
 
         let response = self.client
             .get(&url)
@@ -309,7 +309,7 @@ impl FundamentalDataService {
                     results.insert(symbol, data);
                 }
                 Err(e) => {
-                    eprintln!("[WARN] [fundamentals] Failed to get fundamentals for {}: {}", symbol, e);
+                    tracing::warn!(symbol = %symbol, error = %e, "Failed to get fundamentals");
                 }
             }
             // Rate limiting delay

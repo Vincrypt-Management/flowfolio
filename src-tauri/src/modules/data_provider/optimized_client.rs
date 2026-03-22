@@ -47,7 +47,7 @@ impl OptimizedDataClient {
         let response = match self.client.get(&url).send().await {
             Ok(resp) => resp,
             Err(e) => {
-                eprintln!("Request failed for {}: {}", url, e);
+                tracing::warn!(url = %url, error = %e, "Request failed");
                 return Err(format!("Request failed: {}", e));
             }
         };
@@ -55,7 +55,7 @@ impl OptimizedDataClient {
         // Check HTTP status
         if !response.status().is_success() {
             let status = response.status();
-            eprintln!("HTTP error for {}: {}", url, status);
+            tracing::warn!(url = %url, status = %status, "HTTP error");
             return Err(format!("HTTP error: {}", status));
         }
 
@@ -63,7 +63,7 @@ impl OptimizedDataClient {
         let text = match response.text().await {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("Failed to read response for {}: {}", url, e);
+                tracing::warn!(url = %url, error = %e, "Failed to read response");
                 return Err(format!("Read error: {}", e));
             }
         };
@@ -72,8 +72,7 @@ impl OptimizedDataClient {
         let data: Value = match serde_json::from_str(&text) {
             Ok(json) => json,
             Err(e) => {
-                eprintln!("JSON parse failed for {}: {}", url, e);
-                eprintln!("Response (first 500 chars): {}", &text[..text.len().min(500)]);
+                tracing::warn!(url = %url, error = %e, preview = %&text[..text.len().min(500)], "JSON parse failed");
                 return Err(format!("JSON parse failed: {}", e));
             }
         };

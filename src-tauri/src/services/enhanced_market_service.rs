@@ -103,7 +103,7 @@ impl EnhancedMarketDataService {
             if let Some((price, timestamp)) = cache.get(&symbol) {
                 if timestamp.elapsed() < self.price_cache_ttl {
                     HEALTH_MONITOR.record_cache_hit();
-                    eprintln!("[DEBUG] [enhanced_market] Memory cache hit for {}: ${:.2}", symbol, price);
+                    tracing::debug!(symbol = %symbol, price = price, "Memory cache hit");
                     return Ok(*price);
                 }
             }
@@ -117,13 +117,13 @@ impl EnhancedMarketDataService {
                 // Update memory cache
                 let mut cache = self.price_cache.write().await;
                 cache.insert(symbol.clone(), (cached.current_price, std::time::Instant::now()));
-                eprintln!("[DEBUG] [enhanced_market] Database cache hit for {}: ${:.2}", symbol, cached.current_price);
+                tracing::debug!(symbol = %symbol, price = cached.current_price, "Database cache hit");
                 return Ok(cached.current_price);
             }
         }
 
         // 3. Fetch from multi-source provider with circuit breaker
-        eprintln!("[DEBUG] [enhanced_market] Fetching {} from providers (with circuit breaker)...", symbol);
+        tracing::debug!(symbol = %symbol, "Fetching from providers (with circuit breaker)");
         
         let provider = self.provider.clone();
         let symbol_clone = symbol.clone();
@@ -162,7 +162,7 @@ impl EnhancedMarketDataService {
             }
 
             HEALTH_MONITOR.record_request_success(start.elapsed().as_micros() as u64);
-            eprintln!("[DEBUG] [enhanced_market] Fetched {} from {}: ${:.2}", symbol, data.source, price);
+            tracing::debug!(symbol = %symbol, source = %data.source, price = price, "Fetched price from provider");
             return Ok(price);
         }
 
@@ -189,7 +189,7 @@ impl EnhancedMarketDataService {
             }
         }
 
-        eprintln!("[DEBUG] [enhanced_market] Prices: {}/{} from memory cache", results.len(), symbols.len());
+        tracing::debug!(cached = results.len(), total = symbols.len(), "Prices from memory cache");
 
         // 2. Check database cache for remaining symbols
         let db_cache_opt = self.db_cache.read().await.clone();
@@ -208,7 +208,7 @@ impl EnhancedMarketDataService {
             symbols_to_fetch = still_needed;
         }
 
-        eprintln!("[DEBUG] [enhanced_market] Prices: {} still need fetching from providers", symbols_to_fetch.len());
+        tracing::debug!(count = symbols_to_fetch.len(), "Prices still need fetching from providers");
 
         // 3. Fetch remaining from providers
         if !symbols_to_fetch.is_empty() {
@@ -234,7 +234,7 @@ impl EnhancedMarketDataService {
             }
         }
 
-        eprintln!("[DEBUG] [enhanced_market] Batch prices complete: {}/{} symbols", results.len(), symbols.len());
+        tracing::debug!(fetched = results.len(), total = symbols.len(), "Batch prices complete");
         results
     }
 
@@ -260,14 +260,14 @@ impl EnhancedMarketDataService {
                     .collect();
                 
                 if !historical.is_empty() {
-                    eprintln!("[DEBUG] [enhanced_market] Historical cache hit for {}: {} days", symbol, historical.len());
+                    tracing::debug!(symbol = %symbol, days = historical.len(), "Historical cache hit");
                     return Ok(historical);
                 }
             }
         }
 
         // 2. Fetch from provider
-        eprintln!("[DEBUG] [enhanced_market] Fetching historical data for {} from providers...", symbol);
+        tracing::debug!(symbol = %symbol, "Fetching historical data from providers");
         let data = self.provider.get_market_data(&symbol).await?;
         
         if data.historical.is_empty() {
@@ -283,8 +283,7 @@ impl EnhancedMarketDataService {
             let _ = db_cache.set_cached_historical_prices(&symbol, &cache_data).await;
         }
 
-        eprintln!("[DEBUG] [enhanced_market] Fetched {} days of historical data for {} from {}", 
-                  data.historical.len(), symbol, data.source);
+        tracing::debug!(days = data.historical.len(), symbol = %symbol, source = %data.source, "Fetched historical data");
         Ok(data.historical)
     }
 
@@ -299,7 +298,7 @@ impl EnhancedMarketDataService {
             let cache = self.quant_cache.read().await;
             if let Some((metrics, timestamp)) = cache.get(&symbol) {
                 if timestamp.elapsed() < self.quant_cache_ttl {
-                    eprintln!("[DEBUG] [enhanced_market] Quant cache hit for {}", symbol);
+                    tracing::debug!(symbol = %symbol, "Quant cache hit");
                     return Ok(metrics.clone());
                 }
             }
@@ -382,7 +381,7 @@ impl EnhancedMarketDataService {
     pub async fn get_batch_quant_metrics(&self, symbols: Vec<String>) -> Vec<QuantMetrics> {
         use futures::stream::{self, StreamExt};
         
-        eprintln!("[DEBUG] [enhanced_market] Getting quant metrics for {} symbols...", symbols.len());
+        tracing::debug!(count = symbols.len(), "Getting quant metrics for symbols");
         
         // Process symbols in parallel for faster response
         let results: Vec<QuantMetrics> = stream::iter(symbols.clone())
@@ -391,16 +390,16 @@ impl EnhancedMarketDataService {
                 for attempt in 1..=2 {
                     match self.get_quant_metrics(&symbol).await {
                         Ok(metrics) => {
-                            eprintln!("[DEBUG] [enhanced_market] Got metrics for {}", symbol);
+                            tracing::debug!(symbol = %symbol, "Got quant metrics");
                             return metrics;
                         },
                         Err(e) => {
                             if attempt == 1 {
-                                eprintln!("[WARN] [enhanced_market] Retry {}: Failed to get metrics for {}: {}", attempt, symbol, e);
+                                tracing::warn!(attempt = attempt, symbol = %symbol, error = %e, "Retry: failed to get quant metrics");
                                 // Small delay before retry
                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                             } else {
-                                eprintln!("[ERROR] [enhanced_market] Failed to get quant metrics for {} after {} attempts: {}", symbol, attempt, e);
+                                tracing::error!(symbol = %symbol, attempts = attempt, error = %e, "Failed to get quant metrics after all attempts");
                             }
                         }
                     }
@@ -436,7 +435,7 @@ impl EnhancedMarketDataService {
             .await;
         
         let successful = results.iter().filter(|m| m.signal != "INSUFFICIENT DATA").count();
-        eprintln!("[DEBUG] [enhanced_market] Batch quant metrics complete: {}/{} successful", successful, symbols.len());
+        tracing::debug!(successful = successful, total = symbols.len(), "Batch quant metrics complete");
         
         results
     }
@@ -486,7 +485,7 @@ impl EnhancedMarketDataService {
             let _ = db_cache.clear_expired_cache().await;
         }
 
-        eprintln!("🗑️ All caches cleared");
+        tracing::info!("All caches cleared");
     }
 
     /// Get cache statistics
@@ -519,12 +518,12 @@ impl EnhancedMarketDataService {
 
     /// Prefetch data for symbols (background loading)
     pub async fn prefetch_symbols(&self, symbols: Vec<String>) {
-        eprintln!("[INFO] [enhanced_market] Prefetching {} symbols...", symbols.len());
+        tracing::info!(count = symbols.len(), "Prefetching symbols");
         
         // Fetch all data in background
         let _ = self.get_batch_prices(symbols.clone()).await;
         
-        eprintln!("[DEBUG] [enhanced_market] Prefetch complete for {} symbols", symbols.len());
+        tracing::debug!(count = symbols.len(), "Prefetch complete");
     }
 }
 

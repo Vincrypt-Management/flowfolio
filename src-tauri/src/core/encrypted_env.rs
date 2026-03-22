@@ -155,7 +155,7 @@ pub fn load_encrypted_env(_app_data_dir: Option<&std::path::Path>) -> Result<(),
 
         if env_path.exists() {
             dotenvy::from_path(&env_path).ok();
-            eprintln!("[INFO] [env] Loaded development .env from {:?}", env_path);
+            tracing::info!(path = ?env_path, "Loaded development .env");
             return Ok(());
         }
     }
@@ -179,7 +179,7 @@ pub fn load_embedded_env() -> Result<(), String> {
     DECRYPTED_ENV
         .set(vars)
         .map_err(|_| "Encrypted env already loaded".to_string())?;
-    eprintln!("[INFO] [env] Loaded {} embedded encrypted env vars", count);
+    tracing::info!(count = count, "Loaded embedded encrypted env vars");
     Ok(())
 }
 

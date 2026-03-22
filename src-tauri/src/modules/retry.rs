@@ -109,7 +109,7 @@ impl RetryExecutor {
                 match tokio::time::timeout(timeout, f()).await {
                     Ok(r) => r,
                     Err(_) => {
-                        eprintln!("⏱️ Retry attempt {} timed out after {:?}", attempts, timeout);
+                        tracing::warn!(attempt = attempts, timeout = ?timeout, "Retry attempt timed out");
                         if attempts >= self.config.max_retries {
                             // Return a synthetic timeout error - caller should handle
                             return RetryResult {
@@ -138,7 +138,7 @@ impl RetryExecutor {
             match result {
                 Ok(value) => {
                     if attempts > 1 {
-                        eprintln!("[DEBUG] [retry] Operation succeeded after {} attempts", attempts);
+                        tracing::debug!(attempts = attempts, "Operation succeeded after retries");
                     }
                     return RetryResult {
                         result: Ok(value),
@@ -148,7 +148,7 @@ impl RetryExecutor {
                 }
                 Err(e) => {
                     if attempts >= self.config.max_retries {
-                        eprintln!("[ERROR] [retry] All {} retry attempts exhausted: {}", attempts, e);
+                        tracing::error!(attempts = attempts, error = %e, "All retry attempts exhausted");
                         return RetryResult {
                             result: Err(e),
                             attempts,
@@ -164,10 +164,7 @@ impl RetryExecutor {
                         current_delay
                     };
 
-                    eprintln!(
-                        "[WARN] [retry] Attempt {} failed: {}. Retrying in {:?}",
-                        attempts, e, delay
-                    );
+                    tracing::warn!(attempt = attempts, error = %e, delay = ?delay, "Attempt failed, retrying");
 
                     sleep(delay).await;
                     total_delay += delay;

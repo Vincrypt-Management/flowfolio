@@ -89,7 +89,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
     let db_path = app_data_dir.join("flowfolio_cache.db");
     let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
     
-    eprintln!("[INFO] [db] Initializing local cache database at: {}", db_path.display());
+    tracing::info!(path = %db_path.display(), "Initializing local cache database");
     
     let options = SqliteConnectOptions::from_str(&db_url)
         .map_err(|e| format!("Invalid database URL: {}", e))?
@@ -321,7 +321,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create tax_lots: {}", e))?;
 
-    eprintln!("[INFO] [db] Local cache database initialized successfully");
+    tracing::info!("Local cache database initialized successfully");
 
     Ok(pool)
 }
@@ -332,7 +332,7 @@ async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
     let mut db = DB_POOL.lock().await;
     *db = Some(pool);
     DB_INITIALIZED.store(true, std::sync::atomic::Ordering::Release);
-    eprintln!("[INFO] [service] Enhanced market service initialized with database caching");
+    tracing::info!("Enhanced market service initialized with database caching");
 }
 
 async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
@@ -648,11 +648,11 @@ fn get_template(name: String) -> Result<VibePlanScript, String> {
 async fn compile_plan(prompt: String) -> Result<VibePlanScript, String> {
     // Check if OpenRouter is configured
     if !OPENROUTER_SERVICE.is_configured() {
-        eprintln!("[WARN] [compile_plan] OpenRouter not configured, using fallback template");
+        tracing::warn!("OpenRouter not configured, using fallback template");
         return PlanCompiler::from_prompt(&prompt).map_err(|e| e.to_string());
     }
     
-    eprintln!("[INFO] [compile_plan] Compiling plan from prompt using AI...");
+    tracing::info!("Compiling plan from prompt using AI...");
     
     // Use AI to compile the plan
     let plan_json = OPENROUTER_SERVICE.compile_plan_from_prompt(&prompt).await?;
@@ -664,7 +664,7 @@ async fn compile_plan(prompt: String) -> Result<VibePlanScript, String> {
     // Validate the plan
     PlanCompiler::validate(&plan).map_err(|e| format!("Invalid plan from AI: {}", e))?;
     
-    eprintln!("[INFO] [compile_plan] Successfully compiled plan: {}", plan.name);
+    tracing::info!(plan_name = %plan.name, "Successfully compiled plan");
     Ok(plan)
 }
 
@@ -1417,7 +1417,7 @@ async fn prefetch_symbols(symbols: Vec<String>) -> Result<(), String> {
 async fn test_data_connection() -> Result<serde_json::Value, String> {
     use serde_json::json;
     
-    eprintln!("🔬 Testing data connection...");
+    tracing::info!("Testing data connection...");
     
     // Test with a common symbol
     let test_symbol = "AAPL";
@@ -1462,7 +1462,7 @@ async fn test_data_connection() -> Result<serde_json::Value, String> {
         }
     });
     
-    eprintln!("🔬 Test result: {:?}", result);
+    tracing::debug!(result = ?result, "Data connection test result");
     
     Ok(result)
 }
@@ -1813,7 +1813,7 @@ async fn save_generated_portfolio(id: String, name: String, data: serde_json::Va
         .await
         .map_err(|e| format!("Failed to save portfolio: {}", e))?;
         
-        eprintln!("[INFO] [portfolio] Saved portfolio '{}' with id '{}'", name, id);
+        tracing::info!(portfolio_name = %name, id = %id, "Saved portfolio");
         Ok(id)
     } else {
         Err("Database not initialized".to_string())
@@ -1872,7 +1872,7 @@ async fn delete_saved_portfolio(id: String) -> Result<(), String> {
             .await
             .map_err(|e| format!("Failed to delete portfolio: {}", e))?;
         
-        eprintln!("[INFO] [portfolio] Deleted portfolio '{}'", id);
+        tracing::info!(id = %id, "Deleted portfolio");
         Ok(())
     } else {
         Err("Database not initialized".to_string())
@@ -3049,18 +3049,27 @@ async fn get_exchange_rate(from: String, to: String) -> Result<f64, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing subscriber (use try_init to avoid panic in tests)
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("flowfolio=info,warn"))
+        )
+        .with_target(true)
+        .try_init();
+
     // Initialize logging for observability
     #[cfg(debug_assertions)]
     {
-        eprintln!("[INFO] [app] FlowFolio starting in DEBUG mode");
-        eprintln!("[INFO] [app] Industrial-grade features enabled:");
-        eprintln!("[INFO] [app]   - Circuit breaker pattern");
-        eprintln!("[INFO] [app]   - Retry with exponential backoff");
-        eprintln!("[INFO] [app]   - Health monitoring and metrics");
-        eprintln!("[INFO] [app]   - Multi-tier caching");
-        eprintln!("[INFO] [app]   - Live progress streaming");
+        tracing::info!(target: "app", "FlowFolio starting in DEBUG mode");
+        tracing::info!(target: "app", "Industrial-grade features enabled:");
+        tracing::info!(target: "app", "  - Circuit breaker pattern");
+        tracing::info!(target: "app", "  - Retry with exponential backoff");
+        tracing::info!(target: "app", "  - Health monitoring and metrics");
+        tracing::info!(target: "app", "  - Multi-tier caching");
+        tracing::info!(target: "app", "  - Live progress streaming");
     }
-    
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -3198,7 +3207,7 @@ pub fn run() {
             let salt_path = match app.path().app_local_data_dir() {
                 Ok(dir) => dir.join("stronghold-salt.txt"),
                 Err(e) => {
-                    eprintln!("[WARN] [app] Could not resolve app local data path: {e}");
+                    tracing::warn!(error = %e, "Could not resolve app local data path");
                     return Ok(());
                 }
             };
@@ -3218,16 +3227,16 @@ pub fn run() {
                     })
                     .join("data");
                 
-                eprintln!("[INFO] [app] Using data directory: {}", data_dir.display());
+                tracing::info!(path = %data_dir.display(), "Using data directory");
                 
                 match init_local_database(data_dir).await {
                     Ok(pool) => {
                         init_market_service_with_db(pool).await;
-                        eprintln!("[INFO] [app] ✅ Local database caching enabled");
+                        tracing::info!("Local database caching enabled");
                     }
                     Err(e) => {
-                        eprintln!("[WARN] [app] ⚠️ Failed to initialize database cache: {}", e);
-                        eprintln!("[WARN] [app] Continuing with in-memory cache only");
+                        tracing::warn!(error = %e, "Failed to initialize database cache");
+                        tracing::warn!("Continuing with in-memory cache only");
                     }
                 }
 

@@ -756,7 +756,7 @@ impl FreeDataProviders {
         for (name, result) in sources {
             if let Ok(data) = result {
                 if data.quote.is_some() {
-                    eprintln!("[DEBUG] [free_sources] Successfully fetched data from provider: {}", name);
+                    tracing::debug!(provider = %name, "Successfully fetched data from provider");
                     return Ok(data);
                 }
             }

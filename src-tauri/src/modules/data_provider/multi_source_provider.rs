@@ -100,16 +100,18 @@ impl MultiSourceProvider {
         let tiingo_key = get_env_var("TIINGO_API_KEY");
         let twelve_data_key = get_env_var("TWELVE_DATA_API_KEY");
         
-        eprintln!("[INFO] [data_provider] Multi-Source Provider initialized");
-        eprintln!("[INFO] [data_provider] API Keys status:");
-        eprintln!("[INFO] [data_provider]   Alpaca: {}", if alpaca_key.is_some() && alpaca_secret.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   Polygon: {}", if polygon_key.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   Alpha Vantage: {}", if alphavantage_key.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   Finnhub: {}", if finnhub_key.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   FMP: {}", if fmp_key.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   Tiingo: {}", if tiingo_key.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   Twelve Data: {}", if twelve_data_key.is_some() { "configured" } else { "not configured" });
-        eprintln!("[INFO] [data_provider]   Yahoo Finance: available (no key required)");
+        tracing::info!("Multi-Source Provider initialized");
+        tracing::info!(
+            alpaca = if alpaca_key.is_some() && alpaca_secret.is_some() { "configured" } else { "not configured" },
+            polygon = if polygon_key.is_some() { "configured" } else { "not configured" },
+            alpha_vantage = if alphavantage_key.is_some() { "configured" } else { "not configured" },
+            finnhub = if finnhub_key.is_some() { "configured" } else { "not configured" },
+            fmp = if fmp_key.is_some() { "configured" } else { "not configured" },
+            tiingo = if tiingo_key.is_some() { "configured" } else { "not configured" },
+            twelve_data = if twelve_data_key.is_some() { "configured" } else { "not configured" },
+            yahoo = "available",
+            "API Keys status"
+        );
 
         Self {
             client: Client::builder()
@@ -875,7 +877,7 @@ impl MultiSourceProvider {
             symbol, start_time, end_time
         );
 
-        eprintln!("[DEBUG] [yahoo] Fetching data for symbol: {}", symbol);
+        tracing::debug!(symbol = %symbol, "Fetching data from Yahoo");
 
         let response = self.client
             .get(&url)
@@ -1020,7 +1022,7 @@ impl MultiSourceProvider {
                 Err(e) => {
                     self.track_failure(provider);
                     last_error = format!("{}: {}", provider, e);
-                    eprintln!("[WARN] [data_provider] Provider {} failed for {}: {}", provider, symbol, e);
+                    tracing::warn!(provider = %provider, symbol = %symbol, error = %e, "Provider failed");
                     continue;
                 }
             }

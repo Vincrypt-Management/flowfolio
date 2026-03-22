@@ -2,7 +2,6 @@
 // Professional structured logging for production environments
 
 use std::sync::Once;
-use chrono::Utc;
 
 static INIT: Once = Once::new();
 
@@ -33,36 +32,47 @@ pub fn init_logging() {
     INIT.call_once(|| {
         #[cfg(debug_assertions)]
         {
-            let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
-            eprintln!("[{}] [INFO] [app] FlowFolio starting in DEBUG mode", timestamp);
-            eprintln!("[{}] [INFO] [app] Industrial-grade features enabled:", timestamp);
-            eprintln!("[{}] [INFO] [app]   - Circuit breaker pattern", timestamp);
-            eprintln!("[{}] [INFO] [app]   - Retry with exponential backoff", timestamp);
-            eprintln!("[{}] [INFO] [app]   - Health monitoring and metrics", timestamp);
-            eprintln!("[{}] [INFO] [app]   - Multi-tier caching", timestamp);
-            eprintln!("[{}] [INFO] [app]   - Free-tier optimized providers", timestamp);
+            tracing::info!(target: "app", "FlowFolio starting in DEBUG mode");
+            tracing::info!(target: "app", "Industrial-grade features enabled:");
+            tracing::info!(target: "app", "  - Circuit breaker pattern");
+            tracing::info!(target: "app", "  - Retry with exponential backoff");
+            tracing::info!(target: "app", "  - Health monitoring and metrics");
+            tracing::info!(target: "app", "  - Multi-tier caching");
+            tracing::info!(target: "app", "  - Free-tier optimized providers");
         }
     });
 }
 
 /// Log a structured message
-pub fn log(level: LogLevel, module: &str, message: &str) {
-    let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
-    eprintln!("[{}] [{}] [{}] {}", timestamp, level.as_str(), module, message);
+pub fn log(level: LogLevel, _module: &str, message: &str) {
+    match level {
+        LogLevel::Trace => tracing::trace!("{}", message),
+        LogLevel::Debug => tracing::debug!("{}", message),
+        LogLevel::Info  => tracing::info!("{}", message),
+        LogLevel::Warn  => tracing::warn!("{}", message),
+        LogLevel::Error => tracing::error!("{}", message),
+    }
 }
 
 /// Log with context data
-pub fn log_with_context(level: LogLevel, module: &str, message: &str, context: &[(&str, &str)]) {
-    let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
+pub fn log_with_context(level: LogLevel, _module: &str, message: &str, context: &[(&str, &str)]) {
     let ctx_str: String = context.iter()
         .map(|(k, v)| format!("{}={}", k, v))
         .collect::<Vec<_>>()
         .join(" ");
-    
-    if ctx_str.is_empty() {
-        eprintln!("[{}] [{}] [{}] {}", timestamp, level.as_str(), module, message);
+
+    let full_message = if ctx_str.is_empty() {
+        message.to_string()
     } else {
-        eprintln!("[{}] [{}] [{}] {} | {}", timestamp, level.as_str(), module, message, ctx_str);
+        format!("{} | {}", message, ctx_str)
+    };
+
+    match level {
+        LogLevel::Trace => tracing::trace!("{}", full_message),
+        LogLevel::Debug => tracing::debug!("{}", full_message),
+        LogLevel::Info  => tracing::info!("{}", full_message),
+        LogLevel::Warn  => tracing::warn!("{}", full_message),
+        LogLevel::Error => tracing::error!("{}", full_message),
     }
 }
 
