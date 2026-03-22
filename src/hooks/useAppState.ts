@@ -43,6 +43,18 @@ export interface PortfolioHolding {
   weight: number;
 }
 
+/** Full holding record — mirrors the Holding interface in PortfolioTab. */
+export interface PersistedHolding {
+  symbol: string;
+  shares: number;
+  cost_basis: number;
+  current_price: number;
+  market_value: number;
+  target_pct: number;
+  current_pct: number;
+  drift_pct: number;
+}
+
 // ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
@@ -97,6 +109,11 @@ export interface AppState {
   portfolioHoldings: PortfolioHolding[];
   portfolioValue: number;
 
+  // Persisted PortfolioTab state so holdings survive tab switches
+  portfolioName: string;
+  persistedHoldings: PersistedHolding[];
+  portfolioCash: number;
+
   // Onboarding
   onboardingComplete: boolean | null;
 }
@@ -129,6 +146,9 @@ export type AppAction =
   | { type: "SET_ANALYSIS_SYMBOL"; payload: string }
   | { type: "SET_PORTFOLIO_HOLDINGS"; payload: PortfolioHolding[] }
   | { type: "SET_PORTFOLIO_VALUE"; payload: number }
+  | { type: "SET_PORTFOLIO_NAME"; payload: string }
+  | { type: "SET_PERSISTED_HOLDINGS"; payload: PersistedHolding[] }
+  | { type: "SET_PORTFOLIO_CASH"; payload: number }
   | { type: "SET_ONBOARDING_COMPLETE"; payload: boolean | null }
   // Compound actions for common multi-field updates
   | {
@@ -179,6 +199,9 @@ const initialState: AppState = {
   analysisSymbol: "",
   portfolioHoldings: [],
   portfolioValue: 0,
+  portfolioName: "My Portfolio",
+  persistedHoldings: [],
+  portfolioCash: 0,
   onboardingComplete: null,
 };
 
@@ -256,6 +279,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "SET_PORTFOLIO_VALUE":
       return { ...state, portfolioValue: action.payload };
+
+    case "SET_PORTFOLIO_NAME":
+      return { ...state, portfolioName: action.payload };
+
+    case "SET_PERSISTED_HOLDINGS":
+      return { ...state, persistedHoldings: action.payload };
+
+    case "SET_PORTFOLIO_CASH":
+      return { ...state, portfolioCash: action.payload };
 
     case "SET_ONBOARDING_COMPLETE":
       return { ...state, onboardingComplete: action.payload };
@@ -340,6 +372,9 @@ export const actions = {
   setAnalysisSymbol: (payload: string): AppAction => ({ type: "SET_ANALYSIS_SYMBOL", payload }),
   setPortfolioHoldings: (payload: PortfolioHolding[]): AppAction => ({ type: "SET_PORTFOLIO_HOLDINGS", payload }),
   setPortfolioValue: (payload: number): AppAction => ({ type: "SET_PORTFOLIO_VALUE", payload }),
+  setPortfolioName: (payload: string): AppAction => ({ type: "SET_PORTFOLIO_NAME", payload }),
+  setPersistedHoldings: (payload: PersistedHolding[]): AppAction => ({ type: "SET_PERSISTED_HOLDINGS", payload }),
+  setPortfolioCash: (payload: number): AppAction => ({ type: "SET_PORTFOLIO_CASH", payload }),
   setOnboardingComplete: (payload: boolean | null): AppAction => ({ type: "SET_ONBOARDING_COMPLETE", payload }),
   setPortfolioHoldingsAndValue: (holdings: PortfolioHolding[], value: number): AppAction => ({
     type: "SET_PORTFOLIO_HOLDINGS_AND_VALUE",

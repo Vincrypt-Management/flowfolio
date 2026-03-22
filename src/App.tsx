@@ -760,6 +760,21 @@ function App() {
     dispatch(actions.setPortfolioHoldingsAndValue(h, v));
   }, [dispatch]);
 
+  const handlePortfolioChange = useCallback((
+    holdings: Array<{
+      symbol: string; shares: number; cost_basis: number; current_price: number;
+      market_value: number; target_pct: number; current_pct: number; drift_pct: number;
+    }>,
+    cash: number
+  ) => {
+    dispatch(actions.setPersistedHoldings(holdings));
+    dispatch(actions.setPortfolioCash(cash));
+  }, [dispatch]);
+
+  const handlePortfolioNameChange = useCallback((name: string) => {
+    dispatch(actions.setPortfolioName(name));
+  }, [dispatch]);
+
   if (state.onboardingComplete === null) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
       <div className="tab-loading-spinner" />
@@ -886,6 +901,11 @@ function App() {
               <Suspense fallback={<TabLoading />}>
                 <PortfolioTab
                   onHoldingsChange={handleHoldingsChange}
+                  onPortfolioChange={handlePortfolioChange}
+                  onPortfolioNameChange={handlePortfolioNameChange}
+                  initialPortfolioName={state.portfolioName}
+                  initialHoldings={state.persistedHoldings}
+                  initialCash={state.portfolioCash}
                   onAnalyze={(symbol) => {
                     dispatch(actions.setAnalysisSymbol(symbol));
                     handleNavClick('analysis');

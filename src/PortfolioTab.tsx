@@ -84,20 +84,43 @@ interface PortfolioTabProps {
     value: number; weight: number;
   }>, totalValue: number) => void;
   onAnalyze?: (symbol: string) => void;
+  /** Initial portfolio name persisted from global state. */
+  initialPortfolioName?: string;
+  /** Initial holdings array persisted from global state. */
+  initialHoldings?: Holding[];
+  /** Initial cash amount persisted from global state. */
+  initialCash?: number;
+  /** Called whenever the portfolio name changes so it can be persisted. */
+  onPortfolioNameChange?: (name: string) => void;
+  /** Called whenever holdings or cash change so the full state can be persisted. */
+  onPortfolioChange?: (holdings: Holding[], cash: number) => void;
 }
 
-export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps = {}) {
+export function PortfolioTab({
+  onHoldingsChange,
+  onAnalyze,
+  initialPortfolioName,
+  initialHoldings,
+  initialCash,
+  onPortfolioNameChange,
+  onPortfolioChange,
+}: PortfolioTabProps = {}) {
   const { addToast } = useToast();
   const { isAdvanced } = useUserMode();
   const [rebalanceThreshold, setRebalanceThreshold] = useState(5.0);
   const [maxPosition, setMaxPosition] = useState(25.0);
   const [cashBuffer, setCashBuffer] = useState(5.0);
-  const [portfolio, setPortfolio] = useState<Portfolio>({
-    name: "My Portfolio",
-    holdings: [],
-    cash: 0.0,
-    total_value: 0.0,
-    last_updated: new Date().toISOString(),
+  const [portfolio, setPortfolio] = useState<Portfolio>(() => {
+    const holdings = initialHoldings ?? [];
+    const cash = initialCash ?? 0.0;
+    const total_value = holdings.reduce((s, h) => s + h.market_value, 0) + cash;
+    return {
+      name: initialPortfolioName ?? "My Portfolio",
+      holdings,
+      cash,
+      total_value,
+      last_updated: new Date().toISOString(),
+    };
   });
   const [allocationPlan, setAllocationPlan] = useState<AllocationPlan | null>(null);
   const [allocationMethod, setAllocationMethod] = useState<'equal_weight' | 'score_weighted'>('equal_weight');
@@ -135,6 +158,15 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
       isMountedRef.current = false;
     };
   }, []);
+
+  // Persist portfolio holdings and name to global state whenever they change
+  useEffect(() => {
+    onPortfolioChange?.(portfolio.holdings, portfolio.cash);
+  }, [portfolio.holdings, portfolio.cash, onPortfolioChange]);
+
+  useEffect(() => {
+    onPortfolioNameChange?.(portfolio.name);
+  }, [portfolio.name, onPortfolioNameChange]);
 
   const notifyHoldingsChange = useCallback((holdings: Holding[], totalValue: number) => {
     if (!onHoldingsChange) return;
