@@ -529,6 +529,13 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
 
 // ==================== HELPER FUNCTIONS ====================
 
+const BOND_ETFS: &[&str] = &[
+    "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
+    "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
+    "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
+    "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
+];
+
 /// Check if a symbol is an ETF
 pub(crate) fn is_etf_symbol(symbol: &str) -> bool {
     let symbol_upper = symbol.to_uppercase();
@@ -556,14 +563,7 @@ pub(crate) fn is_etf_symbol(symbol: &str) -> bool {
 pub(crate) fn is_bond_etf_symbol(symbol: &str) -> bool {
     let symbol_upper = symbol.to_uppercase();
 
-    let bond_etfs = [
-        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
-        "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
-        "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
-        "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
-    ];
-
-    bond_etfs.iter().any(|p| symbol_upper == *p) ||
+    BOND_ETFS.iter().any(|p| symbol_upper == *p) ||
     symbol_upper.contains("BOND") ||
     symbol_upper.contains("TREASURY")
 }
