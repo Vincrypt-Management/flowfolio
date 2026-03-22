@@ -72,7 +72,10 @@ pub struct BacktestEngine;
 
 impl BacktestEngine {
     /// Run a complete backtest simulation
-    pub fn run_backtest(config: BacktestConfig) -> BacktestResult {
+    pub fn run_backtest(
+        config: BacktestConfig,
+        prices: HashMap<String, Vec<(NaiveDate, f64)>>,
+    ) -> BacktestResult {
         let mut timeline = Vec::new();
         let mut trades = Vec::new();
         let mut cash = config.initial_cash;
@@ -92,7 +95,7 @@ impl BacktestEngine {
         let initial_allocation = Self::calculate_allocation(&config.symbols, &config.allocation_method);
         for (symbol, target_pct) in &initial_allocation {
             let amount = config.initial_cash * target_pct;
-            let price = Self::get_price_at_date(symbol, current_date);
+            let price = Self::get_price_at_date(symbol, current_date, &prices);
             let shares = (amount / price).floor();
             
             if shares > 0.0 {
@@ -112,7 +115,7 @@ impl BacktestEngine {
         }
 
         // Take initial snapshot
-        timeline.push(Self::create_snapshot(current_date, cash, &positions));
+        timeline.push(Self::create_snapshot(current_date, cash, &positions, &prices));
 
         // Monthly loop
         for month in 0..duration_months {
@@ -127,11 +130,11 @@ impl BacktestEngine {
 
             // Allocate contribution
             let allocation = Self::calculate_allocation(&config.symbols, &config.allocation_method);
-            let portfolio_value = Self::calculate_portfolio_value(cash, &positions, current_date);
-            
+            let portfolio_value = Self::calculate_portfolio_value(cash, &positions, current_date, &prices);
+
             for (symbol, target_pct) in &allocation {
                 let position_shares = positions.get(symbol).copied().unwrap_or(0.0);
-                let price = Self::get_price_at_date(symbol, current_date);
+                let price = Self::get_price_at_date(symbol, current_date, &prices);
                 let current_value = position_shares * price;
                 let target_value = portfolio_value * target_pct;
                 let gap = target_value - current_value;
@@ -163,12 +166,13 @@ impl BacktestEngine {
                     &allocation,
                     current_date,
                     config.rebalance_threshold,
+                    &prices,
                 );
                 trades.extend(rebalance_trades);
             }
 
             // Take snapshot
-            timeline.push(Self::create_snapshot(current_date, cash, &positions));
+            timeline.push(Self::create_snapshot(current_date, cash, &positions, &prices));
         }
 
         // Calculate metrics
@@ -296,16 +300,17 @@ impl BacktestEngine {
         target_allocation: &HashMap<String, f64>,
         date: NaiveDate,
         threshold: f64,
+        prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
     ) -> Vec<TradeRecord> {
         let mut trades = Vec::new();
         
         // Calculate current portfolio value
-        let portfolio_value = Self::calculate_portfolio_value(*cash, positions, date);
-        
+        let portfolio_value = Self::calculate_portfolio_value(*cash, positions, date, prices);
+
         // Check each position for drift
         for (symbol, target_pct) in target_allocation {
             let current_shares = positions.get(symbol).copied().unwrap_or(0.0);
-            let price = Self::get_price_at_date(symbol, date);
+            let price = Self::get_price_at_date(symbol, date, prices);
             let current_value = current_shares * price;
             let current_pct = if portfolio_value > 0.0 {
                 (current_value / portfolio_value) * 100.0
@@ -533,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_backtest_basic() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
 
         assert!(result.metrics.final_value > 0.0);
         assert!(!result.timeline.is_empty());
@@ -543,14 +548,14 @@ mod tests {
     #[test]
     fn test_backtest_duration_months_correct() {
         // Jan 2020 → Jan 2021 = 12 months
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert_eq!(result.duration_months, 12);
     }
 
     #[test]
     fn test_backtest_start_and_end_dates_preserved() {
         let config = default_config();
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert_eq!(result.start_date, "2020-01-01");
         assert_eq!(result.end_date, "2021-01-01");
     }
@@ -564,57 +569,57 @@ mod tests {
             end_date: "2021-01-01".to_string(), // 12 months
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         // total_invested = 10_000 + 12 * 1_000 = 22_000
         assert_eq!(result.metrics.total_invested, 22_000.0);
     }
 
     #[test]
     fn test_backtest_timeline_not_empty() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert!(!result.timeline.is_empty());
     }
 
     #[test]
     fn test_backtest_trades_not_empty() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         // There should be at least the initial allocation trades
         assert!(!result.trades.is_empty());
     }
 
     #[test]
     fn test_backtest_num_trades_matches_trades_vec() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert_eq!(result.metrics.num_trades, result.trades.len());
     }
 
     #[test]
     fn test_backtest_max_drawdown_non_negative() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert!(result.metrics.max_drawdown >= 0.0);
     }
 
     #[test]
     fn test_backtest_volatility_non_negative() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert!(result.metrics.volatility >= 0.0);
     }
 
     #[test]
     fn test_backtest_cagr_finite() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert!(result.metrics.cagr.is_finite());
     }
 
     #[test]
     fn test_backtest_summary_contains_cagr() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert!(result.summary.contains("CAGR"));
     }
 
     #[test]
     fn test_backtest_summary_contains_total_return() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         assert!(result.summary.contains("Total Return"));
     }
 
@@ -624,7 +629,7 @@ mod tests {
             rebalance_frequency: "monthly".to_string(),
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert!(result.metrics.final_value > 0.0);
     }
 
@@ -634,7 +639,7 @@ mod tests {
             rebalance_frequency: "yearly".to_string(),
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert!(result.metrics.final_value > 0.0);
     }
 
@@ -644,7 +649,7 @@ mod tests {
             monthly_contribution: 0.0,
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert_eq!(result.metrics.total_invested, 10_000.0);
     }
 
@@ -654,7 +659,7 @@ mod tests {
             symbols: vec!["AAPL".to_string()],
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert!(result.metrics.final_value > 0.0);
     }
 
@@ -670,7 +675,7 @@ mod tests {
             ],
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert!(result.metrics.final_value > 0.0);
         assert!(!result.trades.is_empty());
     }
@@ -684,7 +689,7 @@ mod tests {
             end_date: "2020-06-30".to_string(),
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert_eq!(result.duration_months, 0);
     }
 
@@ -695,13 +700,13 @@ mod tests {
             end_date: "2020-04-01".to_string(),
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert_eq!(result.duration_months, 3);
     }
 
     #[test]
     fn test_backtest_trade_actions_are_buy_or_sell() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         for trade in &result.trades {
             assert!(
                 trade.action == "BUY" || trade.action == "SELL",
@@ -713,7 +718,7 @@ mod tests {
 
     #[test]
     fn test_backtest_trade_amounts_positive() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         for trade in &result.trades {
             assert!(trade.amount >= 0.0, "Trade amount negative: {}", trade.amount);
         }
@@ -721,7 +726,7 @@ mod tests {
 
     #[test]
     fn test_backtest_snapshot_values_positive() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         for snap in &result.timeline {
             assert!(snap.value >= 0.0);
         }
@@ -731,7 +736,7 @@ mod tests {
 
     #[test]
     fn test_snapshot_position_weights_sum_near_100() {
-        let result = BacktestEngine::run_backtest(default_config());
+        let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         if let Some(snap) = result.timeline.last() {
             if !snap.positions.is_empty() {
                 // Cash is excluded from position weights, so weights are of invested portion only
@@ -776,7 +781,7 @@ mod tests {
             symbols: vec![],
             ..default_config()
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert!(result.trades.is_empty(), "Expected no trades when symbols list is empty");
         assert!(!result.timeline.is_empty(), "Timeline should still have an initial snapshot");
     }
@@ -799,7 +804,7 @@ mod tests {
     fn test_get_price_unknown_symbol() {
         use chrono::NaiveDate;
         let date = NaiveDate::from_ymd_opt(2024, 6, 1).unwrap();
-        let price = BacktestEngine::get_price_at_date("UNKNOWN_SYM", date);
+        let price = BacktestEngine::get_price_at_date("UNKNOWN_SYM", date, &HashMap::new());
         assert!((price - 100.0).abs() < 1e-6);
     }
 
@@ -828,7 +833,7 @@ mod tests {
             symbols: vec!["AAPL".to_string(), "MSFT".to_string()],
             allocation_method: "equal_weight".to_string(),
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         assert!(result.metrics.final_value > 0.0);
         assert!(result.duration_months > 0);
     }
@@ -848,7 +853,7 @@ mod tests {
             symbols: vec!["AAPL".to_string()],
             allocation_method: "equal_weight".to_string(),
         };
-        let result = BacktestEngine::run_backtest(config);
+        let result = BacktestEngine::run_backtest(config, HashMap::new());
         // Should still produce a result
         assert!(result.metrics.final_value >= 0.0);
     }
@@ -863,7 +868,7 @@ mod tests {
         target.insert("AAPL".to_string(), 0.1_f64); // 10% target → underweight vs 100%
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
 
-        let trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0);
+        let trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0, &HashMap::new());
 
         assert!(trades.iter().any(|t| t.action == "SELL"), "Expected a SELL trade from overweight position");
     }
@@ -875,7 +880,7 @@ mod tests {
         positions.insert("AAPL".to_string(), 0.0); // 0 shares → 0 value
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
 
-        let snapshot = BacktestEngine::create_snapshot(date, 0.0, &positions);
+        let snapshot = BacktestEngine::create_snapshot(date, 0.0, &positions, &HashMap::new());
         assert_eq!(snapshot.positions.len(), 1);
         assert!((snapshot.positions[0].weight - 0.0).abs() < f64::EPSILON);
     }
@@ -890,7 +895,7 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
 
         // portfolio_value = 0 (no cash, no positions) → line 298
-        let _trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0);
+        let _trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0, &HashMap::new());
         // Just verify no panic
     }
 
