@@ -1,5 +1,6 @@
 import { useReducer, useRef, useEffect, useMemo, memo } from "react";
 import { useIsMounted } from '../hooks/useIsMounted';
+import { saveFile } from '../shared/utils/fileSystem';
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage, streamChat } from "../services/openrouter";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
@@ -600,16 +601,7 @@ Be conversational but professional. Cite specific data points from the portfolio
       const safeTitle = (generatedPortfolio.title || 'Portfolio').replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
       const fileName = `${safeTitle}_${new Date().toISOString().split('T')[0]}.json`;
       
-      // Auto-download using browser
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await saveFile(dataStr, fileName, 'application/json');
     } catch (err) {
       logger.error('JSON export error:', err);
     }
@@ -761,16 +753,7 @@ Be conversational but professional. Cite specific data points from the portfolio
       const safeTitle = (generatedPortfolio.title || 'Portfolio').replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
       const fileName = `${safeTitle}_full_analysis.csv`;
       
-      // Auto-download using browser
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await saveFile(csvContent, fileName, 'text/csv');
     } catch (err) {
       logger.error('CSV export error:', err);
     }
