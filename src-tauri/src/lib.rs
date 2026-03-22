@@ -57,6 +57,12 @@ lazy_static::lazy_static! {
     // In-memory plan storage
     pub(crate) static ref SAVED_PLANS: Arc<Mutex<HashMap<String, VibePlanScript>>> =
         Arc::new(Mutex::new(HashMap::new()));
+
+    /// Shared HTTP client — clone is cheap (shares the connection pool).
+    pub(crate) static ref HTTP_CLIENT: reqwest::Client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .expect("Failed to create shared HTTP client");
 }
 
 /// Whether the Stronghold vault is currently unlocked.

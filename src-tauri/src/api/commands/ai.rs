@@ -67,7 +67,7 @@ pub async fn ai_chat_stream(
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
     let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".to_string());
-    let client = reqwest::Client::new();
+    let client = crate::HTTP_CLIENT.clone();
 
     let body = serde_json::json!({
         "model": model,

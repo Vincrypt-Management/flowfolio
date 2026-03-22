@@ -13,20 +13,61 @@ pub fn health_check() -> String {
     "FlowFolio API is running".to_string()
 }
 
-/// Get API provider status
+/// Get API provider status — returns configured/not-configured state for each provider.
 #[tauri::command]
 pub fn get_provider_status() -> String {
+    use crate::core::encrypted_env::get_env_var;
+    let providers = serde_json::json!([
+        {
+            "name": "Alpaca",
+            "status": if get_env_var("ALPACA_API_KEY").is_some() && get_env_var("ALPACA_SECRET_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 1
+        },
+        {
+            "name": "Finnhub",
+            "status": if get_env_var("FINNHUB_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 2
+        },
+        {
+            "name": "FMP",
+            "status": if get_env_var("FMP_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 2
+        },
+        {
+            "name": "Tiingo",
+            "status": if get_env_var("TIINGO_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 2
+        },
+        {
+            "name": "Twelve Data",
+            "status": if get_env_var("TWELVE_DATA_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 2
+        },
+        {
+            "name": "Polygon",
+            "status": if get_env_var("POLYGON_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 3
+        },
+        {
+            "name": "Alpha Vantage",
+            "status": if get_env_var("ALPHA_VANTAGE_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "tier": 3
+        },
+        {
+            "name": "Yahoo Finance",
+            "status": "configured",
+            "tier": 4
+        }
+    ]);
     serde_json::json!({
-        "provider": "Alpha Vantage",
-        "status": "ready",
-        "quota_remaining": 25
+        "providers": providers
     }).to_string()
 }
 
 /// Get database initialization status
 #[tauri::command]
 pub fn get_database_status() -> serde_json::Value {
-    let initialized = DB_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst);
+    let initialized = DB_INITIALIZED.load(std::sync::atomic::Ordering::Acquire);
     serde_json::json!({
         "initialized": initialized,
         "cache_type": if initialized { "sqlite" } else { "memory" }
@@ -37,7 +78,7 @@ pub fn get_database_status() -> serde_json::Value {
 #[tauri::command]
 pub async fn get_exchange_rate(from: String, to: String) -> Result<f64, String> {
     if from == to { return Ok(1.0); }
-    let client = reqwest::Client::new();
+    let client = crate::HTTP_CLIENT.clone();
     let url = format!(
         "https://api.exchangerate-api.com/v4/latest/{}",
         from.to_uppercase()
