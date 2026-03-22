@@ -78,5 +78,5 @@ whoami = "1.5"                                           # Machine identity for 
 lto = true              # Full link-time optimization — biggest size reduction
 codegen-units = 1        # Single codegen unit for maximum optimization
 strip = true             # Strip debug symbols from binary
-opt-level = "s"          # Optimize for size over speed
+opt-level = 3            # Optimize for speed (desktop app, not size-constrained)
 panic = "abort"          # Remove unwinding machinery
