@@ -64,10 +64,10 @@ metrics = "0.24"                                         # Performance metrics c
 once_cell = "1.20"                                       # Thread-safe lazy initialization
 arc-swap = "1.7"                                         # Lock-free Arc swapping
 
-# Encryption for secure env storage in release builds (dual-layer 512-bit equivalent)
-aes-gcm = "0.10"                                         # AES-256-GCM encryption (layer 1)
-chacha20poly1305 = "0.10"                                # ChaCha20-Poly1305 encryption (layer 2)
+# Encryption for secure env storage in release builds (obfuscation-grade, machine-derived key)
+aes-gcm = "0.10"                                         # AES-256-GCM encryption with random nonces
 base64 = "0.22"                                          # Base64 encoding
+whoami = "1.5"                                           # Machine identity for key derivation
 
 # Mobile platform support
 [target.'cfg(target_os = "android")'.dependencies]

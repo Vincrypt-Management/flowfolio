@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "flowfolio"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1547,7 +1547,6 @@ dependencies = [
  "async-trait",
  "backoff",
  "base64 0.22.1",
- "chacha20poly1305",
  "chrono",
  "dashmap",
  "dotenvy",
@@ -1579,6 +1578,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "whoami",
 ]
 
 [[package]]
@@ -6850,6 +6850,7 @@ checksum = "5d4a4db5077702ca3015d3d02d74974948aba2ad9e12ab7df718ee64ccd7e97d"
 dependencies = [
  "libredox",
  "wasite",
+ "web-sys",
 ]
 
 [[package]]
