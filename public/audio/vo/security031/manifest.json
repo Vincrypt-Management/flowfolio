@@ -1,0 +1,44 @@
+[
+  {
+    "id": "hook",
+    "text": "Your portfolio tracker might be selling your data. Most free investment tools store your holdings on their servers, and that data gets sold to hedge funds who trade against you.",
+    "file": "audio/vo/security031/hook.wav",
+    "startFrame": 0,
+    "durationInFrames": 360
+  },
+  {
+    "id": "vault",
+    "text": "FlowFolio version 0.3.1 changes everything. Your API keys are now encrypted with IOTA Stronghold, the same vault technology used in blockchain infrastructure. Argon 2 key derivation makes brute force impractical.",
+    "file": "audio/vo/security031/vault.wav",
+    "startFrame": 380,
+    "durationInFrames": 480
+  },
+  {
+    "id": "testing",
+    "text": "Every release is battle tested. A new Playwright end-to-end test suite validates every critical user flow across Linux, Mac OS, and Windows before a single line ships.",
+    "file": "audio/vo/security031/testing.wav",
+    "startFrame": 880,
+    "durationInFrames": 420
+  },
+  {
+    "id": "architecture",
+    "text": "Zero crash architecture. Dynamic plugin loading ensures the app never goes down from missing modules. Five critical integration bugs were fixed in this release.",
+    "file": "audio/vo/security031/architecture.wav",
+    "startFrame": 1320,
+    "durationInFrames": 380
+  },
+  {
+    "id": "local",
+    "text": "All features are now unlocked locally. No cloud account. No paywall. Thirty plus quant metrics, eight market data providers, and an AI portfolio agent, all running on your machine.",
+    "file": "audio/vo/security031/local.wav",
+    "startFrame": 1720,
+    "durationInFrames": 440
+  },
+  {
+    "id": "cta",
+    "text": "Your portfolio data is valuable. Keep it on your machine. FlowFolio. Vault encrypted. One hundred percent offline. One hundred percent yours.",
+    "file": "audio/vo/security031/cta.wav",
+    "startFrame": 2180,
+    "durationInFrames": 380
+  }
+]

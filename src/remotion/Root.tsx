@@ -8,6 +8,9 @@ import { FlowFolioAppShowcase } from './FlowFolioAppShowcase';
 import { FeedTipCard, FeedMetricsCard, FeedBacktestCard, FeedFeatureCard, FeedQuoteCard } from './FlowFolioFeedPosts';
 import { FeedCarousel } from './FlowFolioCarousel';
 import { FlowFolioRelease022 } from './FlowFolioRelease022';
+import { FlowFolioRelease031 } from './FlowFolioRelease031';
+import { SecurityCarousel031, SECURITY_CAROUSEL_SLIDES } from './FlowFolioSecurityCarousel031';
+import { SecurityEducational031 } from './FlowFolioSecurityEducational031';
 
 export const Root: React.FC = () => {
   const defaultSeed = Date.now();
@@ -117,6 +120,36 @@ export const Root: React.FC = () => {
         id="FlowFolioRelease022"
         component={FlowFolioRelease022}
         durationInFrames={1960}
+        fps={60}
+        width={1080}
+        height={1920}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      <Composition
+        id="FlowFolioRelease031"
+        component={FlowFolioRelease031}
+        durationInFrames={1960}
+        fps={60}
+        width={1080}
+        height={1920}
+        defaultProps={{ seed: defaultSeed }}
+      />
+      {Array.from({ length: SECURITY_CAROUSEL_SLIDES }, (_, i) => (
+        <Composition
+          key={`sec031-${i}`}
+          id={`SecurityCarousel031-Slide${i}`}
+          component={SecurityCarousel031}
+          durationInFrames={90}
+          fps={60}
+          width={1080}
+          height={1080}
+          defaultProps={{ slide: i }}
+        />
+      ))}
+      <Composition
+        id="SecurityEducational031"
+        component={SecurityEducational031}
+        durationInFrames={2560}
         fps={60}
         width={1080}
         height={1920}
