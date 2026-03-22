@@ -4,7 +4,7 @@
  * Checks for overdue schedules on mount and provides a visual timeline.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   Calendar,
   Clock,
@@ -149,7 +149,7 @@ function formatDate(iso: string): string {
   });
 }
 
-export function RebalanceScheduler({
+function RebalanceScheduler({
   onRunRebalance,
   onNavigate: _onNavigate,
 }: RebalanceSchedulerProps) {
@@ -785,3 +785,5 @@ export function RebalanceScheduler({
     </div>
   );
 }
+export { RebalanceScheduler };
+export default memo(RebalanceScheduler);

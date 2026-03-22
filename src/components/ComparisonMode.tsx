@@ -4,7 +4,7 @@
  * and quantitative metrics comparison table.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import {
   LineChart,
   Line,
@@ -95,7 +95,7 @@ function formatMetric(value: number, isPercent = false): string {
   return value.toFixed(3);
 }
 
-export function ComparisonMode({
+function ComparisonMode({
   initialSymbolA = '',
   initialSymbolB = '',
 }: ComparisonModeProps) {
@@ -553,3 +553,5 @@ export function ComparisonMode({
     </div>
   );
 }
+export { ComparisonMode };
+export default memo(ComparisonMode);

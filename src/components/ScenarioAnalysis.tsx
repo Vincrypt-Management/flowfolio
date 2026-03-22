@@ -5,7 +5,7 @@
  * a custom slider-based scenario builder, and a per-holding bar chart.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   BarChart,
   Bar,
@@ -260,7 +260,7 @@ function CustomBarTooltip({ active, payload }: BarTooltipProps) {
 
 // --- Main Component ---
 
-export function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
+function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
   const [sectorMap, setSectorMap] = useState<Record<string, string>>({});
   const [loadingSectors, setLoadingSectors] = useState(false);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('crash');
@@ -669,3 +669,5 @@ export function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisP
     </div>
   );
 }
+export { ScenarioAnalysis };
+export default memo(ScenarioAnalysis);

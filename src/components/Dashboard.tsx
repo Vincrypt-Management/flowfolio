@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { invokeWithResilience } from "../services/apiClient";
 import { useToast } from "./Toast";
 import { useUserMode } from "../contexts/UserModeContext";
@@ -511,4 +511,4 @@ function Dashboard({
   );
 }
 
-export default Dashboard;
+export default memo(Dashboard);

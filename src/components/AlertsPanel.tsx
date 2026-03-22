@@ -4,7 +4,7 @@
  * Uses get_current_prices_batch Tauri command for live price fetching.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { createLogger } from '../core/logger';
 import { invokeWithResilience } from '../services/apiClient';
 
@@ -90,7 +90,7 @@ function formatTimestamp(iso: string): string {
 
 // --- Component ---
 
-export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
+function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -620,3 +620,5 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
     </div>
   );
 }
+export { AlertsPanel };
+export default memo(AlertsPanel);

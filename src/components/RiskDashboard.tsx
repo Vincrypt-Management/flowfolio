@@ -4,7 +4,7 @@
  * concentration risk, correlation heatmap, VaR display, and drawdown chart.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { invokeWithResilience } from '../services/apiClient';
 import { DEFAULT_SYMBOLS } from '../shared/constants';
 import {
@@ -214,7 +214,7 @@ function RiskGauge({ score }: { score: number }) {
 
 // --- Component ---
 
-export function RiskDashboard({
+function RiskDashboard({
   holdings: propHoldings,
   portfolioValue: propPortfolioValue,
   marketPrices,
@@ -659,3 +659,5 @@ export function RiskDashboard({
     </div>
   );
 }
+export { RiskDashboard };
+export default memo(RiskDashboard);
