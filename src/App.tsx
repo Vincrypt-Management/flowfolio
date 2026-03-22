@@ -106,7 +106,6 @@ function App() {
     checkHealth();
     loadTemplates();
     loadDefaultPlan();
-    loadCacheStats();
     loadUniverses();
     loadSavedPlans();
     loadMarketOverview();
@@ -149,11 +148,6 @@ function App() {
     } catch (error) {
       logger.error("Failed to load default plan:", error);
     }
-  }
-
-  async function loadCacheStats() {
-    // Cache stats are now loaded directly by the DataSourcesPage component
-    // This function is kept for backwards compatibility
   }
 
   async function loadUniverses() {

@@ -172,11 +172,16 @@ pub async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, S
 #[tauri::command]
 pub async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
     validate_symbol(&symbol)?;
-    let _days = days.unwrap_or(365);
+    let days = days.unwrap_or(365);
 
     match ENHANCED_MARKET_SERVICE.get_historical_prices(&symbol).await {
         Ok(prices) => {
-            let result: Vec<serde_json::Value> = prices.into_iter()
+            let truncated: Vec<_> = if prices.len() > days {
+                prices[prices.len() - days..].to_vec()
+            } else {
+                prices
+            };
+            let result: Vec<serde_json::Value> = truncated.into_iter()
                 .map(|p| serde_json::json!({
                     "date": p.date,
                     "close": p.close,
