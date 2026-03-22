@@ -798,6 +798,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore] // live-network test — run manually with `cargo test test_yahoo_fetch -- --ignored`
     async fn test_yahoo_fetch() {
         let provider = FreeDataProviders::new();
         let result = provider.fetch_yahoo("AAPL").await;
