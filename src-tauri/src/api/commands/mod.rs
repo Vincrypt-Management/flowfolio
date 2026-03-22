@@ -1,18 +1,20 @@
 // API Commands Module
-// Structure for future clean separation of Tauri commands
-// Currently, commands are still in lib.rs
+// Domain-grouped Tauri command handlers extracted from lib.rs
 
-#[allow(dead_code)]
 pub mod market;
-#[allow(dead_code)]
-pub mod cache;
-#[allow(dead_code)]
-pub mod health;
+pub mod vibe;
+pub mod portfolio;
+pub mod backtest;
+pub mod journal;
+pub mod settings;
+pub mod ai;
+pub mod dividends_tax;
 
-// Re-export command structs (future migration targets)
-#[allow(unused_imports)]
-pub use market::MarketCommands;
-#[allow(unused_imports)]
-pub use cache::CacheCommands;
-#[allow(unused_imports)]
-pub use health::HealthCommands;
+pub use market::*;
+pub use vibe::*;
+pub use portfolio::*;
+pub use backtest::*;
+pub use journal::*;
+pub use settings::*;
+pub use ai::*;
+pub use dividends_tax::*;

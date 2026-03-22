@@ -1,5 +1,5 @@
 // FlowFolio - Industrial Grade Investment Management
-// 
+//
 // Architecture:
 // - core/     : Configuration, errors, logging
 // - infrastructure/: HTTP, cache, database, resilience
@@ -15,94 +15,165 @@ mod infrastructure;
 mod domain;
 mod api;
 
-use modules::{
-    plan_compiler::{PlanCompiler, VibePlanScript},
-    scoring::{ScoringConfig, SymbolScore},
-    portfolio::{
-        PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
-        BuyList, RebalanceReport,
-        review::{ReviewGenerator, YearlyReview},
-        PortfolioOptimizer, PortfolioOptimizationReport,
-    },
-    backtest::{BacktestEngine, BacktestConfig, BacktestResult},
-    journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff},
-    quant_analysis::{QuantMetrics, QuantAnalyzer, DashboardData},
-    progress::{ProgressEvent, generate_operation_id, ProgressDetail},
-};
-use modules::portfolio::optimizer::OptimizationThresholds;
+use api::commands::*;
+
+use modules::plan_compiler::VibePlanScript;
+use modules::journal::JournalEntry;
 use services::{
     EnhancedMarketDataService,
-    enhanced_market_service::CacheStats,
     OpenRouterService,
     AlpacaService,
     FundamentalDataService,
-    FundamentalMetrics,
-    openrouter_service::OpenRouterMessage,
 };
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_store::StoreExt;
-use std::sync::atomic::{AtomicBool, Ordering};
-use crate::core::validation::{validate_symbol, validate_symbols};
+use tauri::Manager;
+use std::sync::atomic::AtomicBool;
 
-// Global service instances
+// ==================== GLOBAL STATE ====================
+
 lazy_static::lazy_static! {
-    static ref ENHANCED_MARKET_SERVICE: Arc<EnhancedMarketDataService> =
+    pub(crate) static ref ENHANCED_MARKET_SERVICE: Arc<EnhancedMarketDataService> =
         Arc::new(EnhancedMarketDataService::new_without_db());
 
-    static ref OPENROUTER_SERVICE: Arc<OpenRouterService> =
+    pub(crate) static ref OPENROUTER_SERVICE: Arc<OpenRouterService> =
         Arc::new(OpenRouterService::new());
 
-    static ref ALPACA_SERVICE: Arc<AlpacaService> =
+    pub(crate) static ref ALPACA_SERVICE: Arc<AlpacaService> =
         Arc::new(AlpacaService::new());
 
-    static ref FUNDAMENTAL_SERVICE: Arc<FundamentalDataService> =
+    pub(crate) static ref FUNDAMENTAL_SERVICE: Arc<FundamentalDataService> =
         Arc::new(FundamentalDataService::new());
 
-    // Flag to track if database is initialized
-    static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> =
+    pub(crate) static ref DB_INITIALIZED: Arc<std::sync::atomic::AtomicBool> =
         Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    static ref DB_POOL: Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>> =
+    pub(crate) static ref DB_POOL: Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>> =
         Arc::new(Mutex::new(None));
+
+    // In-memory plan storage
+    pub(crate) static ref SAVED_PLANS: Arc<Mutex<HashMap<String, VibePlanScript>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 }
 
 /// Whether the Stronghold vault is currently unlocked.
-static VAULT_UNLOCKED: AtomicBool = AtomicBool::new(false);
+pub(crate) static VAULT_UNLOCKED: AtomicBool = AtomicBool::new(false);
 
 /// Name of the Stronghold vault file stored in the app data directory.
-const STRONGHOLD_VAULT: &str = "flowfolio-vault.hold";
+pub(crate) const STRONGHOLD_VAULT: &str = "flowfolio-vault.hold";
+
+pub(crate) const API_KEYS_STORE: &str = "api-keys.json";
+pub(crate) const API_KEY_NAMES: &[&str] = &[
+    "alpaca_key", "alpaca_secret", "finnhub_key", "fmp_key",
+    "tiingo_key", "twelve_data_key", "polygon_key", "alpha_vantage_key", "openrouter_key",
+];
+
+// ==================== SHARED TYPES ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriceAlert {
+    pub id: String,
+    pub symbol: String,
+    pub condition: String,
+    pub threshold: f64,
+    pub reference_price: Option<f64>,
+    pub active: bool,
+    pub triggered: bool,
+    pub triggered_at: Option<String>,
+    pub created_at: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebalanceSchedule {
+    pub id: String,
+    pub plan_name: String,
+    pub frequency: String,
+    pub day_of_week: Option<i64>,
+    pub day_of_month: Option<i64>,
+    pub next_run: String,
+    pub last_run: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+}
+
+/// Universe definition for symbol filtering
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Universe {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub symbols: Vec<String>,
+    pub tags: HashMap<String, Vec<String>>,
+    pub exclude_list: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Export data bundle
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportBundle {
+    pub version: String,
+    pub exported_at: String,
+    pub plan: Option<VibePlanScript>,
+    pub universes: Vec<Universe>,
+    pub journal_entries: Vec<JournalEntry>,
+    pub settings: HashMap<String, String>,
+}
+
+// ==================== HELPER FUNCTIONS ====================
+
+pub(crate) async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
+    let pool = DB_POOL.lock().await;
+    pool.clone().ok_or_else(|| "Database not initialized".to_string())
+}
+
+pub(crate) async fn get_user_tier() -> String {
+    if let Some(pool) = DB_POOL.lock().await.as_ref() {
+        if let Ok(Some(row)) = sqlx::query_scalar::<_, String>(
+            "SELECT value FROM user_settings WHERE key = 'subscription_tier'"
+        )
+        .fetch_optional(pool)
+        .await
+        {
+            return row;
+        }
+    }
+    "pro".to_string()
+}
+
+// ==================== DATABASE INITIALIZATION ====================
 
 /// Initialize local SQLite database for caching
 async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use std::str::FromStr;
-    
-    // Ensure the data directory exists
+
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|e| format!("Failed to create data directory: {}", e))?;
-    
+
     let db_path = app_data_dir.join("flowfolio_cache.db");
     let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
-    
+
     tracing::info!(path = %db_path.display(), "Initializing local cache database");
-    
+
     let options = SqliteConnectOptions::from_str(&db_url)
         .map_err(|e| format!("Invalid database URL: {}", e))?
         .create_if_missing(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal);
-    
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(options)
         .await
         .map_err(|e| format!("Failed to connect to database: {}", e))?;
-    
+
     // Create cache tables
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS price_cache (
@@ -111,7 +182,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             updated_at TEXT NOT NULL
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create price_cache: {}", e))?;
-    
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS quant_metrics_cache (
             symbol TEXT PRIMARY KEY,
@@ -125,7 +196,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             updated_at TEXT NOT NULL
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create quant_metrics_cache: {}", e))?;
-    
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS historical_prices_cache (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,13 +211,12 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             UNIQUE(symbol, date)
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create historical_prices_cache: {}", e))?;
-    
-    // Create index for faster lookups
+
     sqlx::query(r#"
-        CREATE INDEX IF NOT EXISTS idx_historical_symbol_date 
+        CREATE INDEX IF NOT EXISTS idx_historical_symbol_date
         ON historical_prices_cache(symbol, date)
     "#).execute(&pool).await.map_err(|e| format!("Failed to create index: {}", e))?;
-    
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS fundamentals_cache (
             symbol TEXT PRIMARY KEY,
@@ -160,7 +230,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             updated_at TEXT NOT NULL
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create fundamentals_cache: {}", e))?;
-    
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS sentiment_cache (
             symbol TEXT PRIMARY KEY,
@@ -171,7 +241,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             updated_at TEXT NOT NULL
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create sentiment_cache: {}", e))?;
-    
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS analyst_ratings_cache (
             symbol TEXT PRIMARY KEY,
@@ -183,8 +253,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             updated_at TEXT NOT NULL
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create analyst_ratings_cache: {}", e))?;
-    
-    // Create saved portfolios table
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS saved_portfolios (
             id TEXT PRIMARY KEY,
@@ -194,7 +263,7 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
             updated_at TEXT NOT NULL
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create saved_portfolios: {}", e))?;
-    
+
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS price_alerts (
             id TEXT PRIMARY KEY,
@@ -222,7 +291,6 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
         )
     "#).execute(&pool).await.map_err(|e| format!("Failed to create rebalance_schedules: {}", e))?;
 
-    // Add optional columns for day granularity (ignore error if columns already exist)
     let _ = sqlx::query("ALTER TABLE rebalance_schedules ADD COLUMN day_of_week INTEGER")
         .execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE rebalance_schedules ADD COLUMN day_of_month INTEGER")
@@ -335,2721 +403,10 @@ async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
     tracing::info!("Enhanced market service initialized with database caching");
 }
 
-async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
-    let pool = DB_POOL.lock().await;
-    pool.clone().ok_or_else(|| "Database not initialized".to_string())
-}
-
-async fn get_user_tier() -> String {
-    if let Some(pool) = DB_POOL.lock().await.as_ref() {
-        if let Ok(Some(row)) = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM user_settings WHERE key = 'subscription_tier'"
-        )
-        .fetch_optional(pool)
-        .await
-        {
-            return row;
-        }
-    }
-    // Default to "pro" for local-first mode — all features available offline.
-    // When the auth/payment server is deployed, the tier will be set via the
-    // subscription flow and stored in user_settings.
-    "pro".to_string()
-}
-
-// ==================== PRICE ALERTS ====================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PriceAlert {
-    pub id: String,
-    pub symbol: String,
-    pub condition: String, // "above" | "below" | "percent_change_up" | "percent_change_down"
-    pub threshold: f64,
-    pub reference_price: Option<f64>,
-    pub active: bool,
-    pub triggered: bool,
-    pub triggered_at: Option<String>,
-    pub created_at: String,
-    pub note: Option<String>,
-}
-
-#[tauri::command]
-async fn create_alert(alert: PriceAlert) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query(
-        "INSERT INTO price_alerts (id, symbol, condition, threshold, reference_price, active, triggered, triggered_at, created_at, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&alert.id)
-    .bind(&alert.symbol)
-    .bind(&alert.condition)
-    .bind(alert.threshold)
-    .bind(alert.reference_price)
-    .bind(alert.active as i64)
-    .bind(alert.triggered as i64)
-    .bind(&alert.triggered_at)
-    .bind(&alert.created_at)
-    .bind(&alert.note)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to create alert: {}", e))?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_alerts() -> Result<Vec<PriceAlert>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query(
-        "SELECT id, symbol, condition, threshold, reference_price, active, triggered, triggered_at, created_at, note
-         FROM price_alerts ORDER BY created_at DESC"
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("Failed to list alerts: {}", e))?;
-
-    let alerts = rows.iter().map(|row| {
-        use sqlx::Row;
-        PriceAlert {
-            id: row.get("id"),
-            symbol: row.get("symbol"),
-            condition: row.get("condition"),
-            threshold: row.get("threshold"),
-            reference_price: row.get("reference_price"),
-            active: row.get::<i64, _>("active") != 0,
-            triggered: row.get::<i64, _>("triggered") != 0,
-            triggered_at: row.get("triggered_at"),
-            created_at: row.get("created_at"),
-            note: row.get("note"),
-        }
-    }).collect();
-
-    Ok(alerts)
-}
-
-#[tauri::command]
-async fn update_alert(alert: PriceAlert) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query(
-        "UPDATE price_alerts SET symbol=?, condition=?, threshold=?, reference_price=?,
-         active=?, triggered=?, triggered_at=?, note=? WHERE id=?"
-    )
-    .bind(&alert.symbol)
-    .bind(&alert.condition)
-    .bind(alert.threshold)
-    .bind(alert.reference_price)
-    .bind(alert.active as i64)
-    .bind(alert.triggered as i64)
-    .bind(&alert.triggered_at)
-    .bind(&alert.note)
-    .bind(&alert.id)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to update alert: {}", e))?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn delete_alert(id: String) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query("DELETE FROM price_alerts WHERE id = ?")
-        .bind(&id)
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("Failed to delete alert: {}", e))?;
-    Ok(())
-}
-
-// ==================== REBALANCE SCHEDULES ====================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RebalanceSchedule {
-    pub id: String,
-    pub plan_name: String,
-    pub frequency: String, // "daily" | "weekly" | "monthly" | "quarterly"
-    pub day_of_week: Option<i64>,
-    pub day_of_month: Option<i64>,
-    pub next_run: String,
-    pub last_run: Option<String>,
-    pub enabled: bool,
-    pub created_at: String,
-}
-
-#[tauri::command]
-async fn save_schedule(schedule: RebalanceSchedule) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query(
-        "INSERT OR REPLACE INTO rebalance_schedules
-         (id, plan_name, cadence, day_of_week, day_of_month, next_run, last_run, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&schedule.id)
-    .bind(&schedule.plan_name)
-    .bind(&schedule.frequency)
-    .bind(schedule.day_of_week)
-    .bind(schedule.day_of_month)
-    .bind(&schedule.next_run)
-    .bind(&schedule.last_run)
-    .bind(schedule.enabled as i64)
-    .bind(&schedule.created_at)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to save schedule: {}", e))?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_schedules() -> Result<Vec<RebalanceSchedule>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query(
-        "SELECT id, plan_name, cadence, day_of_week, day_of_month, next_run, last_run, enabled, created_at
-         FROM rebalance_schedules ORDER BY next_run ASC"
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("Failed to list schedules: {}", e))?;
-
-    let schedules = rows.iter().map(|row| {
-        use sqlx::Row;
-        RebalanceSchedule {
-            id: row.get("id"),
-            plan_name: row.get("plan_name"),
-            frequency: row.get("cadence"),
-            day_of_week: row.get("day_of_week"),
-            day_of_month: row.get("day_of_month"),
-            next_run: row.get("next_run"),
-            last_run: row.get("last_run"),
-            enabled: row.get::<i64, _>("enabled") != 0,
-            created_at: row.get("created_at"),
-        }
-    }).collect();
-
-    Ok(schedules)
-}
-
-#[tauri::command]
-async fn delete_schedule(id: String) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query("DELETE FROM rebalance_schedules WHERE id = ?")
-        .bind(&id)
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("Failed to delete schedule: {}", e))?;
-    Ok(())
-}
-
-// ==================== USER SETTINGS ====================
-
-#[tauri::command]
-async fn save_setting(key: String, value: String) -> Result<(), String> {
-    let pool = get_pool().await?;
-    let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)"
-    )
-    .bind(&key)
-    .bind(&value)
-    .bind(&now)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to save setting: {}", e))?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn load_setting(key: String) -> Result<Option<String>, String> {
-    let pool = get_pool().await?;
-    let row = sqlx::query("SELECT value FROM user_settings WHERE key = ?")
-        .bind(&key)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|e| format!("Failed to load setting: {}", e))?;
-
-    use sqlx::Row;
-    Ok(row.map(|r| r.get("value")))
-}
-
-// ==================== REBALANCE TRANSACTIONS ====================
-
-#[tauri::command]
-async fn record_rebalance(portfolio_name: String, report_json: String) -> Result<String, String> {
-    let pool = get_pool().await?;
-    let id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        "INSERT INTO rebalance_transactions (id, plan_name, method, symbols, allocations, executed_at, notes)
-         VALUES (?, ?, 'rebalance', '[]', ?, ?, ?)"
-    )
-    .bind(&id)
-    .bind(&portfolio_name)
-    .bind(&report_json)
-    .bind(&now)
-    .bind("")
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to record rebalance: {}", e))?;
-    Ok(id)
-}
-
-#[tauri::command]
-async fn list_rebalance_history(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query(
-        "SELECT id, executed_at, allocations FROM rebalance_transactions WHERE plan_name = ? ORDER BY executed_at DESC LIMIT 20"
-    )
-    .bind(&portfolio_name)
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("Failed to list rebalance history: {}", e))?;
-
-    use sqlx::Row;
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "id": r.get::<String, _>("id"),
-        "recorded_at": r.get::<String, _>("executed_at"),
-        "report": serde_json::from_str::<serde_json::Value>(r.get::<&str, _>("allocations")).unwrap_or_default(),
-    })).collect())
-}
-
-#[allow(dead_code)]
-#[derive(Serialize, Deserialize)]
-struct TemplateInfo {
-    name: String,
-    description: String,
-}
-
-/// Health check command
-#[tauri::command]
-fn health_check() -> String {
-    "FlowFolio API is running".to_string()
-}
-
-/// Get default VibePlan template
-#[tauri::command]
-fn get_default_plan() -> Result<VibePlanScript, String> {
-    Ok(PlanCompiler::default_template())
-}
-
-/// List available templates
-#[tauri::command]
-fn list_templates() -> Vec<String> {
-    PlanCompiler::list_templates()
-}
-
-/// Get a specific template by name
-#[tauri::command]
-fn get_template(name: String) -> Result<VibePlanScript, String> {
-    PlanCompiler::get_template(&name)
-        .ok_or_else(|| format!("Template '{}' not found", name))
-}
-
-/// Compile a prompt into a VibePlan using AI
-#[tauri::command]
-async fn compile_plan(prompt: String) -> Result<VibePlanScript, String> {
-    // Check if OpenRouter is configured
-    if !OPENROUTER_SERVICE.is_configured() {
-        tracing::warn!("OpenRouter not configured, using fallback template");
-        return PlanCompiler::from_prompt(&prompt).map_err(|e| e.to_string());
-    }
-    
-    tracing::info!("Compiling plan from prompt using AI...");
-    
-    // Use AI to compile the plan
-    let plan_json = OPENROUTER_SERVICE.compile_plan_from_prompt(&prompt).await?;
-    
-    // Convert JSON to VibePlanScript
-    let plan: VibePlanScript = serde_json::from_value(plan_json)
-        .map_err(|e| format!("Failed to convert AI response to plan: {}", e))?;
-    
-    // Validate the plan
-    PlanCompiler::validate(&plan).map_err(|e| format!("Invalid plan from AI: {}", e))?;
-    
-    tracing::info!(plan_name = %plan.name, "Successfully compiled plan");
-    Ok(plan)
-}
-
-/// Validate a VibePlan
-#[tauri::command]
-fn validate_plan(plan: VibePlanScript) -> Result<(), String> {
-    PlanCompiler::validate(&plan)
-        .map_err(|e| e.to_string())
-}
-
-/// Get API provider status
-#[tauri::command]
-fn get_provider_status() -> String {
-    serde_json::json!({
-        "provider": "Alpha Vantage",
-        "status": "ready",
-        "quota_remaining": 25
-    }).to_string()
-}
-
-/// Get scoring configuration for a plan
-#[tauri::command]
-fn get_scoring_config(plan: VibePlanScript) -> Result<ScoringConfig, String> {
-    // Extract factor weights from plan
-    let mut weights = HashMap::new();
-    
-    for factor in &plan.ranking.factors {
-        weights.insert(factor.name.clone(), factor.weight);
-    }
-    
-    Ok(ScoringConfig {
-        factor_weights: weights,
-    })
-}
-
-/// Score multiple symbols with custom config
-#[tauri::command]
-async fn score_symbols_batch(
-    symbols: Vec<String>,
-    config: ScoringConfig,
-) -> Result<Vec<SymbolScore>, String> {
-    validate_symbols(&symbols)?;
-    use modules::scoring::FactorScore;
-
-    let mut scores = Vec::new();
-
-    for symbol in symbols {
-        // Get quant metrics for this symbol
-        let metrics_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await;
-        
-        match metrics_result {
-            Ok(metrics) => {
-                let mut factors = Vec::new();
-                let mut total_contribution = 0.0;
-                let mut total_weight = 0.0;
-                
-                // Momentum factor (based on RSI and signal)
-                if let Some(weight) = config.factor_weights.get("momentum") {
-                    let normalized = momentum_score_from_rsi(metrics.rsi, &metrics.signal);
-                    let contribution = normalized * weight;
-                    factors.push(FactorScore {
-                        name: "momentum".to_string(),
-                        raw_value: Some(metrics.rsi),
-                        normalized_value: normalized,
-                        weight: *weight,
-                        contribution,
-                    });
-                    total_contribution += contribution;
-                    total_weight += weight;
-                }
-                
-                // Quality factor (based on Sharpe ratio and volatility)
-                if let Some(weight) = config.factor_weights.get("quality") {
-                    let normalized = quality_score_from_sharpe(metrics.sharpe_ratio, metrics.volatility);
-                    let contribution = normalized * weight;
-                    factors.push(FactorScore {
-                        name: "quality".to_string(),
-                        raw_value: Some(metrics.sharpe_ratio),
-                        normalized_value: normalized,
-                        weight: *weight,
-                        contribution,
-                    });
-                    total_contribution += contribution;
-                    total_weight += weight;
-                }
-                
-                // Value factor (inverse of volatility - lower vol = better value)
-                if let Some(weight) = config.factor_weights.get("value") {
-                    let normalized = value_score_from_vol(metrics.volatility, metrics.max_drawdown);
-                    let contribution = normalized * weight;
-                    factors.push(FactorScore {
-                        name: "value".to_string(),
-                        raw_value: Some(metrics.volatility),
-                        normalized_value: normalized,
-                        weight: *weight,
-                        contribution,
-                    });
-                    total_contribution += contribution;
-                    total_weight += weight;
-                }
-                
-                // Growth factor (based on annualized return)
-                if let Some(weight) = config.factor_weights.get("growth") {
-                    let normalized = growth_score_from_return(metrics.annualized_return);
-                    let contribution = normalized * weight;
-                    factors.push(FactorScore {
-                        name: "growth".to_string(),
-                        raw_value: Some(metrics.annualized_return),
-                        normalized_value: normalized,
-                        weight: *weight,
-                        contribution,
-                    });
-                    total_contribution += contribution;
-                    total_weight += weight;
-                }
-                
-                let total_score = if total_weight > 0.0 {
-                    total_contribution / total_weight
-                } else {
-                    50.0
-                };
-                
-                let explanation = format!(
-                    "{}: Score {:.1}/100\n\
-                    RSI: {:.1} | Sharpe: {:.2} | Vol: {:.1}% | Return: {:.1}%\n\
-                    Signal: {} (Confidence: {:.0}%)",
-                    symbol, total_score,
-                    metrics.rsi, metrics.sharpe_ratio, metrics.volatility, metrics.annualized_return,
-                    metrics.signal, metrics.confidence
-                );
-                
-                scores.push(SymbolScore {
-                    symbol,
-                    total_score,
-                    factors,
-                    explanation,
-                });
-            }
-            Err(e) => {
-                // Still add the symbol with zero score and error
-                scores.push(SymbolScore {
-                    symbol: symbol.clone(),
-                    total_score: 0.0,
-                    factors: vec![],
-                    explanation: format!("Error fetching data for {}: {}", symbol, e),
-                });
-            }
-        }
-    }
-    
-    // Sort by total score descending
-    scores.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap_or(std::cmp::Ordering::Equal));
-    
-    Ok(scores)
-}
-
-// Helper functions for score normalization
-fn momentum_score_from_rsi(rsi: f64, signal: &str) -> f64 {
-    // RSI 30-70 is neutral, below 30 is oversold (good buy), above 70 is overbought
-    let rsi_score = match rsi {
-        r if r < 30.0 => 80.0 + (30.0 - r), // Oversold = high score
-        r if r > 70.0 => 50.0 - (r - 70.0), // Overbought = lower score
-        r => 50.0 + (50.0 - r).abs() * 0.5, // Neutral range
-    };
-    
-    // Adjust based on signal
-    let signal_adj = match signal {
-        "STRONG BUY" => 15.0,
-        "BUY" => 10.0,
-        "HOLD" => 0.0,
-        "SELL" => -10.0,
-        "STRONG SELL" => -15.0,
-        _ => 0.0,
-    };
-    
-    (rsi_score + signal_adj).max(0.0).min(100.0)
-}
-
-fn quality_score_from_sharpe(sharpe: f64, volatility: f64) -> f64 {
-    // Sharpe > 1 is good, > 2 is excellent
-    let sharpe_score = match sharpe {
-        s if s > 2.0 => 90.0,
-        s if s > 1.5 => 80.0,
-        s if s > 1.0 => 70.0,
-        s if s > 0.5 => 60.0,
-        s if s > 0.0 => 50.0,
-        s => (50.0 + s * 10.0).max(0.0),
-    };
-    
-    // Lower volatility is better
-    let vol_adj = match volatility {
-        v if v < 15.0 => 10.0,
-        v if v < 25.0 => 5.0,
-        v if v < 40.0 => 0.0,
-        _ => -10.0,
-    };
-    
-    (sharpe_score + vol_adj).max(0.0).min(100.0)
-}
-
-fn value_score_from_vol(volatility: f64, max_drawdown: f64) -> f64 {
-    // Lower volatility and drawdown = better value
-    let vol_score: f64 = match volatility {
-        v if v < 15.0 => 85.0,
-        v if v < 25.0 => 70.0,
-        v if v < 35.0 => 55.0,
-        v if v < 50.0 => 40.0,
-        _ => 25.0,
-    };
-    
-    // Penalize high drawdowns
-    let dd_adj: f64 = match max_drawdown {
-        d if d < 10.0 => 10.0,
-        d if d < 20.0 => 0.0,
-        d if d < 30.0 => -10.0,
-        _ => -20.0,
-    };
-    
-    (vol_score + dd_adj).max(0.0_f64).min(100.0_f64)
-}
-
-fn growth_score_from_return(annualized_return: f64) -> f64 {
-    // Higher return = better growth
-    match annualized_return {
-        r if r > 30.0 => 95.0,
-        r if r > 20.0 => 85.0,
-        r if r > 10.0 => 70.0,
-        r if r > 5.0 => 60.0,
-        r if r > 0.0 => 50.0,
-        r if r > -10.0 => 35.0,
-        _ => 20.0,
-    }
-}
-
-// Create equal-weight allocation plan
-#[tauri::command]
-fn create_equal_weight_allocation(
-    symbols: Vec<String>,
-    max_position_pct: f64,
-    cash_buffer_pct: f64,
-) -> Result<AllocationPlan, String> {
-    let constraints = AllocationConstraints {
-        max_position_pct,
-        min_position_pct: 1.0,
-        max_sector_pct: None,
-        cash_buffer_pct,
-    };
-
-    Ok(PortfolioManager::equal_weight_allocation(symbols, constraints))
-}
-
-/// Create score-weighted allocation plan
-#[tauri::command]
-fn create_score_weighted_allocation(
-    scores: Vec<SymbolScore>,
-    max_position_pct: f64,
-    cash_buffer_pct: f64,
-) -> Result<AllocationPlan, String> {
-    let symbols_with_scores: Vec<(String, f64)> = scores
-        .into_iter()
-        .map(|s| (s.symbol, s.total_score))
-        .collect();
-
-    let constraints = AllocationConstraints {
-        max_position_pct,
-        min_position_pct: 1.0,
-        max_sector_pct: None,
-        cash_buffer_pct,
-    };
-
-    Ok(PortfolioManager::score_weighted_allocation(
-        symbols_with_scores,
-        constraints,
-    ))
-}
-
-/// Generate monthly buy list
-#[tauri::command]
-fn generate_monthly_buy_list(
-    contribution: f64,
-    portfolio: Portfolio,
-    allocation_plan: AllocationPlan,
-    prices: HashMap<String, f64>,
-) -> Result<BuyList, String> {
-    Ok(PortfolioManager::generate_buy_list(
-        contribution,
-        &portfolio,
-        &allocation_plan,
-        &prices,
-    ))
-}
-
-/// Check rebalancing needs
-#[tauri::command]
-fn check_portfolio_rebalance(
-    portfolio: Portfolio,
-    threshold_pct: f64,
-) -> Result<RebalanceReport, String> {
-    Ok(PortfolioManager::check_rebalance(&portfolio, threshold_pct))
-}
-
-/// Generate yearly review checklist
-#[tauri::command]
-fn generate_yearly_review(
-    portfolio_name: String,
-    year: i32,
-) -> Result<YearlyReview, String> {
-    Ok(ReviewGenerator::generate_yearly_review(&portfolio_name, year))
-}
-
-/// Generate portfolio optimization report with drop/replace recommendations
-#[tauri::command]
-async fn generate_optimization_report(
-    portfolio_name: String,
-    holdings: Vec<(String, f64, f64, f64)>, // (symbol, shares, cost_basis, current_price)
-    candidate_symbols: Vec<String>,
-    thresholds: Option<OptimizationThresholds>,
-) -> Result<PortfolioOptimizationReport, String> {
-    // Get metrics for current holdings
-    let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
-    let mut holding_metrics: HashMap<String, QuantMetrics> = HashMap::new();
-
-    for symbol in &holding_symbols {
-        if let Ok(metrics) = ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
-            holding_metrics.insert(symbol.clone(), metrics);
-        }
-    }
-
-    // Get metrics for candidate replacements
-    let mut candidate_metrics: HashMap<String, QuantMetrics> = HashMap::new();
-
-    for symbol in &candidate_symbols {
-        if !holding_symbols.contains(symbol) {
-            if let Ok(metrics) = ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
-                candidate_metrics.insert(symbol.clone(), metrics);
-            }
-        }
-    }
-    
-    let thresholds = thresholds.unwrap_or_default();
-    
-    Ok(PortfolioOptimizer::generate_optimization_report(
-        &portfolio_name,
-        holdings,
-        &holding_metrics,
-        &candidate_metrics,
-        thresholds,
-    ))
-}
-
-/// Generate portfolio optimization report with LIVE progress updates
-/// This version emits events during the analysis for real-time UI updates
-#[tauri::command]
-async fn generate_optimization_report_live(
-    app: AppHandle,
-    portfolio_name: String,
-    holdings: Vec<(String, f64, f64, f64)>, // (symbol, shares, cost_basis, current_price)
-    candidate_symbols: Vec<String>,
-    thresholds: Option<OptimizationThresholds>,
-) -> Result<PortfolioOptimizationReport, String> {
-    let operation_id = generate_operation_id();
-
-    let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
-    let total_symbols = holding_symbols.len() + candidate_symbols.len();
-    
-    // Emit start event
-    let _ = app.emit("optimization_progress", ProgressEvent::Started {
-        operation_id: operation_id.clone(),
-        operation_type: "portfolio_optimization".to_string(),
-        total_steps: Some(total_symbols),
-        message: format!("Starting portfolio optimization for {}", portfolio_name),
-    });
-    
-    let mut holding_metrics: HashMap<String, QuantMetrics> = HashMap::new();
-    let mut current_step = 0;
-    
-    // Analyze current holdings with progress updates
-    for (idx, symbol) in holding_symbols.iter().enumerate() {
-        current_step = idx + 1;
-        
-        let _ = app.emit("optimization_progress", ProgressEvent::Progress {
-            operation_id: operation_id.clone(),
-            current_step,
-            total_steps: Some(total_symbols),
-            percentage: (current_step as f64 / total_symbols as f64) * 100.0,
-            message: format!("Analyzing holding: {}", symbol),
-            detail: Some(ProgressDetail {
-                symbol: Some(symbol.clone()),
-                provider: None,
-                metric: Some("quant_metrics".to_string()),
-                value: None,
-            }),
-        });
-        
-        // Try to get metrics with retry tracking
-        let mut attempts = 0;
-        let max_attempts = 3;
-        
-        loop {
-            attempts += 1;
-            match ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
-                Ok(metrics) => {
-                    // Emit partial result for immediate UI update
-                    let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
-                        operation_id: operation_id.clone(),
-                        result_type: "holding_metrics".to_string(),
-                        data: serde_json::json!({
-                            "symbol": symbol,
-                            "sharpe_ratio": metrics.sharpe_ratio,
-                            "annualized_return": metrics.annualized_return,
-                            "volatility": metrics.volatility,
-                            "signal": metrics.signal,
-                        }),
-                    });
-                    
-                    holding_metrics.insert(symbol.clone(), metrics);
-                    break;
-                }
-                Err(e) => {
-                    if attempts < max_attempts {
-                        // Emit retry event
-                        let _ = app.emit("optimization_progress", ProgressEvent::Retry {
-                            operation_id: operation_id.clone(),
-                            attempt: attempts,
-                            max_attempts,
-                            error: e.clone(),
-                            next_retry_ms: (attempts as u64) * 500,
-                        });
-                        
-                        tokio::time::sleep(tokio::time::Duration::from_millis((attempts as u64) * 500)).await;
-                    } else {
-                        // Emit error for this symbol but continue
-                        let _ = app.emit("optimization_progress", ProgressEvent::Error {
-                            operation_id: operation_id.clone(),
-                            error: format!("Failed to get metrics for {}: {}", symbol, e),
-                            recoverable: true,
-                        });
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Analyze candidate symbols for replacements
-    let mut candidate_metrics: HashMap<String, QuantMetrics> = HashMap::new();
-    
-    for symbol in &candidate_symbols {
-        if holding_symbols.contains(symbol) {
-            continue;
-        }
-        
-        current_step += 1;
-        
-        let _ = app.emit("optimization_progress", ProgressEvent::Progress {
-            operation_id: operation_id.clone(),
-            current_step,
-            total_steps: Some(total_symbols),
-            percentage: (current_step as f64 / total_symbols as f64) * 100.0,
-            message: format!("Evaluating replacement candidate: {}", symbol),
-            detail: Some(ProgressDetail {
-                symbol: Some(symbol.clone()),
-                provider: None,
-                metric: Some("candidate_analysis".to_string()),
-                value: None,
-            }),
-        });
-        
-        let mut attempts = 0;
-        let max_attempts = 3;
-        
-        loop {
-            attempts += 1;
-            match ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
-                Ok(metrics) => {
-                    // Emit partial result
-                    let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
-                        operation_id: operation_id.clone(),
-                        result_type: "candidate_metrics".to_string(),
-                        data: serde_json::json!({
-                            "symbol": symbol,
-                            "sharpe_ratio": metrics.sharpe_ratio,
-                            "annualized_return": metrics.annualized_return,
-                            "volatility": metrics.volatility,
-                            "signal": metrics.signal,
-                            "score": calculate_quick_score(&metrics),
-                        }),
-                    });
-                    
-                    candidate_metrics.insert(symbol.clone(), metrics);
-                    break;
-                }
-                Err(e) => {
-                    if attempts < max_attempts {
-                        let _ = app.emit("optimization_progress", ProgressEvent::Retry {
-                            operation_id: operation_id.clone(),
-                            attempt: attempts,
-                            max_attempts,
-                            error: e.clone(),
-                            next_retry_ms: (attempts as u64) * 500,
-                        });
-                        
-                        tokio::time::sleep(tokio::time::Duration::from_millis((attempts as u64) * 500)).await;
-                    } else {
-                        let _ = app.emit("optimization_progress", ProgressEvent::Error {
-                            operation_id: operation_id.clone(),
-                            error: format!("Failed to analyze candidate {}: {}", symbol, e),
-                            recoverable: true,
-                        });
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Generate final report
-    let _ = app.emit("optimization_progress", ProgressEvent::Progress {
-        operation_id: operation_id.clone(),
-        current_step: total_symbols,
-        total_steps: Some(total_symbols),
-        percentage: 100.0,
-        message: "Generating optimization recommendations...".to_string(),
-        detail: None,
-    });
-    
-    let thresholds = thresholds.unwrap_or_default();
-    let report = PortfolioOptimizer::generate_optimization_report(
-        &portfolio_name,
-        holdings,
-        &holding_metrics,
-        &candidate_metrics,
-        thresholds,
-    );
-    
-    // Emit completion
-    let _ = app.emit("optimization_progress", ProgressEvent::Completed {
-        operation_id: operation_id.clone(),
-        success: true,
-        message: format!(
-            "Optimization complete: {} drops recommended, {} replacements found",
-            report.drop_recommendations.len(),
-            report.replacement_options.len()
-        ),
-        duration_ms: 0, // Would need to track this
-    });
-    
-    Ok(report)
-}
-
-// Helper function to calculate a quick score for candidates
-fn calculate_quick_score(metrics: &QuantMetrics) -> f64 {
-    let mut score = 0.0;
-    score += (metrics.sharpe_ratio * 15.0).min(30.0).max(0.0);
-    score += (metrics.annualized_return * 0.5).min(25.0).max(0.0);
-    score += ((50.0 - metrics.volatility) * 0.3).min(15.0).max(0.0);
-    score += ((40.0 - metrics.max_drawdown) * 0.375).min(15.0).max(0.0);
-    score += match metrics.signal.as_str() {
-        "STRONG BUY" => 15.0,
-        "BUY" => 10.0,
-        "HOLD" => 5.0,
-        _ => 0.0,
-    };
-    score
-}
-
-/// Run backtest simulation
-#[tauri::command]
-fn run_backtest_simulation(config: BacktestConfig) -> Result<BacktestResult, String> {
-    Ok(BacktestEngine::run_backtest(config))
-}
-
-/// Create a journal entry
-#[tauri::command]
-fn create_journal_entry(
-    event_type: String,
-    title: String,
-    content: String,
-    plan_version: Option<String>,
-    tags: Vec<String>,
-) -> Result<JournalEntry, String> {
-    Ok(Journal::create_entry(
-        &event_type,
-        &title,
-        &content,
-        plan_version,
-        tags,
-    ))
-}
-
-/// Log a strategy change
-#[tauri::command]
-fn log_strategy_change(
-    change_description: String,
-    old_plan: String,
-    new_plan: String,
-) -> Result<JournalEntry, String> {
-    Ok(Journal::log_strategy_change(&change_description, &old_plan, &new_plan))
-}
-
-/// Log a trade decision
-#[tauri::command]
-fn log_trade_decision(
-    symbol: String,
-    action: String,
-    rationale: String,
-) -> Result<JournalEntry, String> {
-    Ok(Journal::log_trade_decision(&symbol, &action, &rationale))
-}
-
-/// Log a rebalance event
-#[tauri::command]
-fn log_rebalance_event(
-    trigger_reason: String,
-    actions_summary: String,
-) -> Result<JournalEntry, String> {
-    Ok(Journal::log_rebalance(&trigger_reason, &actions_summary))
-}
-
-/// Log a review
-#[tauri::command]
-fn log_review_event(
-    review_type: String,
-    findings: String,
-    action_items: Vec<String>,
-) -> Result<JournalEntry, String> {
-    Ok(Journal::log_review(&review_type, &findings, action_items))
-}
-
-/// Compare plan versions
-#[tauri::command]
-fn compare_plan_versions(
-    old_plan: String,
-    new_plan: String,
-    from_version: String,
-    to_version: String,
-) -> Result<PlanVersionDiff, String> {
-    Ok(Journal::compare_plans(&old_plan, &new_plan, &from_version, &to_version))
-}
-
-/// Filter journal entries
-#[tauri::command]
-fn filter_journal_entries(
-    entries: Vec<JournalEntry>,
-    filter: JournalFilter,
-) -> Result<Vec<JournalEntry>, String> {
-    Ok(Journal::filter_entries(&entries, &filter))
-}
-
-/// Calculate journal statistics
-#[tauri::command]
-fn calculate_journal_stats(
-    entries: Vec<JournalEntry>,
-) -> Result<JournalStats, String> {
-    Ok(Journal::calculate_stats(&entries))
-}
-
-/// Export journal to markdown
-#[tauri::command]
-fn export_journal_markdown(
-    entries: Vec<JournalEntry>,
-) -> Result<String, String> {
-    Ok(Journal::export_to_markdown(&entries))
-}
-
-/// Get quantitative metrics for multiple symbols
-#[tauri::command]
-async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
-    validate_symbols(&symbols)?;
-    Ok(ENHANCED_MARKET_SERVICE.get_batch_quant_metrics(symbols).await)
-}
-
-/// Generate comprehensive dashboard data - ALL calculations done on backend
-/// This eliminates heavy frontend calculations for better performance
-#[tauri::command]
-async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, String> {
-    validate_symbols(&symbols)?;
-    use modules::quant_analysis::HistoricalPrice as QuantHistoricalPrice;
-
-    // Fetch historical data for all symbols
-    let mut assets_data: Vec<(String, Vec<QuantHistoricalPrice>)> = Vec::new();
-
-    for symbol in &symbols {
-        match ENHANCED_MARKET_SERVICE.get_historical_prices(symbol).await {
-            Ok(prices) => {
-                // Convert from provider's HistoricalPrice to quant_analysis HistoricalPrice
-                let historical: Vec<QuantHistoricalPrice> = prices
-                    .into_iter()
-                    .map(|p| QuantHistoricalPrice { date: p.date, close: p.close })
-                    .collect();
-                assets_data.push((symbol.clone(), historical));
-            }
-            Err(_) => {
-                // Skip symbols without data
-                continue;
-            }
-        }
-    }
-    
-    if assets_data.is_empty() {
-        return Err("No historical data available for any symbol".to_string());
-    }
-    
-    Ok(QuantAnalyzer::generate_dashboard_data(assets_data))
-}
-
-/// Get current prices for multiple symbols
-#[tauri::command]
-async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String, f64>, String> {
-    validate_symbols(&symbols)?;
-    Ok(ENHANCED_MARKET_SERVICE.get_batch_prices(symbols).await)
-}
-
-/// Get single symbol quantitative metrics
-#[tauri::command]
-async fn get_quant_metrics_single(symbol: String) -> Result<QuantMetrics, String> {
-    validate_symbol(&symbol)?;
-    ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await
-}
-
-/// Get single symbol current price
-#[tauri::command]
-async fn get_current_price_single(symbol: String) -> Result<f64, String> {
-    validate_symbol(&symbol)?;
-    ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await
-}
-
-/// Get cache statistics
-#[tauri::command]
-async fn get_cache_stats() -> Result<CacheStats, String> {
-    Ok(ENHANCED_MARKET_SERVICE.get_cache_stats().await)
-}
-
-/// Clear all caches
-#[tauri::command]
-async fn clear_all_caches() -> Result<(), String> {
-    ENHANCED_MARKET_SERVICE.clear_all_caches().await;
-    Ok(())
-}
-
-/// Prefetch symbols for faster access
-#[tauri::command]
-async fn prefetch_symbols(symbols: Vec<String>) -> Result<(), String> {
-    ENHANCED_MARKET_SERVICE.prefetch_symbols(symbols).await;
-    Ok(())
-}
-
-/// Test data connection by fetching a sample symbol
-#[tauri::command]
-async fn test_data_connection() -> Result<serde_json::Value, String> {
-    use serde_json::json;
-    
-    tracing::info!("Testing data connection...");
-    
-    // Test with a common symbol
-    let test_symbol = "AAPL";
-
-    // Try to get price
-    let price_result = ENHANCED_MARKET_SERVICE.get_current_price(test_symbol).await;
-    let price = price_result.unwrap_or(0.0);
-
-    // Try to get metrics
-    let metrics_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(test_symbol).await;
-    let metrics_ok = metrics_result.is_ok();
-    let signal = metrics_result.map(|m| m.signal).unwrap_or_else(|_| "FAILED".to_string());
-
-    // Get cache stats
-    let cache_stats = ENHANCED_MARKET_SERVICE.get_cache_stats().await;
-    
-    // Check API keys
-    use crate::core::encrypted_env::get_env_var;
-    let alpaca_configured = get_env_var("ALPACA_API_KEY").is_some();
-    let finnhub_configured = get_env_var("FINNHUB_API_KEY").is_some();
-    let fmp_configured = get_env_var("FMP_API_KEY").is_some();
-    let polygon_configured = get_env_var("POLYGON_API_KEY").is_some();
-    let alphavantage_configured = get_env_var("ALPHA_VANTAGE_API_KEY").is_some();
-    
-    let result = json!({
-        "status": if price > 0.0 { "connected" } else { "failed" },
-        "test_symbol": test_symbol,
-        "price": price,
-        "metrics_ok": metrics_ok,
-        "signal": signal,
-        "cache_stats": {
-            "memory_prices": cache_stats.memory_prices,
-            "memory_quant": cache_stats.memory_quant,
-        },
-        "providers": {
-            "alpaca": alpaca_configured,
-            "finnhub": finnhub_configured,
-            "fmp": fmp_configured,
-            "polygon": polygon_configured,
-            "alphavantage": alphavantage_configured,
-            "yahoo": true, // Always available
-        }
-    });
-    
-    tracing::debug!(result = ?result, "Data connection test result");
-    
-    Ok(result)
-}
-
-/// Get detailed health report with metrics
-#[tauri::command]
-async fn get_health_report() -> Result<serde_json::Value, String> {
-    use crate::modules::health::HEALTH_MONITOR;
-    
-    let report = HEALTH_MONITOR.get_health_report();
-    serde_json::to_value(report).map_err(|e| e.to_string())
-}
-
-/// Get provider-specific metrics
-#[tauri::command]
-async fn get_provider_metrics() -> Result<serde_json::Value, String> {
-    use crate::modules::health::HEALTH_MONITOR;
-    
-    let metrics = HEALTH_MONITOR.get_provider_metrics();
-    serde_json::to_value(metrics).map_err(|e| e.to_string())
-}
-
-// ==================== UNIVERSE & WATCHLIST ====================
-
-/// Universe definition for symbol filtering
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Universe {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub symbols: Vec<String>,
-    pub tags: HashMap<String, Vec<String>>,
-    pub exclude_list: Vec<String>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-/// Create a new universe/watchlist
-#[tauri::command]
-async fn create_universe(name: String, description: String, symbols: Vec<String>) -> Result<Universe, String> {
-    let pool = get_pool().await?;
-    let now = chrono::Utc::now().to_rfc3339();
-    let id = uuid::Uuid::new_v4().to_string();
-    let symbols_json = serde_json::to_string(&symbols).map_err(|e| e.to_string())?;
-
-    sqlx::query(
-        "INSERT INTO universes (id, name, description, symbols, tags, exclude_list, created_at, updated_at)
-         VALUES (?, ?, ?, ?, '{}', '[]', ?, ?)"
-    )
-    .bind(&id)
-    .bind(&name)
-    .bind(&description)
-    .bind(&symbols_json)
-    .bind(&now)
-    .bind(&now)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to create universe: {}", e))?;
-
-    Ok(Universe {
-        id,
-        name,
-        description,
-        symbols,
-        tags: HashMap::new(),
-        exclude_list: Vec::new(),
-        created_at: now.clone(),
-        updated_at: now,
-    })
-}
-
-/// Get all universes
-#[tauri::command]
-async fn list_universes() -> Result<Vec<Universe>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query(
-        "SELECT id, name, description, symbols, tags, exclude_list, created_at, updated_at
-         FROM universes ORDER BY created_at DESC"
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| format!("Failed to list universes: {}", e))?;
-
-    let universes = rows.iter().map(|row| {
-        use sqlx::Row;
-        let symbols_json: String = row.get("symbols");
-        let tags_json: String = row.get("tags");
-        let exclude_json: String = row.get("exclude_list");
-        let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
-        let tags: HashMap<String, Vec<String>> =
-            serde_json::from_str(&tags_json).unwrap_or_default();
-        let exclude_list: Vec<String> =
-            serde_json::from_str(&exclude_json).unwrap_or_default();
-        Universe {
-            id: row.get("id"),
-            name: row.get("name"),
-            description: row.get("description"),
-            symbols,
-            tags,
-            exclude_list,
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        }
-    }).collect();
-    Ok(universes)
-}
-
-/// Get a specific universe
-#[tauri::command]
-async fn get_universe(id: String) -> Result<Option<Universe>, String> {
-    let pool = get_pool().await?;
-    let row = sqlx::query(
-        "SELECT id, name, description, symbols, tags, exclude_list, created_at, updated_at
-         FROM universes WHERE id = ?"
-    )
-    .bind(&id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| format!("Failed to get universe: {}", e))?;
-
-    Ok(row.map(|row| {
-        use sqlx::Row;
-        let symbols: Vec<String> = serde_json::from_str(row.get::<&str, _>("symbols")).unwrap_or_default();
-        let tags: HashMap<String, Vec<String>> =
-            serde_json::from_str(row.get::<&str, _>("tags")).unwrap_or_default();
-        let exclude_list: Vec<String> =
-            serde_json::from_str(row.get::<&str, _>("exclude_list")).unwrap_or_default();
-        Universe {
-            id: row.get("id"),
-            name: row.get("name"),
-            description: row.get("description"),
-            symbols,
-            tags,
-            exclude_list,
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        }
-    }))
-}
-
-/// Update universe symbols
-#[tauri::command]
-async fn update_universe_symbols(id: String, symbols: Vec<String>) -> Result<Universe, String> {
-    let pool = get_pool().await?;
-    let now = chrono::Utc::now().to_rfc3339();
-    let symbols_json = serde_json::to_string(&symbols).map_err(|e| e.to_string())?;
-
-    let result = sqlx::query(
-        "UPDATE universes SET symbols = ?, updated_at = ? WHERE id = ?"
-    )
-    .bind(&symbols_json)
-    .bind(&now)
-    .bind(&id)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to update universe symbols: {}", e))?;
-
-    if result.rows_affected() == 0 {
-        return Err(format!("Universe '{}' not found", id));
-    }
-
-    get_universe(id).await?.ok_or_else(|| "Universe disappeared after update".to_string())
-}
-
-/// Add symbols to universe exclude list
-#[tauri::command]
-async fn add_to_exclude_list(id: String, symbols: Vec<String>) -> Result<Universe, String> {
-    let pool = get_pool().await?;
-    let now = chrono::Utc::now().to_rfc3339();
-
-    // Fetch current exclude_list
-    let row = sqlx::query(
-        "SELECT exclude_list FROM universes WHERE id = ?"
-    )
-    .bind(&id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| format!("Failed to fetch universe: {}", e))?
-    .ok_or_else(|| format!("Universe '{}' not found", id))?;
-
-    use sqlx::Row;
-    let exclude_json: String = row.get("exclude_list");
-    let mut exclude_list: Vec<String> = serde_json::from_str(&exclude_json).unwrap_or_default();
-
-    for symbol in symbols {
-        if !exclude_list.contains(&symbol) {
-            exclude_list.push(symbol);
-        }
-    }
-
-    let new_exclude_json = serde_json::to_string(&exclude_list).map_err(|e| e.to_string())?;
-
-    sqlx::query(
-        "UPDATE universes SET exclude_list = ?, updated_at = ? WHERE id = ?"
-    )
-    .bind(&new_exclude_json)
-    .bind(&now)
-    .bind(&id)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to update exclude list: {}", e))?;
-
-    get_universe(id).await?.ok_or_else(|| "Universe disappeared after update".to_string())
-}
-
-/// Delete a universe
-#[tauri::command]
-async fn delete_universe(id: String) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query("DELETE FROM universes WHERE id = ?")
-        .bind(&id)
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("Failed to delete universe: {}", e))?;
-    Ok(())
-}
-
-// ==================== EXPORT / IMPORT ====================
-
-/// Export data bundle (plan + holdings + journal)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportBundle {
-    pub version: String,
-    pub exported_at: String,
-    pub plan: Option<VibePlanScript>,
-    pub universes: Vec<Universe>,
-    pub journal_entries: Vec<JournalEntry>,
-    pub settings: HashMap<String, String>,
-}
-
-/// Export all data to JSON bundle
-#[tauri::command]
-async fn export_data_bundle(
-    plan: Option<VibePlanScript>,
-    journal_entries: Vec<JournalEntry>,
-) -> Result<String, String> {
-    let universes = list_universes().await?;
-
-    let bundle = ExportBundle {
-        version: "1.0.0".to_string(),
-        exported_at: chrono::Utc::now().to_rfc3339(),
-        plan,
-        universes,
-        journal_entries,
-        settings: HashMap::new(),
-    };
-
-    serde_json::to_string_pretty(&bundle)
-        .map_err(|e| format!("Failed to serialize bundle: {}", e))
-}
-
-/// Import data from JSON bundle
-#[tauri::command]
-async fn import_data_bundle(bundle_json: String) -> Result<serde_json::Value, String> {
-    let bundle: ExportBundle = serde_json::from_str(&bundle_json)
-        .map_err(|e| format!("Failed to parse bundle: {}", e))?;
-
-    let universe_count = bundle.universes.len();
-    let journal_count = bundle.journal_entries.len();
-    let has_plan = bundle.plan.is_some();
-
-    // Import universes into SQLite
-    for universe in bundle.universes {
-        create_universe(universe.name, universe.description, universe.symbols).await?;
-    }
-
-    Ok(serde_json::json!({
-        "success": true,
-        "imported": {
-            "universes": universe_count,
-            "journal_entries": journal_count,
-            "has_plan": has_plan,
-        }
-    }))
-}
-
-// ==================== PLAN MANAGEMENT ====================
-
-// In-memory plan storage
-lazy_static::lazy_static! {
-    static ref SAVED_PLANS: Arc<Mutex<HashMap<String, VibePlanScript>>> = Arc::new(Mutex::new(HashMap::new()));
-}
-
-/// Save a plan
-#[tauri::command]
-async fn save_plan(plan: VibePlanScript) -> Result<String, String> {
-    let mut plans = SAVED_PLANS.lock().await;
-    let id = plan.name.clone();
-    plans.insert(id.clone(), plan);
-    Ok(id)
-}
-
-/// Load a saved plan
-#[tauri::command]
-async fn load_plan(name: String) -> Result<VibePlanScript, String> {
-    let plans = SAVED_PLANS.lock().await;
-    plans.get(&name)
-        .cloned()
-        .ok_or_else(|| format!("Plan '{}' not found", name))
-}
-
-/// List all saved plans
-#[tauri::command]
-async fn list_saved_plans() -> Result<Vec<String>, String> {
-    let plans = SAVED_PLANS.lock().await;
-    Ok(plans.keys().cloned().collect())
-}
-
-/// Delete a saved plan
-#[tauri::command]
-async fn delete_plan(name: String) -> Result<(), String> {
-    let mut plans = SAVED_PLANS.lock().await;
-    plans.remove(&name)
-        .map(|_| ())
-        .ok_or_else(|| format!("Plan '{}' not found", name))
-}
-
-// ==================== SAVED PORTFOLIOS (Generated from Vibe Studio) ====================
-
-/// Saved portfolio info for listing
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SavedPortfolioInfo {
-    id: String,
-    name: String,
-    created_at: String,
-    updated_at: String,
-}
-
-/// Save a generated portfolio to the database
-#[tauri::command]
-async fn save_generated_portfolio(id: String, name: String, data: serde_json::Value) -> Result<String, String> {
-    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
-        let now = chrono::Utc::now().to_rfc3339();
-        let data_str = serde_json::to_string(&data)
-            .map_err(|e| format!("Failed to serialize portfolio: {}", e))?;
-        
-        sqlx::query(r#"
-            INSERT OR REPLACE INTO saved_portfolios (id, name, data, created_at, updated_at)
-            VALUES (?, ?, ?, COALESCE((SELECT created_at FROM saved_portfolios WHERE id = ?), ?), ?)
-        "#)
-        .bind(&id)
-        .bind(&name)
-        .bind(&data_str)
-        .bind(&id)
-        .bind(&now)
-        .bind(&now)
-        .execute(&pool)
-        .await
-        .map_err(|e| format!("Failed to save portfolio: {}", e))?;
-        
-        tracing::info!(portfolio_name = %name, id = %id, "Saved portfolio");
-        Ok(id)
-    } else {
-        Err("Database not initialized".to_string())
-    }
-}
-
-/// Load a saved portfolio by ID
-#[tauri::command]
-async fn load_generated_portfolio(id: String) -> Result<serde_json::Value, String> {
-    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
-        let row: Option<(String,)> = sqlx::query_as(r#"
-            SELECT data FROM saved_portfolios WHERE id = ?
-        "#)
-        .bind(&id)
-        .fetch_optional(&pool)
-        .await
-        .map_err(|e| format!("Failed to load portfolio: {}", e))?;
-        
-        if let Some((data_str,)) = row {
-            serde_json::from_str(&data_str)
-                .map_err(|e| format!("Failed to parse portfolio data: {}", e))
-        } else {
-            Err(format!("Portfolio '{}' not found", id))
-        }
-    } else {
-        Err("Database not initialized".to_string())
-    }
-}
-
-/// List all saved portfolios
-#[tauri::command]
-async fn list_saved_portfolios() -> Result<Vec<SavedPortfolioInfo>, String> {
-    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
-        let rows: Vec<(String, String, String, String)> = sqlx::query_as(r#"
-            SELECT id, name, created_at, updated_at FROM saved_portfolios ORDER BY updated_at DESC
-        "#)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| format!("Failed to list portfolios: {}", e))?;
-        
-        Ok(rows.into_iter().map(|(id, name, created_at, updated_at)| {
-            SavedPortfolioInfo { id, name, created_at, updated_at }
-        }).collect())
-    } else {
-        Err("Database not initialized".to_string())
-    }
-}
-
-/// Delete a saved portfolio
-#[tauri::command]
-async fn delete_saved_portfolio(id: String) -> Result<(), String> {
-    if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
-        sqlx::query("DELETE FROM saved_portfolios WHERE id = ?")
-            .bind(&id)
-            .execute(&pool)
-            .await
-            .map_err(|e| format!("Failed to delete portfolio: {}", e))?;
-        
-        tracing::info!(id = %id, "Deleted portfolio");
-        Ok(())
-    } else {
-        Err("Database not initialized".to_string())
-    }
-}
-
-/// Get detailed quantitative analysis for a single ticker
-#[tauri::command]
-async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::Value, String> {
-    // Get available data for the ticker
-    let quant_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(&symbol).await;
-    let price_result = ENHANCED_MARKET_SERVICE.get_current_price(&symbol).await;
-    
-    // Fetch real fundamentals from the fundamental service
-    let fundamentals_result = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await;
-    
-    // Detect if this is an ETF based on common ETF suffixes and known ETFs
-    let is_etf = is_etf_symbol(&symbol);
-    let is_bond_etf = is_bond_etf_symbol(&symbol);
-    
-    let asset_type = if is_etf { "etf" } else { "stock" };
-    
-    let mut result = serde_json::json!({
-        "symbol": symbol,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "assetType": asset_type,
-    });
-    
-    // Add current price
-    if let Ok(price) = price_result {
-        result["currentPrice"] = serde_json::json!(price);
-    }
-    
-    // Add comprehensive quant metrics
-    if let Ok(metrics) = quant_result {
-        let volatility = metrics.volatility;
-        let annualized_return = metrics.annualized_return;
-        let max_drawdown = metrics.max_drawdown;
-        let sharpe = metrics.sharpe_ratio;
-        let rsi = metrics.rsi;
-        
-        result["quantMetrics"] = serde_json::json!({
-            "sharpeRatio": sharpe,
-            "sortinoRatio": metrics.sortino_ratio.unwrap_or(sharpe * 1.2),
-            "annualizedReturn": annualized_return,
-            "volatility": volatility,
-            "maxDrawdown": max_drawdown,
-            "rsi": rsi,
-            "signal": metrics.signal,
-            "confidence": metrics.confidence,
-            "beta": metrics.beta.unwrap_or(1.0),
-            "alpha": metrics.alpha.unwrap_or(annualized_return - 10.0),
-            "var95": metrics.var_95.unwrap_or(volatility * 1.65 / 100.0 * 10000.0),
-            "cvar95": volatility * 2.06 / 100.0 * 10000.0, // CVaR approximation
-            "calmarRatio": metrics.calmar_ratio.unwrap_or_else(|| {
-                if max_drawdown.abs() > 0.01 { annualized_return / max_drawdown.abs() } else { 0.0 }
-            }),
-            "informationRatio": sharpe * 0.8,
-            "treynorRatio": annualized_return / metrics.beta.unwrap_or(1.0).max(0.01),
-            // Technical indicators
-            "rsiSignal": if rsi < 30.0 { "oversold" } else if rsi > 70.0 { "overbought" } else { "neutral" },
-            "trendStrength": if rsi > 50.0 { "bullish" } else { "bearish" },
-            "momentumScore": ((rsi - 50.0) / 50.0 * 100.0).round(),
-        });
-        
-        // Calculate factor scores based on real fundamentals when available
-        let (_value_score, _quality_score, _growth_score, fundamentals_json) =
-            if let Ok(ref fund) = fundamentals_result {
-                // Calculate Value Score (based on P/E, P/B, P/S, EV/EBITDA)
-                let mut v_score: f64 = 50.0;
-                if let Some(pe) = fund.pe_ratio {
-                    v_score += if pe < 15.0 { 20.0 } else if pe < 25.0 { 10.0 } else if pe > 40.0 { -15.0 } else { 0.0 };
-                }
-                if let Some(pb) = fund.price_to_book {
-                    v_score += if pb < 1.5 { 10.0 } else if pb < 3.0 { 5.0 } else if pb > 5.0 { -10.0 } else { 0.0 };
-                }
-                if let Some(ps) = fund.price_to_sales {
-                    v_score += if ps < 2.0 { 10.0 } else if ps < 5.0 { 5.0 } else if ps > 10.0 { -10.0 } else { 0.0 };
-                }
-                
-                // Calculate Quality Score (based on ROE, ROA, profit margin, debt/equity)
-                let mut q_score: f64 = 50.0;
-                if let Some(roe) = fund.return_on_equity {
-                    q_score += if roe > 0.20 { 20.0 } else if roe > 0.15 { 15.0 } else if roe > 0.10 { 10.0 } else if roe < 0.0 { -15.0 } else { 0.0 };
-                }
-                if let Some(margin) = fund.profit_margin {
-                    q_score += if margin > 0.20 { 15.0 } else if margin > 0.10 { 10.0 } else if margin < 0.0 { -15.0 } else { 0.0 };
-                }
-                if let Some(de) = fund.debt_to_equity {
-                    q_score += if de < 0.5 { 10.0 } else if de < 1.0 { 5.0 } else if de > 2.0 { -15.0 } else { 0.0 };
-                }
-                
-                // Calculate Growth Score (based on revenue growth, earnings growth)
-                let mut g_score: f64 = 50.0;
-                if let Some(rev_growth) = fund.revenue_growth_yoy {
-                    g_score += if rev_growth > 0.20 { 25.0 } else if rev_growth > 0.10 { 15.0 } else if rev_growth > 0.05 { 10.0 } else if rev_growth < 0.0 { -15.0 } else { 0.0 };
-                }
-                if let Some(earn_growth) = fund.earnings_growth_yoy {
-                    g_score += if earn_growth > 0.20 { 20.0 } else if earn_growth > 0.10 { 10.0 } else if earn_growth < 0.0 { -10.0 } else { 0.0 };
-                }
-                
-                // Calculate advanced metrics
-                // Altman Z-Score estimate (simplified for data available)
-                let altman_z = calculate_altman_z_estimate(&fund);
-                
-                // Piotroski F-Score estimate
-                let piotroski_f = calculate_piotroski_estimate(&fund);
-                
-                // Calculate intrinsic value metrics
-                let price = price_result.clone().unwrap_or(100.0);
-                let graham_number = calculate_graham_number(&fund);
-                let margin_of_safety = if let Some(gn) = graham_number {
-                    if gn > 0.0 { Some(((gn - price) / gn) * 100.0) } else { None }
-                } else { None };
-                
-                // Dividend safety assessment
-                let dividend_safety = assess_dividend_safety(&fund);
-                
-                let fundamentals = serde_json::json!({
-                    // Basic valuation
-                    "peRatio": fund.pe_ratio,
-                    "forwardPE": fund.forward_pe,
-                    "pegRatio": fund.peg_ratio,
-                    "priceToBook": fund.price_to_book,
-                    "priceToSales": fund.price_to_sales,
-                    "evToEbitda": fund.ev_to_ebitda,
-                    
-                    // Profitability
-                    "profitMargin": fund.profit_margin,
-                    "operatingMargin": fund.operating_margin,
-                    "returnOnAssets": fund.return_on_assets,
-                    "returnOnEquity": fund.return_on_equity,
-                    
-                    // Growth
-                    "revenueGrowthYoY": fund.revenue_growth_yoy,
-                    "earningsGrowthYoY": fund.earnings_growth_yoy,
-                    
-                    // Financial Health
-                    "debtToEquity": fund.debt_to_equity,
-                    "currentRatio": fund.current_ratio,
-                    "quickRatio": fund.quick_ratio,
-                    "freeCashFlow": fund.free_cash_flow,
-                    
-                    // Dividend
-                    "dividendYield": fund.dividend_yield,
-                    "payoutRatio": fund.payout_ratio,
-                    "dividendSafety": dividend_safety,
-                    
-                    // Company info
-                    "marketCap": fund.market_cap,
-                    "eps": fund.eps,
-                    "beta": fund.beta.or(metrics.beta).unwrap_or(1.0),
-                    "companyName": fund.company_name,
-                    "sector": fund.sector,
-                    "industry": fund.industry,
-                    "fiftyTwoWeekHigh": fund.fifty_two_week_high,
-                    "fiftyTwoWeekLow": fund.fifty_two_week_low,
-                    
-                    // Advanced metrics
-                    "altmanZScore": altman_z,
-                    "piotroskiFScore": piotroski_f,
-                    "grahamNumber": graham_number,
-                    "marginOfSafety": margin_of_safety,
-                    
-                    // Factor scores
-                    "valueScore": v_score.max(0.0).min(100.0),
-                    "qualityScore": q_score.max(0.0).min(100.0),
-                    "growthScore": g_score.max(0.0).min(100.0),
-                    
-                    // Data quality
-                    "dataSource": fund.source,
-                    "lastUpdated": fund.last_updated,
-                });
-                
-                (v_score.max(0.0).min(100.0), q_score.max(0.0).min(100.0), g_score.max(0.0).min(100.0), fundamentals)
-            } else {
-                // Fallback to quant-based estimates when fundamentals unavailable
-                let v_score = 50.0 + (sharpe * 10.0).min(30.0).max(-30.0);
-                let q_score = 50.0 + (annualized_return / 2.0).min(30.0).max(-30.0);
-                let g_score = 50.0 + (annualized_return / 3.0).min(25.0).max(-25.0);
-                
-                let fundamentals = serde_json::json!({
-                    "peRatio": null,
-                    "forwardPE": null,
-                    "pegRatio": null,
-                    "priceToBook": null,
-                    "priceToSales": null,
-                    "evToEbitda": null,
-                    "profitMargin": null,
-                    "operatingMargin": null,
-                    "returnOnAssets": null,
-                    "returnOnEquity": null,
-                    "revenueGrowthYoY": null,
-                    "earningsGrowthYoY": null,
-                    "debtToEquity": null,
-                    "currentRatio": null,
-                    "quickRatio": null,
-                    "freeCashFlow": null,
-                    "dividendYield": null,
-                    "payoutRatio": null,
-                    "dividendSafety": null,
-                    "marketCap": 0,
-                    "eps": null,
-                    "beta": metrics.beta.unwrap_or(1.0),
-                    "companyName": null,
-                    "sector": null,
-                    "industry": null,
-                    "fiftyTwoWeekHigh": null,
-                    "fiftyTwoWeekLow": null,
-                    "altmanZScore": null,
-                    "piotroskiFScore": null,
-                    "grahamNumber": null,
-                    "marginOfSafety": null,
-                    "valueScore": v_score.max(0.0).min(100.0),
-                    "qualityScore": q_score.max(0.0).min(100.0),
-                    "growthScore": g_score.max(0.0).min(100.0),
-                    "dataSource": "estimated",
-                    "lastUpdated": chrono::Utc::now().to_rfc3339(),
-                });
-                
-                (v_score.max(0.0).min(100.0), q_score.max(0.0).min(100.0), g_score.max(0.0).min(100.0), fundamentals)
-            };
-        
-        result["fundamentals"] = fundamentals_json;
-        
-        // Add ETF-specific fundamentals for ETFs
-        if is_etf {
-            let (category, strategy, index_tracked) = get_etf_info(&symbol, is_bond_etf);
-            
-            // Estimate distribution yield based on asset type
-            let dist_yield = if is_bond_etf {
-                Some(4.0 + (rsi - 50.0) / 25.0) // Bond ETFs: ~3-5% yield
-            } else {
-                Some(1.5 + (rsi - 50.0) / 50.0) // Equity ETFs: ~1-2% yield
-            };
-            
-            result["etfFundamentals"] = serde_json::json!({
-                "aum": null,
-                "expenseRatio": get_estimated_expense_ratio(&symbol),
-                "inceptionDate": null,
-                "indexTracked": index_tracked,
-                "numberOfHoldings": null,
-                "topHoldings": null,
-                "category": category,
-                "strategy": strategy,
-                "distributionYield": dist_yield,
-                "avgDailyVolume": null,
-                "bidAskSpread": null,
-                "premiumDiscount": null,
-            });
-        }
-        
-        // Generate estimated sentiment based on RSI and signal
-        let sentiment_score: f64 = (rsi - 50.0) / 50.0;
-        let overall_sentiment = if sentiment_score > 0.3 { "bullish" } 
-                               else if sentiment_score < -0.3 { "bearish" } 
-                               else { "neutral" };
-        
-        result["sentiment"] = serde_json::json!({
-            "overallSentiment": overall_sentiment,
-            "sentimentScore": sentiment_score,
-            "newsCount": 0,
-            "buzzScore": 0.0,
-            "sentimentTrend": if rsi > 50.0 { "improving" } else { "declining" },
-        });
-        
-        // Generate estimated analyst data
-        let consensus = if sharpe > 1.0 && annualized_return > 10.0 { "Buy" }
-                       else if sharpe < 0.0 || annualized_return < -5.0 { "Sell" }
-                       else { "Hold" };
-        
-        result["analystData"] = serde_json::json!({
-            "consensusRating": consensus,
-            "targetPriceMean": null,
-            "targetPriceHigh": null,
-            "targetPriceLow": null,
-            "numberOfAnalysts": 0,
-            "upside": null,
-        });
-    }
-    
-    Ok(result)
-}
-
-/// Check if a symbol is an ETF
-fn is_etf_symbol(symbol: &str) -> bool {
-    let symbol_upper = symbol.to_uppercase();
-    
-    // Common ETF patterns and known ETFs
-    let etf_patterns = [
-        // Bond ETFs
-        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
-        "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
-        "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
-        // Equity ETFs
-        "SPY", "IVV", "VOO", "VTI", "QQQ", "DIA", "IWM", "VGT", "XLK", "XLF",
-        "XLE", "XLV", "XLP", "XLY", "XLI", "XLB", "XLU", "XLRE", "VNQ", "IYR",
-        "VEA", "VWO", "EFA", "EEM", "IEFA", "IEMG", "SCHF", "SCHB", "SCHA",
-        "VIG", "VYM", "SCHD", "DVY", "HDV", "SDY", "VTV", "VUG", "IJH", "IJR",
-        "IWF", "IWD", "IWN", "IWO", "IWP", "IWS", "MDY", "RSP", "MTUM", "QUAL",
-        "USMV", "EFAV", "EEMV", "NOBL", "ARKK", "ARKW", "ARKG", "ARKF", "ARKQ",
-        // Commodity ETFs
-        "GLD", "IAU", "SLV", "USO", "DBC", "PDBC", "GSG", "GLDM",
-    ];
-    
-    etf_patterns.iter().any(|p| symbol_upper == *p) ||
-    symbol_upper.ends_with("ETF") ||
-    symbol_upper.contains("BOND") ||
-    symbol_upper.contains("TREASURY")
-}
-
-/// Check if a symbol is a bond ETF
-fn is_bond_etf_symbol(symbol: &str) -> bool {
-    let symbol_upper = symbol.to_uppercase();
-    
-    let bond_etfs = [
-        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
-        "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
-        "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
-        "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
-    ];
-    
-    bond_etfs.iter().any(|p| symbol_upper == *p) ||
-    symbol_upper.contains("BOND") ||
-    symbol_upper.contains("TREASURY")
-}
-
-/// Get ETF category, strategy, and index tracked
-fn get_etf_info(symbol: &str, is_bond: bool) -> (String, String, Option<String>) {
-    let symbol_upper = symbol.to_uppercase();
-    
-    if is_bond {
-        let category = if symbol_upper.contains("TIP") || symbol_upper == "SCHP" || symbol_upper == "VTIP" {
-            "Inflation-Protected Bonds"
-        } else if symbol_upper == "TLT" || symbol_upper == "VGLT" || symbol_upper == "SPTL" {
-            "Long-Term Treasury"
-        } else if symbol_upper == "IEF" || symbol_upper == "VGIT" {
-            "Intermediate-Term Treasury"
-        } else if symbol_upper == "SHY" || symbol_upper == "SCHO" || symbol_upper == "SPTS" {
-            "Short-Term Treasury"
-        } else if symbol_upper == "LQD" || symbol_upper == "VCIT" || symbol_upper == "IGLB" {
-            "Investment Grade Corporate"
-        } else if symbol_upper == "HYG" || symbol_upper == "JNK" || symbol_upper == "HYMB" {
-            "High Yield"
-        } else if symbol_upper == "BNDX" || symbol_upper == "BWX" || symbol_upper == "EMB" {
-            "International Bond"
-        } else if symbol_upper == "MUB" || symbol_upper == "SUB" || symbol_upper == "CMF" {
-            "Municipal Bond"
-        } else {
-            "Total Bond Market"
-        };
-        
-        return (category.to_string(), "Passive Index".to_string(), Some("Bond Aggregate Index".to_string()));
-    }
-    
-    // Equity ETF categories
-    let (category, index) = if symbol_upper == "SPY" || symbol_upper == "IVV" || symbol_upper == "VOO" {
-        ("U.S. Large Cap", Some("S&P 500"))
-    } else if symbol_upper == "QQQ" {
-        ("U.S. Large Cap Growth", Some("NASDAQ-100"))
-    } else if symbol_upper == "VTI" || symbol_upper == "SCHB" || symbol_upper == "ITOT" {
-        ("U.S. Total Market", Some("CRSP US Total Market Index"))
-    } else if symbol_upper == "IWM" || symbol_upper == "IJR" || symbol_upper == "SCHA" {
-        ("U.S. Small Cap", Some("Russell 2000"))
-    } else if symbol_upper == "VEA" || symbol_upper == "EFA" || symbol_upper == "SCHF" || symbol_upper == "IEFA" {
-        ("International Developed", Some("MSCI EAFE"))
-    } else if symbol_upper == "VWO" || symbol_upper == "EEM" || symbol_upper == "IEMG" {
-        ("Emerging Markets", Some("MSCI Emerging Markets"))
-    } else if symbol_upper.starts_with("XL") {
-        ("U.S. Sector", None)
-    } else if symbol_upper.starts_with("ARK") {
-        ("Thematic Growth", None)
-    } else if symbol_upper == "GLD" || symbol_upper == "IAU" || symbol_upper == "SLV" {
-        ("Precious Metals", None)
-    } else {
-        ("Diversified", None)
-    };
-    
-    (category.to_string(), "Passive Index".to_string(), index.map(|s| s.to_string()))
-}
-
-/// Get estimated expense ratio for an ETF
-fn get_estimated_expense_ratio(symbol: &str) -> Option<f64> {
-    let symbol_upper = symbol.to_uppercase();
-    
-    // Low-cost providers (Vanguard, Schwab, Fidelity)
-    if symbol_upper.starts_with("V") || symbol_upper.starts_with("SCH") || symbol_upper.starts_with("FI") {
-        Some(0.03)
-    }
-    // iShares core ETFs
-    else if symbol_upper == "IVV" || symbol_upper == "IEFA" || symbol_upper == "IEMG" || symbol_upper == "AGG" {
-        Some(0.03)
-    }
-    // Standard ETFs
-    else if symbol_upper == "SPY" || symbol_upper == "QQQ" || symbol_upper == "DIA" {
-        Some(0.09)
-    }
-    // Sector ETFs
-    else if symbol_upper.starts_with("XL") {
-        Some(0.09)
-    }
-    // ARK ETFs
-    else if symbol_upper.starts_with("ARK") {
-        Some(0.75)
-    }
-    // Bond ETFs
-    else if symbol_upper == "BND" || symbol_upper == "AGG" || symbol_upper == "BNDX" {
-        Some(0.03)
-    }
-    else {
-        Some(0.20) // Default moderate expense ratio
-    }
-}
-
-// ==================== FUNDAMENTAL ANALYSIS HELPERS ====================
-
-/// Calculate Altman Z-Score estimate (simplified version)
-/// Z-Score > 3.0: Safe zone
-/// Z-Score 1.8-3.0: Grey zone  
-/// Z-Score < 1.8: Distress zone
-fn calculate_altman_z_estimate(fund: &FundamentalMetrics) -> Option<f64> {
-    // Simplified Z-Score calculation using available metrics
-    // Original formula: Z = 1.2×A + 1.4×B + 3.3×C + 0.6×D + 1.0×E
-    // A = Working Capital/Total Assets (approximated from current ratio)
-    // B = Retained Earnings/Total Assets (approximated from ROA)
-    // C = EBIT/Total Assets (approximated from operating margin)
-    // D = Market Value of Equity/Total Liabilities (approximated from D/E ratio)
-    // E = Sales/Total Assets (approximated)
-    
-    let mut score: f64 = 0.0;
-    let mut components = 0;
-    
-    // A: Working Capital/Total Assets (estimate from current ratio)
-    if let Some(current_ratio) = fund.current_ratio {
-        // If current ratio > 1, we have positive working capital
-        let a = (current_ratio - 1.0).max(0.0).min(0.5) / 2.0; // Normalize to 0-0.25
-        score += 1.2 * a;
-        components += 1;
-    }
-    
-    // B: Profitability indicator from ROA
-    if let Some(roa) = fund.return_on_assets {
-        let b = roa.max(-0.3).min(0.3); // Cap at ±30%
-        score += 1.4 * b;
-        components += 1;
-    }
-    
-    // C: Operating efficiency from operating margin
-    if let Some(op_margin) = fund.operating_margin {
-        let c = op_margin.max(-0.2).min(0.3);
-        score += 3.3 * c;
-        components += 1;
-    }
-    
-    // D: Leverage indicator (inverse of D/E)
-    if let Some(de) = fund.debt_to_equity {
-        if de > 0.0 {
-            let d = (1.0 / de).min(3.0); // Cap at 3x
-            score += 0.6 * d;
-            components += 1;
-        }
-    }
-    
-    // E: Asset turnover estimate
-    if let Some(profit_margin) = fund.profit_margin {
-        if let Some(roa) = fund.return_on_assets {
-            // Asset turnover ≈ ROA / Profit Margin
-            if profit_margin.abs() > 0.01 {
-                let e = (roa / profit_margin).max(0.0).min(3.0);
-                score += 1.0 * e;
-                components += 1;
-            }
-        }
-    }
-    
-    if components >= 3 {
-        // Normalize based on components used (target score ~2.7 for average company)
-        let normalized_score = score * (5.0 / components as f64);
-        Some(normalized_score.max(0.0).min(5.0))
-    } else {
-        None
-    }
-}
-
-/// Calculate Piotroski F-Score estimate (0-9, higher is better)
-/// Based on 9 binary signals for financial strength
-fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<i32> {
-    let mut score = 0;
-    let mut criteria_checked = 0;
-    
-    // Profitability signals (4 criteria)
-    
-    // 1. Positive Net Income (use profit margin as proxy)
-    if let Some(margin) = fund.profit_margin {
-        criteria_checked += 1;
-        if margin > 0.0 { score += 1; }
-    }
-    
-    // 2. Positive ROA
-    if let Some(roa) = fund.return_on_assets {
-        criteria_checked += 1;
-        if roa > 0.0 { score += 1; }
-    }
-    
-    // 3. Positive Operating Cash Flow (use FCF as proxy)
-    if let Some(fcf) = fund.free_cash_flow {
-        criteria_checked += 1;
-        if fcf > 0.0 { score += 1; }
-    }
-    
-    // 4. Cash Flow > Net Income (quality of earnings)
-    // Assume positive if FCF exists and margin is positive (simplified)
-    if fund.free_cash_flow.is_some() && fund.profit_margin.map_or(false, |m| m > 0.0) {
-        criteria_checked += 1;
-        if fund.free_cash_flow.unwrap_or(0.0) > 0.0 { score += 1; }
-    }
-    
-    // Leverage, Liquidity, Source of Funds (3 criteria)
-    
-    // 5. Lower Debt/Equity (improvement) - assume pass if D/E < 1
-    if let Some(de) = fund.debt_to_equity {
-        criteria_checked += 1;
-        if de < 1.0 { score += 1; }
-    }
-    
-    // 6. Higher Current Ratio (improvement) - assume pass if > 1.5
-    if let Some(cr) = fund.current_ratio {
-        criteria_checked += 1;
-        if cr > 1.5 { score += 1; }
-    }
-    
-    // 7. No new shares issued (assume pass if profitable)
-    if fund.profit_margin.map_or(false, |m| m > 0.05) {
-        criteria_checked += 1;
-        score += 1;
-    }
-    
-    // Operating Efficiency (2 criteria)
-    
-    // 8. Higher Gross Margin (use operating margin as proxy)
-    if let Some(op_margin) = fund.operating_margin {
-        criteria_checked += 1;
-        if op_margin > 0.10 { score += 1; }
-    }
-    
-    // 9. Higher Asset Turnover (revenue growth indicates efficiency)
-    if let Some(rev_growth) = fund.revenue_growth_yoy {
-        criteria_checked += 1;
-        if rev_growth > 0.0 { score += 1; }
-    }
-    
-    if criteria_checked >= 5 {
-        // Scale to 0-9 based on criteria checked
-        let scaled_score = (score as f64 * 9.0 / criteria_checked as f64).round() as i32;
-        Some(scaled_score.min(9).max(0))
-    } else {
-        None
-    }
-}
-
-/// Calculate Graham Number (intrinsic value estimate)
-/// Graham Number = sqrt(22.5 × EPS × Book Value per Share)
-fn calculate_graham_number(fund: &FundamentalMetrics) -> Option<f64> {
-    let eps = fund.eps?;
-    let price_to_book = fund.price_to_book?;
-    
-    if eps <= 0.0 || price_to_book <= 0.0 {
-        return None;
-    }
-    
-    // Estimate book value per share from P/B ratio
-    // If we had price, BV = Price / PB
-    // For now, we estimate using a reference price
-    // Graham Number = sqrt(22.5 × EPS × (EPS × PE / PB))
-    
-    if let Some(pe) = fund.pe_ratio {
-        if pe > 0.0 {
-            // Implied price = EPS × PE
-            let implied_price = eps * pe;
-            // Book value per share = Price / PB
-            let book_value = implied_price / price_to_book;
-            
-            if book_value > 0.0 && eps > 0.0 {
-                let graham = (22.5 * eps * book_value).sqrt();
-                return Some(graham);
-            }
-        }
-    }
-    
-    None
-}
-
-/// Assess dividend safety based on payout ratio and financial health
-fn assess_dividend_safety(fund: &FundamentalMetrics) -> Option<String> {
-    // Only relevant if there's a dividend
-    let yield_val = fund.dividend_yield.unwrap_or(0.0);
-    if yield_val <= 0.0 {
-        return None;
-    }
-    
-    // Check payout ratio
-    let payout = fund.payout_ratio.unwrap_or(0.5);
-    
-    // Check cash flow coverage
-    let has_good_cashflow = fund.free_cash_flow.map_or(false, |f| f > 0.0);
-    
-    // Check profitability
-    let is_profitable = fund.profit_margin.map_or(false, |m| m > 0.05);
-    
-    // Check leverage
-    let low_debt = fund.debt_to_equity.map_or(true, |d| d < 1.5);
-    
-    let safety = if payout < 0.4 && has_good_cashflow && is_profitable && low_debt {
-        "very_safe"
-    } else if payout < 0.6 && (has_good_cashflow || is_profitable) && low_debt {
-        "safe"
-    } else if payout < 0.8 && is_profitable {
-        "moderate"
-    } else if payout < 1.0 {
-        "at_risk"
-    } else {
-        "cutting"
-    };
-    
-    Some(safety.to_string())
-}
-
-// ==================== HISTORICAL DATA ====================
-
-/// Get historical price data for a symbol
-#[tauri::command]
-async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
-    validate_symbol(&symbol)?;
-    let _days = days.unwrap_or(365);
-
-    match ENHANCED_MARKET_SERVICE.get_historical_prices(&symbol).await {
-        Ok(prices) => {
-            let result: Vec<serde_json::Value> = prices.into_iter()
-                .map(|p| serde_json::json!({
-                    "date": p.date,
-                    "close": p.close,
-                    "open": p.open,
-                    "high": p.high,
-                    "low": p.low,
-                    "volume": p.volume,
-                }))
-                .collect();
-            Ok(result)
-        }
-        Err(e) => Err(format!("Failed to get historical data: {}", e))
-    }
-}
-
-// ==================== AI / OPENROUTER COMMANDS ====================
-
-/// Chat with AI assistant (proxied through backend)
-#[tauri::command]
-async fn ai_chat(
-    messages: Vec<OpenRouterMessage>,
-    model: Option<String>,
-    temperature: Option<f64>,
-    max_tokens: Option<u32>,
-) -> Result<String, String> {
-    let tier = get_user_tier().await;
-    if tier != "ai" && tier != "pro" {
-        return Err("AI features require an AI Suite or Pro subscription".to_string());
-    }
-    OPENROUTER_SERVICE.chat(messages, model, temperature, max_tokens).await
-}
-
-/// Generate portfolio insight using AI
-#[tauri::command]
-async fn ai_generate_portfolio_insight(portfolio_data: serde_json::Value) -> Result<String, String> {
-    let tier = get_user_tier().await;
-    if tier != "ai" && tier != "pro" {
-        return Err("AI features require an AI Suite or Pro subscription".to_string());
-    }
-    OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data).await
-}
-
-/// Chat with AI assistant (simple conversation)
-#[tauri::command]
-async fn ai_chat_assistant(
-    message: String,
-    history: Vec<OpenRouterMessage>,
-) -> Result<String, String> {
-    let tier = get_user_tier().await;
-    if tier != "ai" && tier != "pro" {
-        return Err("AI features require an AI Suite or Pro subscription".to_string());
-    }
-    OPENROUTER_SERVICE.chat_with_assistant(message, history).await
-}
-
-/// Check if AI service is configured
-#[tauri::command]
-fn ai_is_configured() -> bool {
-    OPENROUTER_SERVICE.is_configured()
-}
-
-// ==================== ALPACA TRADING COMMANDS ====================
-
-/// Get Alpaca account info (proxied through backend)
-#[tauri::command]
-async fn alpaca_get_account() -> Result<serde_json::Value, String> {
-    let account = ALPACA_SERVICE.get_account().await?;
-    serde_json::to_value(account).map_err(|e| e.to_string())
-}
-
-/// Get Alpaca positions (proxied through backend)
-#[tauri::command]
-async fn alpaca_get_positions() -> Result<serde_json::Value, String> {
-    let positions = ALPACA_SERVICE.get_positions().await?;
-    serde_json::to_value(positions).map_err(|e| e.to_string())
-}
-
-/// Get Alpaca orders (proxied through backend)
-#[tauri::command]
-async fn alpaca_get_orders(status: Option<String>) -> Result<serde_json::Value, String> {
-    let orders = ALPACA_SERVICE.get_orders(status.as_deref()).await?;
-    serde_json::to_value(orders).map_err(|e| e.to_string())
-}
-
-/// Get Alpaca trading mode info
-#[tauri::command]
-fn alpaca_get_trading_mode() -> serde_json::Value {
-    ALPACA_SERVICE.get_trading_mode()
-}
-
-/// Check if Alpaca is configured
-#[tauri::command]
-fn alpaca_is_configured() -> bool {
-    ALPACA_SERVICE.is_configured()
-}
-
-// ==================== FUNDAMENTAL DATA COMMANDS ====================
-
-/// Get fundamental metrics for a symbol (proxied through backend)
-#[tauri::command]
-async fn get_fundamentals(symbol: String) -> Result<serde_json::Value, String> {
-    let data = FUNDAMENTAL_SERVICE.get_fundamentals(&symbol).await?;
-    serde_json::to_value(data).map_err(|e| e.to_string())
-}
-
-/// Get fundamental metrics for multiple symbols
-#[tauri::command]
-async fn get_fundamentals_batch(symbols: Vec<String>) -> Result<serde_json::Value, String> {
-    let data = FUNDAMENTAL_SERVICE.get_batch_fundamentals(symbols).await;
-    serde_json::to_value(data).map_err(|e| e.to_string())
-}
-
-/// Clear fundamental data cache
-#[tauri::command]
-async fn clear_fundamentals_cache() -> Result<(), String> {
-    FUNDAMENTAL_SERVICE.clear_cache().await;
-    Ok(())
-}
-
-
-const API_KEYS_STORE: &str = "api-keys.json";
-const API_KEY_NAMES: &[&str] = &[
-    "alpaca_key", "alpaca_secret", "finnhub_key", "fmp_key",
-    "tiingo_key", "twelve_data_key", "polygon_key", "alpha_vantage_key", "openrouter_key",
-];
-
-#[tauri::command]
-async fn get_api_key_statuses(app: tauri::AppHandle) -> Result<std::collections::HashMap<String, bool>, String> {
-    // When vault is unlocked, statuses are managed by frontend via Stronghold JS API.
-    // This command reads from JSON store (fallback / non-vault mode).
-    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
-    let statuses = API_KEY_NAMES
-        .iter()
-        .map(|&key| {
-            let is_set = store
-                .get(key)
-                .map(|v| matches!(v, serde_json::Value::String(s) if !s.is_empty()))
-                .unwrap_or(false);
-            (key.to_string(), is_set)
-        })
-        .collect();
-    Ok(statuses)
-}
-
-#[tauri::command]
-async fn save_api_keys(
-    app: tauri::AppHandle,
-    keys: std::collections::HashMap<String, String>,
-) -> Result<(), String> {
-    // When vault is unlocked, keys are saved via Stronghold JS API on the frontend.
-    // This command saves to JSON store (fallback / non-vault mode).
-    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
-    for (key, value) in &keys {
-        if !value.is_empty() {
-            store.set(key.clone(), serde_json::Value::String(value.clone()));
-        }
-    }
-    store.save().map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-fn send_price_alert_notification(
-    app: tauri::AppHandle,
-    symbol: String,
-    message: String,
-) -> Result<(), String> {
-    use tauri_plugin_notification::NotificationExt;
-    app.notification()
-        .builder()
-        .title(format!("FlowFolio Alert: {symbol}"))
-        .body(message)
-        .show()
-        .map_err(|e| e.to_string())
-}
-
-// ==================== STRONGHOLD VAULT ====================
-//
-// The Stronghold plugin exposes its own JS commands (initialize, save_store_record,
-// get_store_record, save, destroy, etc.) and the managed state `StrongholdCollection`.
-//
-// Our wrapper commands handle vault lifecycle (exists/setup/unlock/lock) and key
-// migration.  The actual Stronghold I/O uses the JS plugin API on the frontend
-// while the Rust side tracks vault-unlocked state and consults the JSON store
-// fallback when the vault is locked.
-
-/// Check if a Stronghold vault file exists on disk.
-#[tauri::command]
-async fn vault_exists(app: tauri::AppHandle) -> Result<bool, String> {
-    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(data_dir.join(STRONGHOLD_VAULT).exists())
-}
-
-/// Check if the vault is currently unlocked.
-#[tauri::command]
-async fn vault_is_unlocked() -> bool {
-    VAULT_UNLOCKED.load(Ordering::Relaxed)
-}
-
-/// Return the vault snapshot path for the JS Stronghold API to use.
-#[tauri::command]
-async fn vault_get_path(app: tauri::AppHandle) -> Result<String, String> {
-    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(data_dir.join(STRONGHOLD_VAULT).to_string_lossy().into_owned())
-}
-
-/// Mark vault as unlocked (called from JS after successful Stronghold.load).
-#[tauri::command]
-async fn vault_set_unlocked() -> () {
-    VAULT_UNLOCKED.store(true, Ordering::Relaxed);
-}
-
-/// Mark vault as locked.
-#[tauri::command]
-async fn vault_set_locked() -> () {
-    VAULT_UNLOCKED.store(false, Ordering::Relaxed);
-}
-
-/// Migrate API keys from JSON store to Stronghold (returns keys for JS to write).
-/// Returns a map of key_name -> key_value for non-empty keys, then clears the JSON store.
-#[tauri::command]
-async fn vault_migrate_keys(app: tauri::AppHandle) -> Result<HashMap<String, String>, String> {
-    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
-    let mut keys = HashMap::new();
-    for &key_name in API_KEY_NAMES {
-        if let Some(serde_json::Value::String(val)) = store.get(key_name) {
-            if !val.is_empty() {
-                keys.insert(key_name.to_string(), val);
-            }
-        }
-    }
-    // Clear the plaintext JSON store
-    for &key_name in API_KEY_NAMES {
-        store.delete(key_name);
-    }
-    store.save().map_err(|e| e.to_string())?;
-    Ok(keys)
-}
-
-// ==================== AI STREAMING ====================
-
-#[tauri::command]
-async fn ai_chat_stream(
-    app: tauri::AppHandle,
-    messages: Vec<serde_json::Value>,
-    model: Option<String>,
-    temperature: Option<f64>,
-    max_tokens: Option<u32>,
-) -> Result<String, String> {
-    // Tier check
-    let tier = get_user_tier().await;
-    if tier != "ai" && tier != "pro" {
-        return Err("AI features require an AI Suite or Pro subscription".to_string());
-    }
-
-    let api_key = crate::core::encrypted_env::get_env_var("OPENROUTER_API_KEY")
-        .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
-
-    let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".to_string());
-    let client = reqwest::Client::new();
-
-    let body = serde_json::json!({
-        "model": model,
-        "messages": messages,
-        "temperature": temperature.unwrap_or(0.7),
-        "max_tokens": max_tokens.unwrap_or(4096),
-        "stream": true,
-    });
-
-    let response = client
-        .post("https://openrouter.ai/api/v1/chat/completions")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .header("HTTP-Referer", "https://flowfolio.app")
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("OpenRouter API error {}: {}", status, text));
-    }
-
-    let mut full_response = String::new();
-    use futures::StreamExt;
-    let mut stream = response.bytes_stream();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
-        let text = String::from_utf8_lossy(&chunk);
-        for line in text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                if data.trim() == "[DONE]" { continue; }
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                    if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str() {
-                        full_response.push_str(content);
-                        let _ = app.emit("ai-token", content);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(full_response)
-}
-
-// ==================== TRANSACTION HISTORY ====================
-
-#[tauri::command]
-async fn record_transaction(
-    id: String, portfolio_name: String, symbol: String,
-    action: String, shares: f64, price: f64, total: f64,
-    fees: f64, notes: Option<String>, executed_at: String,
-) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query(
-        "INSERT INTO transactions (id, portfolio_name, symbol, action, shares, price, total, fees, notes, executed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&id).bind(&portfolio_name).bind(&symbol).bind(&action)
-    .bind(shares).bind(price).bind(total).bind(fees)
-    .bind(&notes).bind(&executed_at)
-    .execute(&pool).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_transactions(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query_as::<_, (String, String, String, String, f64, f64, f64, f64, Option<String>, String, String)>(
-        "SELECT id, portfolio_name, symbol, action, shares, price, total, fees, notes, executed_at, created_at FROM transactions WHERE portfolio_name = ? ORDER BY executed_at DESC"
-    )
-    .bind(&portfolio_name)
-    .fetch_all(&pool).await.map_err(|e| e.to_string())?;
-
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "id": r.0, "portfolio_name": r.1, "symbol": r.2, "action": r.3,
-        "shares": r.4, "price": r.5, "total": r.6, "fees": r.7,
-        "notes": r.8, "executed_at": r.9, "created_at": r.10
-    })).collect())
-}
-
-#[tauri::command]
-async fn delete_transaction(id: String) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query("DELETE FROM transactions WHERE id = ?")
-        .bind(&id).execute(&pool).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-// ==================== PORTFOLIO SNAPSHOTS ====================
-
-#[tauri::command]
-async fn save_portfolio_snapshot(
-    portfolio_name: String, total_value: f64, cash: f64, holdings_json: String,
-) -> Result<(), String> {
-    let pool = get_pool().await?;
-    let id = uuid::Uuid::new_v4().to_string();
-    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    sqlx::query(
-        "INSERT OR REPLACE INTO portfolio_snapshots (id, portfolio_name, total_value, cash, holdings_json, snapshot_date) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&id).bind(&portfolio_name).bind(total_value).bind(cash)
-    .bind(&holdings_json).bind(&date)
-    .execute(&pool).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_portfolio_snapshots(
-    portfolio_name: String, days: Option<i32>,
-) -> Result<Vec<serde_json::Value>, String> {
-    let pool = get_pool().await?;
-    let days = days.unwrap_or(365);
-    let rows = sqlx::query_as::<_, (String, f64, f64, String, String)>(
-        "SELECT portfolio_name, total_value, cash, holdings_json, snapshot_date FROM portfolio_snapshots WHERE portfolio_name = ? AND snapshot_date >= date('now', '-' || ? || ' days') ORDER BY snapshot_date ASC"
-    )
-    .bind(&portfolio_name).bind(days)
-    .fetch_all(&pool).await.map_err(|e| e.to_string())?;
-
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "portfolio_name": r.0, "total_value": r.1, "cash": r.2,
-        "holdings_json": r.3, "snapshot_date": r.4
-    })).collect())
-}
-
-// ==================== DIVIDEND TRACKING ====================
-
-#[tauri::command]
-async fn record_dividend(
-    id: String, portfolio_name: String, symbol: String,
-    amount_per_share: f64, total_amount: f64, shares_held: f64,
-    ex_date: String, pay_date: Option<String>, reinvested: bool,
-) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query(
-        "INSERT INTO dividends (id, portfolio_name, symbol, amount_per_share, total_amount, shares_held, ex_date, pay_date, reinvested) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&id).bind(&portfolio_name).bind(&symbol)
-    .bind(amount_per_share).bind(total_amount).bind(shares_held)
-    .bind(&ex_date).bind(&pay_date).bind(reinvested as i32)
-    .execute(&pool).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_dividends(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query_as::<_, (String, String, String, f64, f64, f64, String, Option<String>, i32, String)>(
-        "SELECT id, portfolio_name, symbol, amount_per_share, total_amount, shares_held, ex_date, pay_date, reinvested, created_at FROM dividends WHERE portfolio_name = ? ORDER BY ex_date DESC"
-    )
-    .bind(&portfolio_name)
-    .fetch_all(&pool).await.map_err(|e| e.to_string())?;
-
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "id": r.0, "portfolio_name": r.1, "symbol": r.2,
-        "amount_per_share": r.3, "total_amount": r.4, "shares_held": r.5,
-        "ex_date": r.6, "pay_date": r.7, "reinvested": r.8 != 0, "created_at": r.9
-    })).collect())
-}
-
-#[tauri::command]
-async fn get_dividend_summary(portfolio_name: String) -> Result<serde_json::Value, String> {
-    let pool = get_pool().await?;
-    let year = chrono::Utc::now().format("%Y").to_string();
-
-    let total_all: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ?"
-    ).bind(&portfolio_name).fetch_one(&pool).await.map_err(|e| e.to_string())?;
-
-    let total_ytd: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ? AND ex_date >= (? || '-01-01')"
-    ).bind(&portfolio_name).bind(&year).fetch_one(&pool).await.map_err(|e| e.to_string())?;
-
-    Ok(serde_json::json!({
-        "total_all_time": total_all,
-        "total_ytd": total_ytd,
-    }))
-}
-
-// ==================== TAX LOT TRACKING ====================
-
-#[tauri::command]
-async fn create_tax_lot(
-    id: String, portfolio_name: String, symbol: String,
-    shares: f64, cost_basis_per_share: f64, purchase_date: String,
-) -> Result<(), String> {
-    let pool = get_pool().await?;
-    sqlx::query("INSERT INTO tax_lots (id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date) VALUES (?, ?, ?, ?, ?, ?)")
-        .bind(&id).bind(&portfolio_name).bind(&symbol)
-        .bind(shares).bind(cost_basis_per_share).bind(&purchase_date)
-        .execute(&pool).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_tax_lots(portfolio_name: String, symbol: Option<String>) -> Result<Vec<serde_json::Value>, String> {
-    let pool = get_pool().await?;
-    let rows = if let Some(sym) = &symbol {
-        sqlx::query_as::<_, (String, String, String, f64, f64, String, i32, Option<String>, Option<f64>, String)>(
-            "SELECT id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date, is_closed, close_date, close_price, created_at FROM tax_lots WHERE portfolio_name = ? AND symbol = ? ORDER BY purchase_date ASC"
-        ).bind(&portfolio_name).bind(sym).fetch_all(&pool).await
-    } else {
-        sqlx::query_as::<_, (String, String, String, f64, f64, String, i32, Option<String>, Option<f64>, String)>(
-            "SELECT id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date, is_closed, close_date, close_price, created_at FROM tax_lots WHERE portfolio_name = ? ORDER BY purchase_date ASC"
-        ).bind(&portfolio_name).fetch_all(&pool).await
-    }.map_err(|e| e.to_string())?;
-
-    Ok(rows.iter().map(|r| {
-        let days_held = chrono::NaiveDate::parse_from_str(&r.5, "%Y-%m-%d")
-            .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
-            .unwrap_or(0);
-        serde_json::json!({
-            "id": r.0, "portfolio_name": r.1, "symbol": r.2,
-            "shares": r.3, "cost_basis_per_share": r.4, "purchase_date": r.5,
-            "is_closed": r.6 != 0, "close_date": r.7, "close_price": r.8,
-            "created_at": r.9, "days_held": days_held,
-            "is_long_term": days_held > 365
-        })
-    }).collect())
-}
-
-#[tauri::command]
-async fn get_tax_loss_harvest_opportunities(
-    portfolio_name: String, current_prices: std::collections::HashMap<String, f64>,
-) -> Result<Vec<serde_json::Value>, String> {
-    let pool = get_pool().await?;
-    let rows = sqlx::query_as::<_, (String, String, f64, f64, String)>(
-        "SELECT id, symbol, shares, cost_basis_per_share, purchase_date FROM tax_lots WHERE portfolio_name = ? AND is_closed = 0"
-    ).bind(&portfolio_name).fetch_all(&pool).await.map_err(|e| e.to_string())?;
-
-    let mut opportunities = Vec::new();
-    for r in &rows {
-        if let Some(&current_price) = current_prices.get(&r.1) {
-            let unrealized_gain = (current_price - r.3) * r.2;
-            if unrealized_gain < 0.0 {
-                let days_held = chrono::NaiveDate::parse_from_str(&r.4, "%Y-%m-%d")
-                    .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
-                    .unwrap_or(0);
-                opportunities.push(serde_json::json!({
-                    "lot_id": r.0, "symbol": r.1, "shares": r.2,
-                    "cost_basis": r.3, "current_price": current_price,
-                    "unrealized_loss": unrealized_gain,
-                    "days_held": days_held,
-                    "is_long_term": days_held > 365,
-                    "tax_benefit_estimate": unrealized_gain.abs() * 0.25,
-                }));
-            }
-        }
-    }
-    opportunities.sort_by(|a, b| {
-        let a_val = a["unrealized_loss"].as_f64().unwrap_or(0.0);
-        let b_val = b["unrealized_loss"].as_f64().unwrap_or(0.0);
-        a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
-    });
-    Ok(opportunities)
-}
-
-// ==================== MULTI-CURRENCY ====================
-
-#[tauri::command]
-async fn get_exchange_rate(from: String, to: String) -> Result<f64, String> {
-    if from == to { return Ok(1.0); }
-    let client = reqwest::Client::new();
-    let url = format!(
-        "https://api.exchangerate-api.com/v4/latest/{}",
-        from.to_uppercase()
-    );
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    data["rates"][to.to_uppercase().as_str()]
-        .as_f64()
-        .ok_or_else(|| format!("Exchange rate not found for {}", to))
-}
+// ==================== APP ENTRY POINT ====================
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize tracing subscriber (use try_init to avoid panic in tests)
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -3058,7 +415,6 @@ pub fn run() {
         .with_target(true)
         .try_init();
 
-    // Initialize logging for observability
     #[cfg(debug_assertions)]
     {
         tracing::info!(target: "app", "FlowFolio starting in DEBUG mode");
@@ -3203,7 +559,6 @@ pub fn run() {
             get_tax_loss_harvest_opportunities,
         ])
         .setup(|app| {
-            // Register Stronghold plugin with argon2 KDF
             let salt_path = match app.path().app_local_data_dir() {
                 Ok(dir) => dir.join("stronghold-salt.txt"),
                 Err(e) => {
@@ -3215,20 +570,17 @@ pub fn run() {
                 tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build()
             )?;
 
-            // Initialize local database for caching
             let app_handle = app.handle().clone();
-            
+
             tauri::async_runtime::spawn(async move {
-                // Get the app data directory (relative local directory)
                 let data_dir = app_handle.path().app_data_dir()
                     .unwrap_or_else(|_| {
-                        // Fallback to current directory if app data dir not available
                         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
                     })
                     .join("data");
-                
+
                 tracing::info!(path = %data_dir.display(), "Using data directory");
-                
+
                 match init_local_database(data_dir).await {
                     Ok(pool) => {
                         init_market_service_with_db(pool).await;
@@ -3239,29 +591,23 @@ pub fn run() {
                         tracing::warn!("Continuing with in-memory cache only");
                     }
                 }
-
-
             });
-            
+
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
-/// Get database initialization status
-#[tauri::command]
-fn get_database_status() -> serde_json::Value {
-    let initialized = DB_INITIALIZED.load(std::sync::atomic::Ordering::SeqCst);
-    serde_json::json!({
-        "initialized": initialized,
-        "cache_type": if initialized { "sqlite" } else { "memory" }
-    })
-}
+// ==================== TESTS ====================
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::api::commands::vibe::*;
+    use super::api::commands::market::*;
+    use super::api::commands::portfolio::*;
+    use crate::modules::quant_analysis::QuantMetrics;
+    use crate::services::FundamentalMetrics;
 
     // ===== Helper builders =====
 
@@ -3343,34 +689,29 @@ mod tests {
     #[test]
     fn test_momentum_rsi_oversold() {
         let score = momentum_score_from_rsi(20.0, "BUY");
-        // rsi < 30: 80 + (30 - 20) = 90, signal BUY +10 = 100, capped at 100
         assert!((score - 100.0).abs() < 1.0);
     }
 
     #[test]
     fn test_momentum_rsi_overbought() {
         let score = momentum_score_from_rsi(80.0, "SELL");
-        // rsi > 70: 50 - (80 - 70) = 40, signal SELL -10 = 30
         assert!((score - 30.0).abs() < 1.0);
     }
 
     #[test]
     fn test_momentum_rsi_neutral_hold() {
         let score = momentum_score_from_rsi(50.0, "HOLD");
-        // rsi in neutral: 50 + |50-50| * 0.5 = 50, signal HOLD +0
         assert!((score - 50.0).abs() < 1.0);
     }
 
     #[test]
     fn test_momentum_strong_buy_signal() {
         let score = momentum_score_from_rsi(50.0, "STRONG BUY");
-        // neutral rsi = 50, STRONG BUY +15 = 65
         assert!((score - 65.0).abs() < 1.0);
     }
 
     #[test]
     fn test_momentum_strong_sell_clamps_to_zero() {
-        // RSI=75 (overbought): 50 - 5 = 45, STRONG SELL -15 = 30
         let score = momentum_score_from_rsi(75.0, "STRONG SELL");
         assert!(score >= 0.0);
         assert!(score <= 100.0);
@@ -3379,7 +720,6 @@ mod tests {
     #[test]
     fn test_momentum_unknown_signal() {
         let score = momentum_score_from_rsi(50.0, "UNKNOWN");
-        // No adjustment for unknown signal
         assert!((score - 50.0).abs() < 1.0);
     }
 
@@ -3388,14 +728,12 @@ mod tests {
     #[test]
     fn test_quality_high_sharpe_low_vol() {
         let score = quality_score_from_sharpe(2.5, 10.0);
-        // sharpe > 2: 90, vol < 15: +10 = 100
         assert!((score - 100.0).abs() < 1.0);
     }
 
     #[test]
     fn test_quality_negative_sharpe_high_vol() {
         let score = quality_score_from_sharpe(-1.0, 50.0);
-        // sharpe < 0: (50 + (-1)*10).max(0) = 40, vol > 40: -10 = 30
         assert!((score - 30.0).abs() < 1.0);
     }
 
@@ -3409,7 +747,6 @@ mod tests {
     #[test]
     fn test_quality_moderate_sharpe() {
         let score = quality_score_from_sharpe(1.2, 20.0);
-        // sharpe > 1: 70, vol 15-25: +5 = 75
         assert!((score - 75.0).abs() < 1.0);
     }
 
@@ -3418,14 +755,12 @@ mod tests {
     #[test]
     fn test_value_low_vol_low_dd() {
         let score = value_score_from_vol(10.0, 5.0);
-        // vol < 15: 85, dd < 10: +10 = 95
         assert!((score - 95.0).abs() < 1.0);
     }
 
     #[test]
     fn test_value_high_vol_high_dd() {
         let score = value_score_from_vol(60.0, 40.0);
-        // vol > 50: 25, dd > 30: -20 = 5
         assert!((score - 5.0).abs() < 1.0);
     }
 
@@ -3456,15 +791,12 @@ mod tests {
     #[test]
     fn test_growth_zero_return() {
         let score = growth_score_from_return(0.0);
-        // 0 is not > 0, not > -10, so 20
-        // Actually 0 fails `r > 0.0`, falls to `r > -10.0` → 35
         assert!((score - 35.0).abs() < 1.0);
     }
 
     #[test]
     fn test_growth_small_positive() {
         let score = growth_score_from_return(3.0);
-        // > 0.0 → 50
         assert!((score - 50.0).abs() < 1.0);
     }
 
@@ -3488,7 +820,6 @@ mod tests {
     fn test_quick_score_hold_signal() {
         let m = make_quant_metrics(1.0, 10.0, 25.0, 20.0, 50.0, "HOLD");
         let score = calculate_quick_score(&m);
-        // sharpe*15=15 capped at 30 → 15, return*0.5=5, (50-25)*0.3=7.5, (40-20)*0.375=7.5, HOLD=5 → 40
         assert!(score > 0.0);
     }
 
@@ -3618,7 +949,6 @@ mod tests {
 
     #[test]
     fn test_altman_z_insufficient_components() {
-        // Only 1 field provided → None
         let fund = make_fund(None, Some(0.1), None, None, None, None, None, None, None, None, None, None);
         assert!(calculate_altman_z_estimate(&fund).is_none());
     }
@@ -3634,7 +964,6 @@ mod tests {
 
     #[test]
     fn test_altman_z_safe_zone() {
-        // Strong financials
         let fund = make_fund(Some(0.20), Some(0.15), None, Some(0.3), Some(2.5), Some(0.25), None, None, None, None, None, None);
         let z = calculate_altman_z_estimate(&fund);
         assert!(z.is_some());
@@ -3644,7 +973,6 @@ mod tests {
 
     #[test]
     fn test_piotroski_insufficient_criteria() {
-        // Only 2 criteria — None
         let fund = make_fund(Some(0.1), None, None, None, None, None, None, None, None, None, None, None);
         assert!(calculate_piotroski_estimate(&fund).is_none());
     }
@@ -3683,7 +1011,6 @@ mod tests {
 
     #[test]
     fn test_graham_number_valid() {
-        // EPS=5, P/B=2, P/E=20 → price=100, book=50, graham = sqrt(22.5*5*50) = sqrt(5625) = 75
         let fund = make_fund(None, None, None, None, None, None, None, Some(5.0), Some(2.0), Some(20.0), None, None);
         let g = calculate_graham_number(&fund);
         assert!(g.is_some());
