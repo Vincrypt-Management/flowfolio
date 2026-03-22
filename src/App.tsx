@@ -69,6 +69,7 @@ const TickerAnalysis = lazy(() => import('./components/TickerAnalysis'));
 import Dashboard from "./components/Dashboard";
 import { UserProfileCard } from "./components/UserProfileCard";
 import { RateLimitBanner } from "./components/RateLimitBanner";
+import { TabErrorBoundary } from "./components/TabErrorBoundary";
 
 function TabLoading() {
   return (
@@ -809,237 +810,275 @@ function App() {
       <main id="main-content" className="main-content" role="main">
         <RateLimitBanner />
         {state.activeTab === "dashboard" && (
-          <div className="animate-fade-in">
-            <Dashboard
-              plan={state.plan}
-              onNavigate={handleNavClick}
-              marketPrices={state.marketPrices}
-              onRefreshMarket={loadMarketOverview}
-              isLoadingMarket={state.isLoadingMarket}
-            />
-          </div>
+          <TabErrorBoundary tabName="Dashboard">
+            <div className="animate-fade-in">
+              <Dashboard
+                plan={state.plan}
+                onNavigate={handleNavClick}
+                marketPrices={state.marketPrices}
+                onRefreshMarket={loadMarketOverview}
+                isLoadingMarket={state.isLoadingMarket}
+              />
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "vibe-studio" && (
-          <div className="animate-fade-in">
-            <VibeStudio
-              initialPortfolio={state.portfolioToLoad}
-              onPortfolioLoaded={() => dispatch(actions.setPortfolioToLoad(null))}
-            />
-          </div>
+          <TabErrorBoundary tabName="Vibe Studio">
+            <div className="animate-fade-in">
+              <VibeStudio
+                initialPortfolio={state.portfolioToLoad}
+                onPortfolioLoaded={() => dispatch(actions.setPortfolioToLoad(null))}
+              />
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "saved-portfolios" && (
-          <Suspense fallback={<TabLoading />}>
-            <SavedPortfoliosTab onLoadPortfolio={(portfolio) => {
-              dispatch(actions.setPortfolioToLoad(portfolio));
-              dispatch(actions.setActiveTab("vibe-studio"));
-            }} />
-          </Suspense>
+          <TabErrorBoundary tabName="Saved Portfolios">
+            <Suspense fallback={<TabLoading />}>
+              <SavedPortfoliosTab onLoadPortfolio={(portfolio) => {
+                dispatch(actions.setPortfolioToLoad(portfolio));
+                dispatch(actions.setActiveTab("vibe-studio"));
+              }} />
+            </Suspense>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "templates" && (
-          <TemplatesTab
-            templates={state.templates}
-            selectedTemplate={state.selectedTemplate}
-            plan={state.plan}
-            onLoadTemplate={loadTemplate}
-            onNavigateToDashboard={() => dispatch(actions.setActiveTab("dashboard"))}
-          />
+          <TabErrorBoundary tabName="Templates">
+            <TemplatesTab
+              templates={state.templates}
+              selectedTemplate={state.selectedTemplate}
+              plan={state.plan}
+              onLoadTemplate={loadTemplate}
+              onNavigateToDashboard={() => dispatch(actions.setActiveTab("dashboard"))}
+            />
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "data" && (
-          <Suspense fallback={<TabLoading />}>
-            <DataSourcesPage />
-          </Suspense>
+          <TabErrorBoundary tabName="Data Sources">
+            <Suspense fallback={<TabLoading />}>
+              <DataSourcesPage />
+            </Suspense>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "rankings" && (
-          <RankingsTab
-            plan={state.plan}
-            rankingsSymbols={state.rankingsSymbols}
-            onSymbolsChange={(v) => dispatch(actions.setRankingsSymbols(v))}
-            scores={state.scores}
-            isScoring={state.isScoring}
-            selectedScore={state.selectedScore}
-            onSelectScore={(v) => dispatch(actions.setSelectedScore(v))}
-            onScoreSymbols={scoreSymbols}
-          />
+          <TabErrorBoundary tabName="Rankings">
+            <RankingsTab
+              plan={state.plan}
+              rankingsSymbols={state.rankingsSymbols}
+              onSymbolsChange={(v) => dispatch(actions.setRankingsSymbols(v))}
+              scores={state.scores}
+              isScoring={state.isScoring}
+              selectedScore={state.selectedScore}
+              onSelectScore={(v) => dispatch(actions.setSelectedScore(v))}
+              onScoreSymbols={scoreSymbols}
+            />
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "portfolio" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <PortfolioTab
-                onHoldingsChange={handleHoldingsChange}
-                onAnalyze={(symbol) => {
-                  dispatch(actions.setAnalysisSymbol(symbol));
-                  handleNavClick('analysis');
-                }}
-              />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Portfolio">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <PortfolioTab
+                  onHoldingsChange={handleHoldingsChange}
+                  onAnalyze={(symbol) => {
+                    dispatch(actions.setAnalysisSymbol(symbol));
+                    handleNavClick('analysis');
+                  }}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "backtest" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <BacktestTab />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Backtest">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <BacktestTab />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "journal" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <JournalTab />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Journal">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <JournalTab />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "yearly-review" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Yearly Review</h1>
-              <p className="page-subtitle">Comprehensive annual strategy and portfolio review checklist</p>
-            </header>
-            <Suspense fallback={<TabLoading />}>
-              <YearlyReviewComponent portfolioName={state.plan?.name || "My Portfolio"} />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Yearly Review">
+            <div className="animate-fade-in">
+              <header className="page-header">
+                <h1 className="page-title">Yearly Review</h1>
+                <p className="page-subtitle">Comprehensive annual strategy and portfolio review checklist</p>
+              </header>
+              <Suspense fallback={<TabLoading />}>
+                <YearlyReviewComponent portfolioName={state.plan?.name || "My Portfolio"} />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "universe" && (
-          <UniverseTab
-            universes={state.universes}
-            newUniverseName={state.newUniverseName}
-            onNewUniverseNameChange={(v) => dispatch(actions.setNewUniverseName(v))}
-            newUniverseSymbols={state.newUniverseSymbols}
-            onNewUniverseSymbolsChange={(v) => dispatch(actions.setNewUniverseSymbols(v))}
-            onCreateUniverse={createUniverse}
-            onDeleteUniverse={deleteUniverse}
-            selectedUniverse={state.selectedUniverse}
-            onSelectUniverse={(v) => dispatch(actions.setSelectedUniverse(v))}
-            onUseInRankings={useUniverseInRankings}
-            savedPlans={state.savedPlans}
-            plan={state.plan}
-            onSavePlan={savePlan}
-            onExportData={exportData}
-            onImportData={importData}
-            onLoadPlan={loadPlan}
-            onAddToast={addToast}
-          />
+          <TabErrorBoundary tabName="Universe">
+            <UniverseTab
+              universes={state.universes}
+              newUniverseName={state.newUniverseName}
+              onNewUniverseNameChange={(v) => dispatch(actions.setNewUniverseName(v))}
+              newUniverseSymbols={state.newUniverseSymbols}
+              onNewUniverseSymbolsChange={(v) => dispatch(actions.setNewUniverseSymbols(v))}
+              onCreateUniverse={createUniverse}
+              onDeleteUniverse={deleteUniverse}
+              selectedUniverse={state.selectedUniverse}
+              onSelectUniverse={(v) => dispatch(actions.setSelectedUniverse(v))}
+              onUseInRankings={useUniverseInRankings}
+              savedPlans={state.savedPlans}
+              plan={state.plan}
+              onSavePlan={savePlan}
+              onExportData={exportData}
+              onImportData={importData}
+              onLoadPlan={loadPlan}
+              onAddToast={addToast}
+            />
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "watchlist" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <WatchlistTab onNavigate={handleNavClick} />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Watchlist">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <WatchlistTab onNavigate={handleNavClick} />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === 'analysis' && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Ticker Analysis</h1>
-              <p className="page-subtitle">Deep-dive analysis for any symbol</p>
-            </header>
-            <Suspense fallback={<TabLoading />}>
-              <TickerAnalysis
-                symbol={state.analysisSymbol}
-                onClose={() => {}}
-                inline={true}
-                onTickerChange={(v) => dispatch(actions.setAnalysisSymbol(v))}
-              />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Analysis">
+            <div className="animate-fade-in">
+              <header className="page-header">
+                <h1 className="page-title">Ticker Analysis</h1>
+                <p className="page-subtitle">Deep-dive analysis for any symbol</p>
+              </header>
+              <Suspense fallback={<TabLoading />}>
+                <TickerAnalysis
+                  symbol={state.analysisSymbol}
+                  onClose={() => {}}
+                  inline={true}
+                  onTickerChange={(v) => dispatch(actions.setAnalysisSymbol(v))}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "alerts" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">Price Alerts</h1>
-              <p className="page-subtitle">Monitor price thresholds and get notified</p>
-            </header>
-            <Suspense fallback={<TabLoading />}>
-              <AlertsPanel
-                onAlertTriggered={(alert) => {
-                  addToast(`Alert triggered: ${alert.symbol} ${alert.condition} ${alert.threshold}`, "warning");
-                }}
-              />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Alerts">
+            <div className="animate-fade-in">
+              <header className="page-header">
+                <h1 className="page-title">Price Alerts</h1>
+                <p className="page-subtitle">Monitor price thresholds and get notified</p>
+              </header>
+              <Suspense fallback={<TabLoading />}>
+                <AlertsPanel
+                  onAlertTriggered={(alert) => {
+                    addToast(`Alert triggered: ${alert.symbol} ${alert.condition} ${alert.threshold}`, "warning");
+                  }}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "comparison" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <ComparisonMode />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Comparison">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <ComparisonMode />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "risk" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <RiskDashboard
-                holdings={state.portfolioHoldings}
-                portfolioValue={state.portfolioValue}
-                marketPrices={state.marketPrices}
-              />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Risk Dashboard">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <RiskDashboard
+                  holdings={state.portfolioHoldings}
+                  portfolioValue={state.portfolioValue}
+                  marketPrices={state.marketPrices}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "scheduler" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <RebalanceScheduler
-                onRunRebalance={(planName) => {
-                  addToast(`Running rebalance for "${planName}"...`, "info");
-                  handleNavClick("portfolio");
-                }}
-                onNavigate={handleNavClick}
-              />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Scheduler">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <RebalanceScheduler
+                  onRunRebalance={(planName) => {
+                    addToast(`Running rebalance for "${planName}"...`, "info");
+                    handleNavClick("portfolio");
+                  }}
+                  onNavigate={handleNavClick}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
         {state.activeTab === "news" && (
-          <div className="animate-fade-in">
-            <header className="page-header">
-              <h1 className="page-title">News & Sentiment</h1>
-              <p className="page-subtitle">Market news and sentiment analysis</p>
-            </header>
-            <Suspense fallback={<TabLoading />}>
-              <NewsFeed
-                onLogToJournal={async (title, content) => {
-                  try {
-                    await invokeWithResilience('create_journal_entry', {
-                      event_type: 'observation',
-                      title,
-                      content,
-                      plan_version: null,
-                      tags: ['news'],
-                    });
-                    addToast(`Logged "${title}" to journal`, 'success');
-                  } catch {
-                    addToast('Failed to log to journal', 'error');
-                  }
-                }}
-              />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="News">
+            <div className="animate-fade-in">
+              <header className="page-header">
+                <h1 className="page-title">News & Sentiment</h1>
+                <p className="page-subtitle">Market news and sentiment analysis</p>
+              </header>
+              <Suspense fallback={<TabLoading />}>
+                <NewsFeed
+                  onLogToJournal={async (title, content) => {
+                    try {
+                      await invokeWithResilience('create_journal_entry', {
+                        event_type: 'observation',
+                        title,
+                        content,
+                        plan_version: null,
+                        tags: ['news'],
+                      });
+                      addToast(`Logged "${title}" to journal`, 'success');
+                    } catch {
+                      addToast('Failed to log to journal', 'error');
+                    }
+                  }}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
 
 
         {state.activeTab === "settings" && (
-          <div className="animate-fade-in">
-            <Suspense fallback={<TabLoading />}>
-              <SettingsPage />
-            </Suspense>
-          </div>
+          <TabErrorBoundary tabName="Settings">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <SettingsPage />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
         )}
       </main>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { invoke } from "./services/tauri";
+import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
 import { useUserMode } from './contexts/UserModeContext';
@@ -47,9 +47,13 @@ export function JournalTab() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
     if (entries.length > 0) {
-      calculateStats();
+      calculateStats().catch((err) => {
+        if (mounted) logger.error('Error calculating journal stats:', err);
+      });
     }
+    return () => { mounted = false; };
   }, [entries]);
 
   async function calculateStats() {

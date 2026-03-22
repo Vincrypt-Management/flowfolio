@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createLogger } from '../core/logger';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 
 const log = createLogger('AlertsPanel');
 import {
@@ -116,7 +116,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
     const legacyVal = localStorage.getItem('flowfolio-desktop-notifs');
     if (legacyVal !== null) {
       const migrated = legacyVal !== 'false';
-      invoke('save_setting', { key: 'alerts_desktop_notifs', value: String(migrated) })
+      invokeWithResilience('save_setting', { key: 'alerts_desktop_notifs', value: String(migrated) })
         .then(() => {
           localStorage.removeItem('flowfolio-desktop-notifs');
           setDesktopNotifs(migrated);
@@ -125,7 +125,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       return;
     }
     // Normal load from SQLite
-    invoke<string | null>('load_setting', { key: 'alerts_desktop_notifs' })
+    invokeWithResilience<string | null>('load_setting', { key: 'alerts_desktop_notifs' })
       .then(val => { setDesktopNotifs(val !== 'false'); })
       .catch(() => { /* default true */ });
   }, []);
@@ -133,7 +133,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
   const toggleDesktopNotifs = useCallback(() => {
     setDesktopNotifs(prev => {
       const next = !prev;
-      invoke('save_setting', { key: 'alerts_desktop_notifs', value: String(next) })
+      invokeWithResilience('save_setting', { key: 'alerts_desktop_notifs', value: String(next) })
         .catch(() => {});
       return next;
     });
@@ -146,27 +146,29 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
 
   // Load alerts from SQLite on mount
   useEffect(() => {
-    invoke<PriceAlert[]>('list_alerts')
+    invokeWithResilience<PriceAlert[]>('list_alerts')
       .then(setAlerts)
       .catch(() => {});
   }, []);
 
   // One-time migration: move any localStorage alerts into SQLite
   useEffect(() => {
+    let mounted = true;
     const LEGACY_KEY = 'flowfolio_price_alerts';
     const legacy = localStorage.getItem(LEGACY_KEY);
     if (legacy) {
       try {
         const legacyAlerts: PriceAlert[] = JSON.parse(legacy);
-        Promise.all(legacyAlerts.map(a => invoke('create_alert', { alert: a })))
+        Promise.all(legacyAlerts.map(a => invokeWithResilience('create_alert', { alert: a })))
           .then(() => {
             localStorage.removeItem(LEGACY_KEY);
-            return invoke<PriceAlert[]>('list_alerts');
+            return invokeWithResilience<PriceAlert[]>('list_alerts');
           })
-          .then(setAlerts)
-          .catch(err => log.error('Migration failed', err));
+          .then(updated => { if (mounted) setAlerts(updated); })
+          .catch(err => { if (mounted) log.error('Migration failed', err); });
       } catch { /* ignore */ }
     }
+    return () => { mounted = false; };
   }, []);
 
   // Derived
@@ -183,7 +185,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
 
     setChecking(true);
     try {
-      const prices = await invoke<Record<string, number>>('get_current_prices_batch', {
+      const prices = await invokeWithResilience<Record<string, number>>('get_current_prices_batch', {
         symbols,
       });
 
@@ -245,13 +247,13 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
 
       // Persist triggered alerts to SQLite
       for (const a of nowTriggeredAlerts) {
-        invoke('update_alert', { alert: a }).catch(() => {});
+        invokeWithResilience('update_alert', { alert: a }).catch(() => {});
       }
 
       // Fire desktop notifications OUTSIDE the state updater (must be pure)
       if (desktopNotifsRef.current) {
         for (const t of triggered) {
-          invoke('send_price_alert_notification', {
+          invokeWithResilience('send_price_alert_notification', {
             symbol: t.symbol,
             message: `${t.symbol} hit ${t.threshold} — current price: ${t.price.toFixed(2)}`,
           }).catch(() => {});
@@ -295,7 +297,7 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
     // For percent change alerts, fetch current price as reference
     if (formCondition === 'percent_change_up' || formCondition === 'percent_change_down') {
       try {
-        const prices = await invoke<Record<string, number>>('get_current_prices_batch', {
+        const prices = await invokeWithResilience<Record<string, number>>('get_current_prices_batch', {
           symbols: [symbol],
         });
         referencePrice = prices[symbol];
@@ -322,8 +324,8 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
     };
 
     try {
-      await invoke('create_alert', { alert: newAlert });
-      const updated = await invoke<PriceAlert[]>('list_alerts');
+      await invokeWithResilience('create_alert', { alert: newAlert });
+      const updated = await invokeWithResilience<PriceAlert[]>('list_alerts');
       setAlerts(updated);
     } catch {
       setFormError('Failed to save alert');
@@ -341,19 +343,19 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       const updated = prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a));
       const target = updated.find((a) => a.id === id);
       if (target) {
-        invoke('update_alert', { alert: target }).catch(() => {});
+        invokeWithResilience('update_alert', { alert: target }).catch(() => {});
       }
       return updated;
     });
   }, []);
 
   const deleteAlert = useCallback((id: string) => {
-    invoke('delete_alert', { id }).catch(() => {});
+    invokeWithResilience('delete_alert', { id }).catch(() => {});
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
   const dismissTriggered = useCallback((id: string) => {
-    invoke('delete_alert', { id }).catch(() => {});
+    invokeWithResilience('delete_alert', { id }).catch(() => {});
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
@@ -366,8 +368,8 @@ export function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelPr
       triggeredAt: undefined,
       createdAt: new Date().toISOString(),
     };
-    invoke('delete_alert', { id: alert.id }).catch(() => {});
-    invoke('create_alert', { alert: recreated }).catch(() => {});
+    invokeWithResilience('delete_alert', { id: alert.id }).catch(() => {});
+    invokeWithResilience('create_alert', { alert: recreated }).catch(() => {});
     setAlerts((prev) => [recreated, ...prev.filter((a) => a.id !== alert.id)]);
   }, []);
 

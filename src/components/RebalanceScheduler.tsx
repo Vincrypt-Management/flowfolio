@@ -170,18 +170,22 @@ export function RebalanceScheduler({
 
   // Load schedules from SQLite on mount
   useEffect(() => {
+    let mounted = true;
     invoke<RebalanceSchedule[]>('list_schedules')
-      .then(setSchedules)
+      .then(data => { if (mounted) setSchedules(data); })
       .catch((err: unknown) => {
+        if (!mounted) return;
         const msg = err instanceof Error ? err.message : String(err);
         log.warn('Failed to load schedules from SQLite', msg);
         setSchedules([]);
       });
-    loadHistory().then(setHistory);
+    loadHistory().then(data => { if (mounted) setHistory(data); });
+    return () => { mounted = false; };
   }, []);
 
   // Migrate legacy localStorage schedules to SQLite (one-time)
   useEffect(() => {
+    let mounted = true;
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy) {
       try {
@@ -191,18 +195,20 @@ export function RebalanceScheduler({
             localStorage.removeItem(LEGACY_STORAGE_KEY);
             return invoke<RebalanceSchedule[]>('list_schedules');
           })
-          .then(setSchedules)
+          .then(data => { if (mounted) setSchedules(data); })
           .catch((err: unknown) => {
-            log.warn('Legacy schedule migration failed', String(err));
+            if (mounted) log.warn('Legacy schedule migration failed', String(err));
           });
       } catch {
         // ignore malformed legacy data
       }
     }
+    return () => { mounted = false; };
   }, []);
 
   // Migrate legacy localStorage history to SQLite user_settings (one-time)
   useEffect(() => {
+    let mounted = true;
     const legacyHistory = localStorage.getItem(LEGACY_HISTORY_KEY);
     if (legacyHistory) {
       try {
@@ -212,33 +218,38 @@ export function RebalanceScheduler({
             localStorage.removeItem(LEGACY_HISTORY_KEY);
             return loadHistory();
           })
-          .then(setHistory)
+          .then(data => { if (mounted) setHistory(data); })
           .catch((err: unknown) => {
-            log.warn('Legacy history migration failed', String(err));
+            if (mounted) log.warn('Legacy history migration failed', String(err));
           });
       } catch {
         // ignore malformed legacy history
       }
     }
+    return () => { mounted = false; };
   }, []);
 
   // Fetch available plans when form is shown
   useEffect(() => {
     if (!showCreateForm) return;
+    let mounted = true;
     setPlansLoading(true);
     invoke<string[]>('list_saved_plans')
       .then((plans) => {
+        if (!mounted) return;
         setAvailablePlans(plans);
         if (plans.length > 0 && !formPlanName) {
           setFormPlanName(plans[0]);
         }
       })
       .catch((err: unknown) => {
+        if (!mounted) return;
         const msg = err instanceof Error ? err.message : String(err);
         log.warn('Failed to load plans', msg);
         setAvailablePlans([]);
       })
-      .finally(() => setPlansLoading(false));
+      .finally(() => { if (mounted) setPlansLoading(false); });
+    return () => { mounted = false; };
   }, [showCreateForm, formPlanName]);
 
   const overdueSchedules = useMemo(
