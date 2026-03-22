@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { invoke } from "../services/tauri";
+import { invokeWithResilience } from "../services/apiClient";
 import { useToast } from "./Toast";
 import { useUserMode } from "../contexts/UserModeContext";
 import { logger } from "../core/logger";
@@ -118,7 +118,7 @@ function Dashboard({
     async function fetchPlans() {
       setIsLoadingPlans(true);
       try {
-        const plans = await invoke<string[]>("list_saved_plans");
+        const plans = await invokeWithResilience<string[]>("list_saved_plans");
         if (active) setSavedPlans(plans);
       } catch {
         if (active) {

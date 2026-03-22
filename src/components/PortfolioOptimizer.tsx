@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, memo } from "react";
-import { invoke } from "../services/tauri";
+import { invokeWithResilience } from "../services/apiClient";
 import { useLiveProgress } from "../hooks/useLiveProgress";
 import { LiveProgressPanel } from "./LiveProgressPanel";
 import { useToast } from "./Toast";
@@ -178,7 +178,7 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
       // Use live mode or regular mode
       const command = useLiveMode ? "generate_optimization_report_live" : "generate_optimization_report";
       
-      const result = await invoke<PortfolioOptimizationReport>(command, {
+      const result = await invokeWithResilience<PortfolioOptimizationReport>(command, {
         portfolioName,
         holdings: holdingsData,
         candidateSymbols: candidates,

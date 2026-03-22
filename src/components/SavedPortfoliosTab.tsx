@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef, memo } from 'react';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 import { GeneratedPortfolio } from '../services/portfolioAgent';
 import { useToast } from './Toast';
 import {
@@ -61,7 +61,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
     setError(null);
     
     try {
-      const result = await invoke<SavedPortfolioInfo[]>('list_saved_portfolios');
+      const result = await invokeWithResilience<SavedPortfolioInfo[]>('list_saved_portfolios');
       if (isMountedRef.current) {
         setPortfolios(result);
       }
@@ -80,7 +80,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
     setIsLoadingDetails(true);
     
     try {
-      const portfolio = await invoke<GeneratedPortfolio>('load_generated_portfolio', { id });
+      const portfolio = await invokeWithResilience<GeneratedPortfolio>('load_generated_portfolio', { id });
       if (isMountedRef.current) {
         setSelectedPortfolio(portfolio);
         if (onLoadPortfolio) {
@@ -102,7 +102,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
     if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
     
     try {
-      await invoke('delete_saved_portfolio', { id });
+      await invokeWithResilience('delete_saved_portfolio', { id });
       if (isMountedRef.current) {
         setPortfolios(prev => prev.filter(p => p.id !== id));
         if (selectedPortfolio && selectedPortfolio.title === name) {
@@ -118,7 +118,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
 
   async function handleExportPortfolio(id: string) {
     try {
-      const portfolio = await invoke<GeneratedPortfolio>('load_generated_portfolio', { id });
+      const portfolio = await invokeWithResilience<GeneratedPortfolio>('load_generated_portfolio', { id });
       const filename = `${portfolio.title?.replace(/\s+/g, '_') || 'portfolio'}_${new Date().toISOString().split('T')[0]}.json`;
       
       await saveFile(

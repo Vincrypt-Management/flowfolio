@@ -19,7 +19,7 @@ import {
   CheckCircle,
   History,
 } from 'lucide-react';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
 import './RebalanceScheduler.css';
@@ -75,7 +75,7 @@ function generateId(): string {
 
 async function loadHistory(): Promise<RebalanceHistoryEntry[]> {
   try {
-    const val = await invoke<string | null>('load_setting', { key: HISTORY_SETTING_KEY });
+    const val = await invokeWithResilience<string | null>('load_setting', { key: HISTORY_SETTING_KEY });
     return val ? JSON.parse(val) : [];
   } catch {
     return [];
@@ -83,7 +83,7 @@ async function loadHistory(): Promise<RebalanceHistoryEntry[]> {
 }
 
 function saveHistory(history: RebalanceHistoryEntry[]): void {
-  invoke('save_setting', { key: HISTORY_SETTING_KEY, value: JSON.stringify(history) })
+  invokeWithResilience('save_setting', { key: HISTORY_SETTING_KEY, value: JSON.stringify(history) })
     .catch((err: unknown) => log.warn('Failed to persist rebalance history', String(err)));
 }
 
@@ -171,7 +171,7 @@ export function RebalanceScheduler({
   // Load schedules from SQLite on mount
   useEffect(() => {
     let mounted = true;
-    invoke<RebalanceSchedule[]>('list_schedules')
+    invokeWithResilience<RebalanceSchedule[]>('list_schedules')
       .then(data => { if (mounted) setSchedules(data); })
       .catch((err: unknown) => {
         if (!mounted) return;
@@ -190,10 +190,10 @@ export function RebalanceScheduler({
     if (legacy) {
       try {
         const items: RebalanceSchedule[] = JSON.parse(legacy);
-        Promise.all(items.map((s) => invoke('save_schedule', { schedule: s })))
+        Promise.all(items.map((s) => invokeWithResilience('save_schedule', { schedule: s })))
           .then(() => {
             localStorage.removeItem(LEGACY_STORAGE_KEY);
-            return invoke<RebalanceSchedule[]>('list_schedules');
+            return invokeWithResilience<RebalanceSchedule[]>('list_schedules');
           })
           .then(data => { if (mounted) setSchedules(data); })
           .catch((err: unknown) => {
@@ -213,7 +213,7 @@ export function RebalanceScheduler({
     if (legacyHistory) {
       try {
         const items: RebalanceHistoryEntry[] = JSON.parse(legacyHistory);
-        invoke('save_setting', { key: HISTORY_SETTING_KEY, value: JSON.stringify(items) })
+        invokeWithResilience('save_setting', { key: HISTORY_SETTING_KEY, value: JSON.stringify(items) })
           .then(() => {
             localStorage.removeItem(LEGACY_HISTORY_KEY);
             return loadHistory();
@@ -234,7 +234,7 @@ export function RebalanceScheduler({
     if (!showCreateForm) return;
     let mounted = true;
     setPlansLoading(true);
-    invoke<string[]>('list_saved_plans')
+    invokeWithResilience<string[]>('list_saved_plans')
       .then((plans) => {
         if (!mounted) return;
         setAvailablePlans(plans);
@@ -305,7 +305,7 @@ export function RebalanceScheduler({
   }, [schedules]);
 
   const refreshSchedules = useCallback(() => {
-    invoke<RebalanceSchedule[]>('list_schedules')
+    invokeWithResilience<RebalanceSchedule[]>('list_schedules')
       .then(setSchedules)
       .catch((err: unknown) => log.warn('Failed to refresh schedules', String(err)));
   }, []);
@@ -315,7 +315,7 @@ export function RebalanceScheduler({
       setSchedules((prev) => {
         const next = updater(prev);
         // Persist each changed schedule to SQLite
-        Promise.all(next.map((s) => invoke('save_schedule', { schedule: s })))
+        Promise.all(next.map((s) => invokeWithResilience('save_schedule', { schedule: s })))
           .then(refreshSchedules)
           .catch((err: unknown) => log.warn('Failed to persist schedules', String(err)));
         return next;
@@ -355,7 +355,7 @@ export function RebalanceScheduler({
       createdAt: new Date().toISOString(),
     };
 
-    invoke('save_schedule', { schedule })
+    invokeWithResilience('save_schedule', { schedule })
       .then(refreshSchedules)
       .catch((err: unknown) => log.warn('Failed to save new schedule', String(err)));
     setSchedules((prev) => [...prev, schedule]);
@@ -384,7 +384,7 @@ export function RebalanceScheduler({
 
   const handleDelete = useCallback(
     (id: string) => {
-      invoke('delete_schedule', { id })
+      invokeWithResilience('delete_schedule', { id })
         .then(refreshSchedules)
         .catch((err: unknown) => log.warn('Failed to delete schedule', String(err)));
       addToast('Schedule deleted', 'info');

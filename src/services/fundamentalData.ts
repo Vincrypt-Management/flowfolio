@@ -2,7 +2,7 @@
 // Fetches company financials, earnings, and fundamental metrics
 // ALL API calls are proxied through the Tauri backend for security
 
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from './apiClient';
 import { localCacheService } from './localCache';
 import { createLogger } from '../core/logger';
 
@@ -239,7 +239,7 @@ class FundamentalDataService {
     log.info(`Fetching fundamentals for ${symbol} from backend...`);
     
     try {
-      const backendData = await invoke<BackendFundamentals>('get_fundamentals', { symbol });
+      const backendData = await invokeWithResilience<BackendFundamentals>('get_fundamentals', { symbol });
       const data = this.convertToFrontendFormat(backendData);
       
       // Cache the result
@@ -263,7 +263,7 @@ class FundamentalDataService {
     log.info(`Fetching fundamentals for ${symbols.length} symbols...`);
     
     try {
-      const backendData = await invoke<Record<string, BackendFundamentals>>('get_fundamentals_batch', { symbols });
+      const backendData = await invokeWithResilience<Record<string, BackendFundamentals>>('get_fundamentals_batch', { symbols });
       const results: Record<string, FundamentalMetrics> = {};
       
       for (const [symbol, data] of Object.entries(backendData)) {

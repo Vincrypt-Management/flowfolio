@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { invoke } from "./services/tauri";
 import { invokeWithResilience } from './services/apiClient';
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
@@ -160,7 +159,7 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     setIsLoading(true);
     try {
       // Fetch current price
-      const price = await invoke<number>("get_current_price_single", { symbol: newSymbol.toUpperCase() });
+      const price = await invokeWithResilience<number>("get_current_price_single", { symbol: newSymbol.toUpperCase() });
       
       // Check if still mounted before updating state
       if (!isMountedRef.current) return;
@@ -221,7 +220,7 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     setIsLoading(true);
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
-      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
+      const prices = await invokeWithResilience<Record<string, number>>("get_current_prices_batch", { symbols });
       
       // Check if still mounted before updating state
       if (!isMountedRef.current) return;
@@ -325,12 +324,12 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     setIsLoading(true);
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
-      const prices = await invoke<Record<string, number>>("get_current_prices_batch", { symbols });
+      const prices = await invokeWithResilience<Record<string, number>>("get_current_prices_batch", { symbols });
 
       // Check if still mounted before updating state
       if (!isMountedRef.current) return;
 
-      const list = await invoke<BuyList>("generate_monthly_buy_list", {
+      const list = await invokeWithResilience<BuyList>("generate_monthly_buy_list", {
         contribution: parseFloat(contribution),
         portfolio,
         allocationPlan,
@@ -359,7 +358,7 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
 
     setIsLoading(true);
     try {
-      const report = await invoke<RebalanceReport>("check_portfolio_rebalance", {
+      const report = await invokeWithResilience<RebalanceReport>("check_portfolio_rebalance", {
         portfolio,
         thresholdPct: rebalanceThreshold,
       });
@@ -369,11 +368,11 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
       }
 
       if (report) {
-        await invoke('record_rebalance', {
+        await invokeWithResilience('record_rebalance', {
           portfolioName: portfolio?.name ?? 'My Portfolio',
           reportJson: JSON.stringify(report),
         });
-        invoke<Array<{id: string; recorded_at: string; report: unknown}>>('list_rebalance_history', {
+        invokeWithResilience<Array<{id: string; recorded_at: string; report: unknown}>>('list_rebalance_history', {
           portfolioName: portfolio?.name ?? 'My Portfolio',
         }).then(history => {
           if (isMountedRef.current) setRebalanceHistory(history);
@@ -405,7 +404,7 @@ export function PortfolioTab({ onHoldingsChange, onAnalyze }: PortfolioTabProps 
     try {
       const symbols = portfolio.holdings.map(h => h.symbol);
 
-      const plan = await invoke<AllocationPlan>("create_equal_weight_allocation", {
+      const plan = await invokeWithResilience<AllocationPlan>("create_equal_weight_allocation", {
         symbols,
         maxPositionPct: maxPosition,
         cashBufferPct: cashBuffer,

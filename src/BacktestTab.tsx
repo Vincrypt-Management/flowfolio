@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { invoke } from "./services/tauri";
+import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
 import {
@@ -147,7 +147,7 @@ export function BacktestTab() {
     setResult(null);
     
     try {
-      const backtestResult = await invoke<BacktestResult>("run_backtest_simulation", { config });
+      const backtestResult = await invokeWithResilience<BacktestResult>("run_backtest_simulation", { config });
       
       // Check if still mounted before updating state
       if (isMountedRef.current) {

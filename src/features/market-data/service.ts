@@ -1,7 +1,7 @@
 // Market Data Service
 // Unified API for fetching market data with multi-tier caching
 
-import { apiClient, invokeCommand } from '../../core/api';
+import { apiClient, invokeWithResilience as invokeCommand } from '../../services/apiClient';
 import { cacheService } from '../../core/cache';
 import { handleError } from '../../core/errors';
 import { createLogger } from '../../core/logger';

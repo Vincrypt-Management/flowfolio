@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 
 const log = createLogger('data-sources');
@@ -98,7 +98,7 @@ function DataSourcesPage() {
     try {
       // Test connection first (this also returns provider status)
       try {
-        const result = await invoke<ConnectionTestResult>('test_data_connection');
+        const result = await invokeWithResilience<ConnectionTestResult>('test_data_connection');
         setConnectionResult(result);
       } catch (error) {
         log.error('Connection test failed', error);
@@ -122,7 +122,7 @@ function DataSourcesPage() {
 
       // Load cache stats
       try {
-        const stats = await invoke<CacheStats>('get_cache_stats');
+        const stats = await invokeWithResilience<CacheStats>('get_cache_stats');
         setCacheStats(stats);
       } catch {
         // Cache stats may not be available
@@ -130,7 +130,7 @@ function DataSourcesPage() {
 
       // Load health report
       try {
-        const health = await invoke<HealthReport>('get_health_report');
+        const health = await invokeWithResilience<HealthReport>('get_health_report');
         setHealthReport(health);
       } catch {
         // Health report may not be available
@@ -138,7 +138,7 @@ function DataSourcesPage() {
 
       // Check AI configuration
       try {
-        const aiOk = await invoke<boolean>('ai_is_configured');
+        const aiOk = await invokeWithResilience<boolean>('ai_is_configured');
         setAiConfigured(aiOk);
       } catch {
         setAiConfigured(false);
@@ -146,7 +146,7 @@ function DataSourcesPage() {
 
       // Check Alpaca configuration
       try {
-        const alpacaOk = await invoke<boolean>('alpaca_is_configured');
+        const alpacaOk = await invokeWithResilience<boolean>('alpaca_is_configured');
         setAlpacaConfigured(alpacaOk);
       } catch {
         setAlpacaConfigured(false);

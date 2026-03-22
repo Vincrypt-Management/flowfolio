@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 import {
   ResponsiveContainer,
   RadarChart,
@@ -208,7 +208,7 @@ export default function TickerAnalysis({
     clearReport();
     
     try {
-      const result = await invoke<TickerData>('get_detailed_ticker_analysis', { symbol });
+      const result = await invokeWithResilience<TickerData>('get_detailed_ticker_analysis', { symbol });
       if (isMountedRef.current) {
         setData(result);
       }

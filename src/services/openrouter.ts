@@ -1,5 +1,4 @@
 import { createLogger } from '../core/logger';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { isTauriContext } from './tauri';
 import { invokeWithResilience } from './apiClient';
@@ -22,7 +21,7 @@ class OpenRouterService {
    */
   async isConfigured(): Promise<boolean> {
     try {
-      return await invoke<boolean>('ai_is_configured');
+      return await invokeWithResilience<boolean>('ai_is_configured');
     } catch {
       return false;
     }
@@ -43,7 +42,7 @@ class OpenRouterService {
   ): Promise<string> {
     log.debug(`chat called with model: ${model}`);
     try {
-      const response = await invoke<string>('ai_chat', {
+      const response = await invokeWithResilience<string>('ai_chat', {
         messages,
         model,
         temperature: options?.temperature,
@@ -130,11 +129,11 @@ class OpenRouterService {
   }
 
   async generatePortfolioInsight(portfolioData: unknown): Promise<string> {
-    return invoke<string>('ai_generate_portfolio_insight', { portfolioData });
+    return invokeWithResilience<string>('ai_generate_portfolio_insight', { portfolioData });
   }
 
   async chatWithAssistant(userMessage: string, conversationHistory: OpenRouterMessage[] = []): Promise<string> {
-    return invoke<string>('ai_chat_assistant', {
+    return invokeWithResilience<string>('ai_chat_assistant', {
       message: userMessage,
       history: conversationHistory,
     });

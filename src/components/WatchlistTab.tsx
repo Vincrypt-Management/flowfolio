@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
 import {
@@ -102,7 +102,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     setError(null);
 
     try {
-      const result = await invoke<Universe[]>('list_universes');
+      const result = await invokeWithResilience<Universe[]>('list_universes');
       if (isMountedRef.current) {
         setUniverses(result);
       }
@@ -133,7 +133,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     }
 
     try {
-      const result = await invoke<Record<string, number>>('get_current_prices_batch', { symbols });
+      const result = await invokeWithResilience<Record<string, number>>('get_current_prices_batch', { symbols });
       if (isMountedRef.current) {
         const priceUpdate: Record<string, SymbolPriceData> = {};
         for (const [sym, price] of Object.entries(result)) {
@@ -198,7 +198,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
 
     setIsCreating(true);
     try {
-      await invoke<Universe>('create_universe', {
+      await invokeWithResilience<Universe>('create_universe', {
         name,
         description: createDescription.trim(),
         symbols,
@@ -236,7 +236,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     setAddingSymbolsId(universe.id);
     try {
       const updatedSymbols = [...universe.symbols, ...uniqueNew];
-      await invoke('update_universe_symbols', { id: universe.id, symbols: updatedSymbols });
+      await invokeWithResilience('update_universe_symbols', { id: universe.id, symbols: updatedSymbols });
       addToast(`Added ${uniqueNew.length} symbol(s) to "${universe.name}"`, 'success');
       setAddSymbolsInput(prev => ({ ...prev, [universe.id]: '' }));
       await loadUniverses();
@@ -254,7 +254,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
   async function handleRemoveSymbol(universe: Universe, symbol: string) {
     const updatedSymbols = universe.symbols.filter(s => s !== symbol);
     try {
-      await invoke('update_universe_symbols', { id: universe.id, symbols: updatedSymbols });
+      await invokeWithResilience('update_universe_symbols', { id: universe.id, symbols: updatedSymbols });
       addToast(`Removed ${symbol} from "${universe.name}"`, 'success');
       await loadUniverses();
     } catch (err) {
@@ -269,7 +269,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     if (symbols.length === 0) return;
 
     try {
-      await invoke('add_to_exclude_list', { id: universe.id, symbols });
+      await invokeWithResilience('add_to_exclude_list', { id: universe.id, symbols });
       addToast(`Added ${symbols.length} symbol(s) to exclude list`, 'success');
       setExcludeInput(prev => ({ ...prev, [universe.id]: '' }));
       await loadUniverses();
@@ -281,7 +281,7 @@ export function WatchlistTab({ onNavigate }: WatchlistTabProps) {
 
   async function handleDelete(id: string, name: string) {
     try {
-      await invoke('delete_universe', { id });
+      await invokeWithResilience('delete_universe', { id });
       addToast(`Deleted watchlist "${name}"`, 'success');
       setDeletingId(null);
       setExpandedIds(prev => {

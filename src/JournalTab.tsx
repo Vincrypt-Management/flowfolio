@@ -58,7 +58,7 @@ export function JournalTab() {
 
   async function calculateStats() {
     try {
-      const journalStats = await invoke<JournalStats>("calculate_journal_stats", { entries });
+      const journalStats = await invokeWithResilience<JournalStats>("calculate_journal_stats", { entries });
       if (isMountedRef.current) {
         setStats(journalStats);
       }
@@ -79,7 +79,7 @@ export function JournalTab() {
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
 
-      const entry = await invoke<JournalEntry>("create_journal_entry", {
+      const entry = await invokeWithResilience<JournalEntry>("create_journal_entry", {
         eventType: newEntry.event_type,
         title: newEntry.title,
         content: newEntry.content,
@@ -101,7 +101,7 @@ export function JournalTab() {
 
   async function exportToMarkdown() {
     try {
-      const markdown = await invoke<string>("export_journal_markdown", { entries });
+      const markdown = await invokeWithResilience<string>("export_journal_markdown", { entries });
       
       // Create a blob and download
       const blob = new Blob([markdown], { type: "text/markdown" });

@@ -1,5 +1,5 @@
 import { useState, memo } from "react";
-import { invoke } from "../services/tauri";
+import { invokeWithResilience } from "../services/apiClient";
 import { useToast } from "./Toast";
 import { useUserMode } from '../contexts/UserModeContext';
 import {
@@ -61,7 +61,7 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
   async function generateReview() {
     setIsLoading(true);
     try {
-      const result = await invoke<YearlyReview>("generate_yearly_review", {
+      const result = await invokeWithResilience<YearlyReview>("generate_yearly_review", {
         portfolioName,
         year: selectedYear,
       });

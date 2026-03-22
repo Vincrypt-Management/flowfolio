@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 import { DEFAULT_SYMBOLS } from '../shared/constants';
 import {
   Shield,
@@ -270,7 +270,7 @@ export function RiskDashboard({
     try {
       const results = await Promise.allSettled(
         holdings.map(async (h) => {
-          const metrics = await invoke<QuantMetrics>('get_quant_metrics_single', {
+          const metrics = await invokeWithResilience<QuantMetrics>('get_quant_metrics_single', {
             symbol: h.symbol,
           });
           return { symbol: h.symbol, weight: h.weight, metrics };

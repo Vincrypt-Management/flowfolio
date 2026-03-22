@@ -25,7 +25,7 @@ import {
   Target,
   Zap,
 } from 'lucide-react';
-import { invoke } from '../services/tauri';
+import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
 import './ComparisonMode.css';
@@ -131,11 +131,11 @@ export function ComparisonMode({
 
     try {
       const [histA, histB, quantA, quantB, prices] = await Promise.all([
-        invoke<HistoricalPrice[]>('get_historical_prices', { symbol: a, days: 365 }),
-        invoke<HistoricalPrice[]>('get_historical_prices', { symbol: b, days: 365 }),
-        invoke<QuantMetrics>('get_quant_metrics_single', { symbol: a }),
-        invoke<QuantMetrics>('get_quant_metrics_single', { symbol: b }),
-        invoke<Record<string, number>>('get_current_prices_batch', { symbols: [a, b] }),
+        invokeWithResilience<HistoricalPrice[]>('get_historical_prices', { symbol: a, days: 365 }),
+        invokeWithResilience<HistoricalPrice[]>('get_historical_prices', { symbol: b, days: 365 }),
+        invokeWithResilience<QuantMetrics>('get_quant_metrics_single', { symbol: a }),
+        invokeWithResilience<QuantMetrics>('get_quant_metrics_single', { symbol: b }),
+        invokeWithResilience<Record<string, number>>('get_current_prices_batch', { symbols: [a, b] }),
       ]);
 
       setPricesA(histA);
