@@ -23,6 +23,7 @@ use std::collections::HashMap;
 use services::{
     EnhancedMarketDataService,
     OpenRouterService,
+    LocalAiService,
     AlpacaService,
     FundamentalDataService,
 };
@@ -41,6 +42,9 @@ pub(crate) static ENHANCED_MARKET_SERVICE: Lazy<Arc<EnhancedMarketDataService>> 
 
 pub(crate) static OPENROUTER_SERVICE: Lazy<Arc<OpenRouterService>> =
     Lazy::new(|| Arc::new(OpenRouterService::new()));
+
+pub(crate) static LOCAL_AI_SERVICE: Lazy<Arc<LocalAiService>> =
+    Lazy::new(|| Arc::new(LocalAiService::new()));
 
 pub(crate) static ALPACA_SERVICE: Lazy<Arc<AlpacaService>> =
     Lazy::new(|| Arc::new(AlpacaService::new()));
@@ -241,6 +245,7 @@ pub fn run() {
             ai_generate_portfolio_insight,
             ai_chat_assistant,
             ai_is_configured,
+            ai_local_is_ready,
             // Alpaca Trading (backend-proxied)
             alpaca_get_account,
             alpaca_get_positions,
@@ -321,7 +326,7 @@ pub fn run() {
 
                 tracing::info!(path = %data_dir.display(), "Using data directory");
 
-                match init_local_database(data_dir).await {
+                match init_local_database(data_dir.clone()).await {
                     Ok(pool) => {
                         init_market_service_with_db(pool).await;
                         tracing::info!("Local database caching enabled");
@@ -331,6 +336,10 @@ pub fn run() {
                         tracing::warn!("Continuing with in-memory cache only");
                     }
                 }
+
+                // Kick off local model download + load in background.
+                let models_dir = data_dir.join("models");
+                LOCAL_AI_SERVICE.init_in_background(models_dir);
             });
 
             Ok(())

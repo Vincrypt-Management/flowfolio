@@ -2,13 +2,19 @@
 // Extracted from lib.rs
 
 use crate::services::openrouter_service::OpenRouterMessage;
-use crate::{OPENROUTER_SERVICE, get_user_tier};
+use crate::{OPENROUTER_SERVICE, LOCAL_AI_SERVICE, get_user_tier};
 use tauri::{AppHandle, Emitter};
 
-/// Check if AI service is configured
+/// Check if AI service is configured (OpenRouter or local model)
 #[tauri::command]
 pub fn ai_is_configured() -> bool {
-    OPENROUTER_SERVICE.is_configured()
+    OPENROUTER_SERVICE.is_configured() || LOCAL_AI_SERVICE.is_ready()
+}
+
+/// Check if local AI model is downloaded and ready
+#[tauri::command]
+pub fn ai_local_is_ready() -> bool {
+    LOCAL_AI_SERVICE.is_ready()
 }
 
 /// Chat with AI assistant (proxied through backend)
@@ -23,7 +29,13 @@ pub async fn ai_chat(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    OPENROUTER_SERVICE.chat(messages, model, temperature, max_tokens).await
+    match OPENROUTER_SERVICE.chat(messages.clone(), model, temperature, max_tokens).await {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
+            LOCAL_AI_SERVICE.chat(messages).await
+        }
+    }
 }
 
 /// Generate portfolio insight using AI
@@ -33,7 +45,17 @@ pub async fn ai_generate_portfolio_insight(portfolio_data: serde_json::Value) ->
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data).await
+    match OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data.clone()).await {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
+            let msg = crate::services::openrouter_service::OpenRouterMessage {
+                role: "user".to_string(),
+                content: format!("Analyze this portfolio and provide insights:\n{}", serde_json::to_string_pretty(&portfolio_data).unwrap_or_default()),
+            };
+            LOCAL_AI_SERVICE.chat(vec![msg]).await
+        }
+    }
 }
 
 /// Chat with AI assistant (simple conversation)
@@ -46,7 +68,18 @@ pub async fn ai_chat_assistant(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    OPENROUTER_SERVICE.chat_with_assistant(message, history).await
+    match OPENROUTER_SERVICE.chat_with_assistant(message.clone(), history.clone()).await {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
+            let mut messages = history;
+            messages.push(crate::services::openrouter_service::OpenRouterMessage {
+                role: "user".to_string(),
+                content: message,
+            });
+            LOCAL_AI_SERVICE.chat(messages).await
+        }
+    }
 }
 
 /// AI streaming chat
