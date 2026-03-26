@@ -342,7 +342,7 @@ pub fn run() {
                 // Fall back to downloading into the app data directory on first run.
                 let download_dir = data_dir.join("models");
                 let bundled_model = app_handle.path().resource_dir().ok()
-                    .map(|r| r.join("models").join("gemma-3-1b-it-Q4_K_M.gguf"));
+                    .map(|r| r.join("models").join("Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"));
                 LOCAL_AI_SERVICE.init_in_background(bundled_model, download_dir);
             });
 

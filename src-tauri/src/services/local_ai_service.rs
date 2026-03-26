@@ -1,7 +1,8 @@
-// Local AI Service — native Gemma 3 1B inference via llama.cpp
+// Local AI Service — native Qwen2.5-1.5B inference via llama.cpp
 //
 // No Ollama, no external process. On first use:
-//   1. Downloads `gemma-3-1b-it-Q4_K_M.gguf` (~700 MB) from HuggingFace.
+//   1. Downloads `Qwen2.5-1.5B-Instruct-Q4_K_M.gguf` (~1 GB) from HuggingFace.
+//      Model is Apache 2.0 — no login or token required.
 //   2. Loads the GGUF into llama.cpp (Metal-accelerated on macOS).
 //   3. Runs inference in a dedicated blocking thread (actor pattern).
 //
@@ -25,8 +26,8 @@ use super::openrouter_service::OpenRouterMessage;
 // ─── Model source ─────────────────────────────────────────────────────────────
 
 const MODEL_URL: &str =
-    "https://huggingface.co/bartowski/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf";
-const MODEL_FILENAME: &str = "gemma-3-1b-it-Q4_K_M.gguf";
+    "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf";
+const MODEL_FILENAME: &str = "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf";
 const MAX_NEW_TOKENS: usize = 512;
 
 // ─── Actor message ────────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ impl LocalAiService {
             );
         }
 
-        let prompt = format_gemma_prompt(&messages);
+        let prompt = format_chatml_prompt(&messages);
 
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         {
@@ -201,8 +202,8 @@ fn run_inference(model: &LlamaModel, prompt: &str) -> Result<String, String> {
 
     let mut response = String::new();
     for token in completions.into_strings() {
-        // Stop on Gemma end-of-turn marker.
-        if token.contains("<end_of_turn>") {
+        // Stop on ChatML end-of-message marker (Qwen2.5 / ChatML format).
+        if token.contains("<|im_end|>") {
             break;
         }
         response.push_str(&token);
@@ -217,26 +218,22 @@ fn run_inference(model: &LlamaModel, prompt: &str) -> Result<String, String> {
 
 // ─── Chat template ────────────────────────────────────────────────────────────
 
-/// Format messages into Gemma 3 instruct template.
+/// Format messages into ChatML format (Qwen2.5 / OpenChat standard).
 ///
 /// Format:
-///   <start_of_turn>system\n{sys}<end_of_turn>\n
-///   <start_of_turn>user\n{msg}<end_of_turn>\n
-///   <start_of_turn>model\n          ← model fills from here
-fn format_gemma_prompt(messages: &[OpenRouterMessage]) -> String {
+///   <|im_start|>system\n{sys}<|im_end|>\n
+///   <|im_start|>user\n{msg}<|im_end|>\n
+///   <|im_start|>assistant\n          ← model fills from here
+fn format_chatml_prompt(messages: &[OpenRouterMessage]) -> String {
     let mut out = String::new();
     for msg in messages {
-        let tag = match msg.role.as_str() {
-            "assistant" => "model",
-            other => other, // "user" | "system"
-        };
         out.push_str(&format!(
-            "<start_of_turn>{}\n{}<end_of_turn>\n",
-            tag, msg.content
+            "<|im_start|>{}\n{}<|im_end|>\n",
+            msg.role, msg.content
         ));
     }
-    // Prompt model to complete.
-    out.push_str("<start_of_turn>model\n");
+    // Prompt model to start its reply.
+    out.push_str("<|im_start|>assistant\n");
     out
 }
 
@@ -258,7 +255,7 @@ async fn download_if_needed(client: &Client, dest: &PathBuf) -> Result<(), Strin
             .map_err(|e| format!("Failed to create models dir: {e}"))?;
     }
 
-    eprintln!("[LOCAL_AI] Downloading {MODEL_FILENAME} (~700 MB)...");
+    eprintln!("[LOCAL_AI] Downloading {MODEL_FILENAME} (~1 GB)...");
     eprintln!("[LOCAL_AI] Source: {MODEL_URL}");
 
     let resp = client

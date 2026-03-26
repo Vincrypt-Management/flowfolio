@@ -12,9 +12,10 @@ const MODEL_DIR = path.join(ROOT, 'src-tauri', 'models');
 
 const MODELS = [
   {
-    filename : 'gemma-3-1b-it-Q4_K_M.gguf',
-    url      : 'https://huggingface.co/bartowski/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf',
-    sizeMB   : 700,
+    // Qwen2.5-1.5B-Instruct — Apache 2.0, no HuggingFace login required
+    filename : 'Qwen2.5-1.5B-Instruct-Q4_K_M.gguf',
+    url      : 'https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf',
+    sizeMB   : 1000,
   },
 ];
 
