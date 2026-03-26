@@ -11,8 +11,6 @@ import {
   Easing,
 } from 'remotion';
 import { colors, fonts, radius } from './styles';
-import { AudioTrack } from './audio/AudioTrack';
-import { buildIGReelAudio, buildTrendyIGAudio } from './audio/SynthEngine';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 import { hookVariants, pickIGFeatures, taglineVariants } from './lib/contentPools';
 
@@ -564,19 +562,10 @@ export const FlowFolioIntroIG: React.FC<IGProps> = ({ seed }) => {
     }));
   }, [rng]);
 
-  const audioSeed = rng.seed;
-  // Use trendy beat for even seeds, classic for odd (variety across renders)
-  const audioGen = useMemo(
-    () => (dur: number) => audioSeed % 2 === 0 ? buildTrendyIGAudio(dur, audioSeed) : buildIGReelAudio(dur, audioSeed),
-    [audioSeed]
-  );
-
   return (
     <VideoSeedContext.Provider value={rng}>
       <AbsoluteFill style={{ backgroundColor: colors.bg, fontFamily: fonts.sans, overflow: 'hidden' }}>
         <IGBackground />
-        <AudioTrack generator={audioGen} volume={0.8} fadeInFrames={20} fadeOutFrames={30} />
-
         {/* Hook — problem statement (0-5.5s) */}
         <Sequence from={0} durationInFrames={330}>
           <IGHook line1={hookVariant.line1} line2={hookVariant.line2} />

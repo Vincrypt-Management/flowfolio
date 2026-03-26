@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 /**
- * Post v0.3.1 security carousel to Instagram.
- * Usage: npx tsx scripts/instagram/post-security-carousel-031.ts
+ * Post quant metrics educational carousel to Instagram.
+ * Usage: npx tsx scripts/instagram/post-quant-carousel-032.ts
  */
 import dotenv from 'dotenv';
 import path from 'path';
@@ -16,31 +16,31 @@ dotenv.config({ path: path.join(ROOT, '.env') });
 import { launchBrowser, login, saveSession } from './auth';
 import { uploadReel } from './upload';
 
-const CAROUSEL_DIR = path.join(ROOT, 'out', 'security-carousel-031');
+const CAROUSEL_DIR = path.join(ROOT, 'out', 'quant-carousel-032');
 
-const CAPTION = `Your portfolio tracker is selling your data. Here's what we did about it.
+const CAPTION = `been burned by a strategy that looked great on paper but fell apart live? these 5 numbers tell you why before it happens
 
-FlowFolio v0.3.1 — the security & stability update.
+most people just watch returns. but returns without context are basically useless — a fund that made 40% one year and lost 35% the next isn't impressive, it's a trap.
 
-Most free investment tools store your holdings, trades, and API keys on their servers. That data gets sold to hedge funds who trade against retail investors.
+here's what actually matters:
 
-We took a different approach:
+→ sharpe ratio tells you if you're being compensated for the risk you're taking. below 1.0 and you're not.
 
-1. Stronghold Vault — API keys encrypted with IOTA Stronghold + Argon2 KDF. No plain-text secrets on disk.
+→ max drawdown shows the worst case you'd have had to sit through. knowing this before you invest changes how you size positions entirely.
 
-2. E2E test suite — Playwright validates every user flow across Linux, macOS, and Windows before release.
+→ sortino ratio is sharpe's smarter sibling — it only counts the bad volatility against you. upside surprises shouldn't be penalized.
 
-3. Zero-crash architecture — dynamic plugin loading ensures the app stays responsive even when native modules are unavailable.
+→ beta measures how much market exposure you actually have. a lot of "diversified" portfolios are just 1.3x S&P500 in disguise.
 
-4. Local-first Pro — all features unlocked without cloud accounts or paywalls. Your analysis runs on your hardware.
+→ profit factor catches strategies that win often but lose big. a 70% win rate sounds great until the 30% wipes out everything.
 
-5. 24 product gaps mapped — comprehensive audit with a clear roadmap to production-ready.
+FlowFolio calculates all of this automatically when you backtest or score a strategy. no spreadsheets, no formulas to copy from reddit.
 
-Your portfolio data is valuable. Keep it on your machine.
+link in bio if you want to try it.
 
-Download: link in bio
+—
 
-#FlowFolio #InvestSmart #PortfolioManagement #FinTech #CyberSecurity #PrivacyFirst #DataPrivacy #EncryptedVault #LocalFirst #RustLang #TauriApp #DesktopApp #QuantTrading #BuildInPublic #IndieHacker #OpenSource #InvestmentApp #AppDev #FactorInvesting #SecurityFirst`;
+#quanttrading #investingsmart #portfoliomanagement #riskmanagement #backtesting #sharperation #stockmarket #retailinvesting #tradingstrategy #financialeducation #personalfinance #stocktrading #dividendinvesting #wealthbuilding #fintech #indieapp #buildingpublicly #passiveincome #investingforbeginners #portfoliooptimization`;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 15000;
@@ -56,14 +56,14 @@ async function attempt(username: string, password: string, attemptNum: number): 
     }
     await saveSession(context);
 
-    console.log('Uploading v0.3.1 security carousel (8 slides)...');
+    console.log('Uploading quant metrics carousel (8 slides)...');
     const success = await uploadReel(page, {
       mediaPath: CAROUSEL_DIR,
       caption: CAPTION,
     });
 
     if (success) {
-      console.log('\nv0.3.1 security carousel posted successfully!');
+      console.log('\nQuant carousel posted successfully!');
     } else {
       console.error('\nUpload returned false — check debug screenshots');
     }
@@ -83,18 +83,18 @@ async function main() {
     const slide = path.join(CAROUSEL_DIR, `slide-${i}.png`);
     if (!fs.existsSync(slide)) {
       console.error(`Missing slide: ${slide}`);
-      console.error('Run: for i in $(seq 0 7); do npx remotion still src/remotion/index.ts "SecurityCarousel031-Slide${i}" "out/security-carousel-031/slide-${i}.png" --frame=45; done');
+      console.error('Run: for i in $(seq 0 7); do npx remotion still src/remotion/index.ts "QuantCarousel032-Slide${i}" "out/quant-carousel-032/slide-${i}.png" --frame=45; done');
       process.exit(1);
     }
   }
-  console.log('All 8 carousel slides found.');
+  console.log('All 8 slides found.');
 
   const username = process.env.IG_USERNAME;
   const password = process.env.IG_PASSWORD;
 
   if (!username || !password) {
     console.error('Missing IG_USERNAME or IG_PASSWORD in .env');
-    console.log('\nTo post manually, upload the carousel from:', CAROUSEL_DIR);
+    console.log('\nCarousel directory:', CAROUSEL_DIR);
     console.log('\nCaption:\n');
     console.log(CAPTION);
     process.exit(1);

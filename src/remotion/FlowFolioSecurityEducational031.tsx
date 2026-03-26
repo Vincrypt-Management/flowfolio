@@ -18,20 +18,26 @@ import {
   staticFile,
 } from 'remotion';
 import { Audio } from '@remotion/media';
-import { colors, fonts, radius, gradients } from './styles';
-import { AudioTrack } from './audio/AudioTrack';
-import { buildIntroAudio } from './audio/SynthEngine';
+import { colors, fonts, radius } from './styles';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 
 // ─── Constants ──────────────────────────────────────────────
 
-const VO_SEGMENTS = [
-  { id: 'hook',         startFrame: 0,    durationInFrames: 360 },
-  { id: 'vault',        startFrame: 380,  durationInFrames: 480 },
-  { id: 'testing',      startFrame: 880,  durationInFrames: 420 },
-  { id: 'architecture', startFrame: 1320, durationInFrames: 380 },
-  { id: 'local',        startFrame: 1720, durationInFrames: 440 },
-  { id: 'cta',          startFrame: 2180, durationInFrames: 380 },
+export interface VoSegment {
+  id: string;
+  startFrame: number;
+  audioDur: number;   // actual audio duration in frames
+  visualDur: number;  // visual scene duration (audioDur + overlap/buffer)
+}
+
+// Fallback timing used when voSegments prop is absent (audio not yet generated)
+const FALLBACK_SEGMENTS: VoSegment[] = [
+  { id: 'hook',         startFrame: 0,    audioDur: 360, visualDur: 370 },
+  { id: 'vault',        startFrame: 380,  audioDur: 480, visualDur: 490 },
+  { id: 'testing',      startFrame: 880,  audioDur: 420, visualDur: 430 },
+  { id: 'architecture', startFrame: 1320, audioDur: 380, visualDur: 390 },
+  { id: 'local',        startFrame: 1720, audioDur: 440, visualDur: 450 },
+  { id: 'cta',          startFrame: 2180, audioDur: 380, visualDur: 410 },
 ];
 
 // ─── Background ─────────────────────────────────────────────
@@ -120,7 +126,7 @@ const Glass: React.FC<{
 
 // ─── Scene: Hook ────────────────────────────────────────────
 
-const HookScene: React.FC = () => {
+const HookScene: React.FC<{ dur: number }> = ({ dur }) => {
   const frame = useCurrentFrame();
 
   const iconOp = interpolate(frame, [5, 35], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
@@ -130,7 +136,7 @@ const HookScene: React.FC = () => {
   const t2Op = interpolate(frame, [80, 110], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const t2Y = interpolate(frame, [80, 110], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
   const cardOp = interpolate(frame, [130, 170], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const fadeOut = interpolate(frame, [310, 350], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const fadeOut = interpolate(frame, [dur - 60, dur - 20], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   return (
     <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', padding: '0 64px', opacity: fadeOut }}>
@@ -166,7 +172,7 @@ const HookScene: React.FC = () => {
 
 // ─── Scene: Vault ───────────────────────────────────────────
 
-const VaultScene: React.FC = () => {
+const VaultScene: React.FC<{ dur: number }> = ({ dur }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -177,7 +183,7 @@ const VaultScene: React.FC = () => {
   const badge1Op = interpolate(frame, [160, 190], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const badge2Op = interpolate(frame, [200, 230], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const badge3Op = interpolate(frame, [240, 270], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const fadeOut = interpolate(frame, [430, 470], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const fadeOut = interpolate(frame, [dur - 60, dur - 20], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   const badges = [
     { label: 'IOTA Stronghold', op: badge1Op },
@@ -229,13 +235,13 @@ const VaultScene: React.FC = () => {
 
 // ─── Scene: Testing ─────────────────────────────────────────
 
-const TestingScene: React.FC = () => {
+const TestingScene: React.FC<{ dur: number }> = ({ dur }) => {
   const frame = useCurrentFrame();
 
   const iconOp = interpolate(frame, [5, 35], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const titleOp = interpolate(frame, [30, 60], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const titleY = interpolate(frame, [30, 60], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
-  const fadeOut = interpolate(frame, [370, 410], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const fadeOut = interpolate(frame, [dur - 60, dur - 20], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   const platforms = ['Linux', 'macOS', 'Windows'];
 
@@ -284,13 +290,13 @@ const TestingScene: React.FC = () => {
 
 // ─── Scene: Architecture ────────────────────────────────────
 
-const ArchScene: React.FC = () => {
+const ArchScene: React.FC<{ dur: number }> = ({ dur }) => {
   const frame = useCurrentFrame();
 
   const iconOp = interpolate(frame, [5, 35], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const titleOp = interpolate(frame, [30, 60], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const titleY = interpolate(frame, [30, 60], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
-  const fadeOut = interpolate(frame, [330, 370], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const fadeOut = interpolate(frame, [dur - 60, dur - 20], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   const stats = [
     { value: '5', label: 'Bugs Fixed', color: colors.blue },
@@ -342,13 +348,13 @@ const ArchScene: React.FC = () => {
 
 // ─── Scene: Local-First ─────────────────────────────────────
 
-const LocalScene: React.FC = () => {
+const LocalScene: React.FC<{ dur: number }> = ({ dur }) => {
   const frame = useCurrentFrame();
 
   const iconOp = interpolate(frame, [5, 35], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const titleOp = interpolate(frame, [30, 60], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const titleY = interpolate(frame, [30, 60], [10, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
-  const fadeOut = interpolate(frame, [390, 430], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const fadeOut = interpolate(frame, [dur - 60, dur - 20], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   const features = [
     { label: '30+ Quant Metrics', delay: 160 },
@@ -404,7 +410,7 @@ const LocalScene: React.FC = () => {
 
 // ─── Scene: CTA ─────────────────────────────────────────────
 
-const CTAScene: React.FC = () => {
+const CTAScene: React.FC<{ dur: number }> = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -445,69 +451,55 @@ const CTAScene: React.FC = () => {
   );
 };
 
-// ─── Main Composition ───────────────────────────────────────
-// Timeline (60fps):
-//   Hook:          0-360    (6s)
-//   Vault:         380-860  (8s)
-//   Testing:       880-1300 (7s)
-//   Architecture: 1320-1700 (6.3s)
-//   Local-First:  1720-2160 (7.3s)
-//   CTA:          2180-2560 (6.3s)
-// Total: ~42.7s (2560 frames)
+// ─── Scene renderer ─────────────────────────────────────────
 
-export const SecurityEducational031: React.FC<{ seed?: number }> = ({ seed }) => {
+function renderScene(seg: VoSegment): React.ReactNode {
+  switch (seg.id) {
+    case 'hook':         return <HookScene dur={seg.visualDur} />;
+    case 'vault':        return <VaultScene dur={seg.visualDur} />;
+    case 'testing':      return <TestingScene dur={seg.visualDur} />;
+    case 'architecture': return <ArchScene dur={seg.visualDur} />;
+    case 'local':        return <LocalScene dur={seg.visualDur} />;
+    case 'cta':          return <CTAScene dur={seg.visualDur} />;
+    default:             return null;
+  }
+}
+
+// ─── Main Composition ───────────────────────────────────────
+// Timeline is driven by actual audio durations via calculateMetadata in Root.tsx.
+// FALLBACK_SEGMENTS are used only when audio hasn't been generated yet.
+
+export const SecurityEducational031: React.FC<{ seed?: number; voSegments?: VoSegment[] }> = ({ seed, voSegments }) => {
   const rng = useMemo(() => new VideoRNG(seed), [seed]);
-  const audioGen = useMemo(
-    () => (dur: number) => buildIntroAudio(dur, seed ?? 42),
-    [seed],
-  );
+  const segments = voSegments ?? FALLBACK_SEGMENTS;
 
   return (
     <VideoSeedContext.Provider value={rng}>
       <AbsoluteFill style={{ backgroundColor: colors.bg, fontFamily: fonts.sans, overflow: 'hidden' }}>
         <AmbientBg />
 
-        {/* ── Voiceover audio ── */}
-        {VO_SEGMENTS.map((seg) => (
-          <Sequence key={seg.id} from={seg.startFrame} durationInFrames={seg.durationInFrames}>
+        {/* ── Voiceover audio — duration matches actual audio file ── */}
+        {segments.map((seg) => (
+          <Sequence key={seg.id} from={seg.startFrame} durationInFrames={seg.audioDur}>
             <Audio
               src={staticFile(`audio/vo/security031/${seg.id}.wav`)}
               volume={(f) => {
                 const fadeIn = interpolate(f, [0, 5], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-                const fadeOut = interpolate(f, [seg.durationInFrames - 8, seg.durationInFrames], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+                const fadeOut = interpolate(f, [seg.audioDur - 8, seg.audioDur], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
                 return 0.9 * Math.min(fadeIn, fadeOut);
               }}
             />
           </Sequence>
         ))}
 
-        {/* ── Ambient synth music (ducked under VO) ── */}
-        <AudioTrack generator={audioGen} volume={0.15} fadeInFrames={60} fadeOutFrames={60} />
 
-        {/* ── Visual scenes ── */}
-        <Sequence from={0} durationInFrames={370}>
-          <HookScene />
-        </Sequence>
 
-        <Sequence from={380} durationInFrames={490}>
-          <VaultScene />
-        </Sequence>
-
-        <Sequence from={880} durationInFrames={430}>
-          <TestingScene />
-        </Sequence>
-
-        <Sequence from={1320} durationInFrames={390}>
-          <ArchScene />
-        </Sequence>
-
-        <Sequence from={1720} durationInFrames={450}>
-          <LocalScene />
-        </Sequence>
-
-        <Sequence from={2180} durationInFrames={380}>
-          <CTAScene />
-        </Sequence>
+        {/* ── Visual scenes — duration follows audio ── */}
+        {segments.map((seg) => (
+          <Sequence key={seg.id} from={seg.startFrame} durationInFrames={seg.visualDur}>
+            {renderScene(seg)}
+          </Sequence>
+        ))}
       </AbsoluteFill>
     </VideoSeedContext.Provider>
   );

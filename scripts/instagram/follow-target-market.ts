@@ -342,7 +342,7 @@ async function followUser(
       if (/[Kk]$/.test(raw)) count *= 1000;
       if (/[Mm]$/.test(raw)) count *= 1000000;
       if (count > 800000) { console.log(`  @${username}: ${match[1]} followers — brand/celeb, skip`); return 'skipped'; }
-      if (count < 20)     { console.log(`  @${username}: ${match[1]} followers — inactive/bot, skip`); return 'skipped'; }
+      if (count < 500)    { console.log(`  @${username}: ${match[1]} followers — too few (<500), skip`); return 'skipped'; }
     }
 
     // Click Follow button (exact text match only)

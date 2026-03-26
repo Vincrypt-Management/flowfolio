@@ -11,8 +11,6 @@ import {
   Easing,
 } from 'remotion';
 import { colors, fonts, radius } from './styles';
-import { AudioTrack } from './audio/AudioTrack';
-import { buildIGDemoAudio, buildTrendyIGAudio } from './audio/SynthEngine';
 import { VideoRNG, VideoSeedContext } from './lib/uniqueness';
 import {
   hookVariants,
@@ -519,12 +517,6 @@ export const FlowFolioShowcaseIG: React.FC<IGDemoProps> = ({ seed }) => {
   const beatOptimizer = useMemo(() => pickStoryBeat(rng, 'optimizer'), [rng]);
   const beatChat = useMemo(() => pickStoryBeat(rng, 'ai-chat'), [rng]);
 
-  const audioSeed = rng.seed;
-  const audioGen = useMemo(
-    () => (dur: number) => audioSeed % 2 === 0 ? buildTrendyIGAudio(dur, audioSeed) : buildIGDemoAudio(dur, audioSeed),
-    [audioSeed]
-  );
-
   // Timeline (60fps):
   // Hook:          0-300     (5s)
   // Logo:        280-560     (4.7s)
@@ -540,7 +532,6 @@ export const FlowFolioShowcaseIG: React.FC<IGDemoProps> = ({ seed }) => {
     <VideoSeedContext.Provider value={rng}>
       <AbsoluteFill style={{ backgroundColor: colors.bg, fontFamily: fonts.sans, overflow: 'hidden' }}>
         <IGDemoBackground />
-        <AudioTrack generator={audioGen} volume={0.8} fadeInFrames={20} fadeOutFrames={30} />
 
         {/* Hook */}
         <Sequence from={0} durationInFrames={300}>
