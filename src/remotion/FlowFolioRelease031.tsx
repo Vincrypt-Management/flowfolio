@@ -206,7 +206,7 @@ const LogoScene: React.FC = () => {
 };
 
 // ─── Scene: Feature Cards (scrolling list) ───────────────
-const FeatureListScene: React.FC<{ features: typeof FEATURES_BATCH1; batch: number }> = ({ features, batch }) => {
+const FeatureListScene: React.FC<{ features: { label: string; desc: string; icon: string; color: string }[]; batch: number }> = ({ features, batch }) => {
   const frame = useCurrentFrame();
   const fadeOut = interpolate(frame, [340, 380], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 

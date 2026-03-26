@@ -38,6 +38,7 @@ use services::{
     FundamentalDataService,
     FundamentalMetrics,
     openrouter_service::OpenRouterMessage,
+    LocalAiService,
 };
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -55,6 +56,9 @@ lazy_static::lazy_static! {
 
     static ref OPENROUTER_SERVICE: Arc<OpenRouterService> =
         Arc::new(OpenRouterService::new());
+
+    static ref LOCAL_AI_SERVICE: Arc<LocalAiService> =
+        Arc::new(LocalAiService::new());
 
     static ref ALPACA_SERVICE: Arc<AlpacaService> =
         Arc::new(AlpacaService::new());
@@ -2548,7 +2552,7 @@ async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Ve
 
 // ==================== AI / OPENROUTER COMMANDS ====================
 
-/// Chat with AI assistant (proxied through backend)
+/// Chat with AI assistant (proxied through backend, falls back to local Ollama)
 #[tauri::command]
 async fn ai_chat(
     messages: Vec<OpenRouterMessage>,
@@ -2560,7 +2564,13 @@ async fn ai_chat(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    OPENROUTER_SERVICE.chat(messages, model, temperature, max_tokens).await
+    match OPENROUTER_SERVICE.chat(messages.clone(), model, temperature, max_tokens).await {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            eprintln!("[AI] OpenRouter failed: {}. Trying local model.", e);
+            LOCAL_AI_SERVICE.chat(messages).await
+        }
+    }
 }
 
 /// Generate portfolio insight using AI
@@ -2570,7 +2580,23 @@ async fn ai_generate_portfolio_insight(portfolio_data: serde_json::Value) -> Res
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data).await
+    match OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data.clone()).await {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            eprintln!("[AI] OpenRouter failed: {}. Trying local model.", e);
+            let messages = vec![
+                OpenRouterMessage {
+                    role: "system".to_string(),
+                    content: "You are a financial advisor AI assistant. Analyze portfolio data and provide concise, actionable insights about diversification, risk, and opportunities.".to_string(),
+                },
+                OpenRouterMessage {
+                    role: "user".to_string(),
+                    content: format!("Analyze this portfolio and provide insights:\n{}", serde_json::to_string_pretty(&portfolio_data).unwrap_or_default()),
+                },
+            ];
+            LOCAL_AI_SERVICE.chat(messages).await
+        }
+    }
 }
 
 /// Chat with AI assistant (simple conversation)
@@ -2583,13 +2609,31 @@ async fn ai_chat_assistant(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    OPENROUTER_SERVICE.chat_with_assistant(message, history).await
+    match OPENROUTER_SERVICE.chat_with_assistant(message.clone(), history.clone()).await {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            eprintln!("[AI] OpenRouter failed: {}. Trying local model.", e);
+            let mut messages = vec![OpenRouterMessage {
+                role: "system".to_string(),
+                content: "You are Flowfolio AI, a helpful financial assistant. Provide clear, concise answers about portfolio management, investments, and financial planning.".to_string(),
+            }];
+            messages.extend(history);
+            messages.push(OpenRouterMessage { role: "user".to_string(), content: message });
+            LOCAL_AI_SERVICE.chat(messages).await
+        }
+    }
 }
 
-/// Check if AI service is configured
+/// Check if AI service is configured (OpenRouter or local model)
 #[tauri::command]
 fn ai_is_configured() -> bool {
-    OPENROUTER_SERVICE.is_configured()
+    OPENROUTER_SERVICE.is_configured() || LOCAL_AI_SERVICE.is_ready()
+}
+
+/// Check if the local AI model is ready for offline inference
+#[tauri::command]
+fn ai_local_is_ready() -> bool {
+    LOCAL_AI_SERVICE.is_ready()
 }
 
 // ==================== ALPACA TRADING COMMANDS ====================
@@ -3154,6 +3198,7 @@ pub fn run() {
             ai_generate_portfolio_insight,
             ai_chat_assistant,
             ai_is_configured,
+            ai_local_is_ready,
             // Alpaca Trading (backend-proxied)
             alpaca_get_account,
             alpaca_get_positions,
@@ -3245,7 +3290,13 @@ pub fn run() {
                     }
                 }
 
-
+                // Start local AI model download + load in the background (non-blocking).
+                // Model stored alongside the SQLite cache in the app data directory.
+                let models_dir = app_handle.path().app_data_dir()
+                    .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+                    .join("models");
+                LOCAL_AI_SERVICE.init_in_background(models_dir);
+                eprintln!("[INFO] [app] Local AI initializing in background (gemma-3-1b-it GGUF, no Ollama required)");
             });
             
             Ok(())

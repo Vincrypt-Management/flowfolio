@@ -1,6 +1,6 @@
 [package]
 name = "flowfolio"
-version = "0.3.1"
+version = "0.4.0"
 description = "FlowFolio - AI-Powered Vibe-Based Investing"
 authors = ["evintleovonzko"]
 edition = "2021"
@@ -63,6 +63,9 @@ backoff = { version = "0.4", features = ["tokio"] }     # Exponential backoff fo
 metrics = "0.24"                                         # Performance metrics collection
 once_cell = "1.20"                                       # Thread-safe lazy initialization
 arc-swap = "1.7"                                         # Lock-free Arc swapping
+
+# Local AI inference — GGUF models via llama.cpp (no Ollama required)
+llama_cpp = { version = "0.3", features = ["metal"] }  # macOS Metal GPU acceleration
 
 # Encryption for secure env storage in release builds (dual-layer 512-bit equivalent)
 aes-gcm = "0.10"                                         # AES-256-GCM encryption (layer 1)

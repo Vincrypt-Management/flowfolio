@@ -71,7 +71,6 @@ impl OpenRouterService {
             .or_else(|_| std::env::var("VITE_DEFAULT_LLM_MODEL"))
             .unwrap_or_else(|_| "anthropic/claude-3-sonnet-20240229".to_string());
 
-        // Debug: Log API key status
         eprintln!("[DEBUG] [openrouter] API key configured: {}", api_key.is_some());
         eprintln!("[DEBUG] [openrouter] API URL: {}", api_url);
         eprintln!("[DEBUG] [openrouter] Default model: {}", default_model);
@@ -118,7 +117,7 @@ impl OpenRouterService {
             stream: Some(false),
         };
 
-        eprintln!("[INFO] [openrouter] Sending chat request to model: {} (max_tokens: {:?})", 
+        eprintln!("[INFO] [openrouter] Sending chat request to model: {} (max_tokens: {:?})",
             model_name, request.max_tokens);
 
         let response = self.client
@@ -139,8 +138,7 @@ impl OpenRouterService {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             eprintln!("[ERROR] [openrouter] API error {}: {}", status, error_text);
-            
-            // Provide more helpful error messages
+
             let user_error = match status.as_u16() {
                 401 => "Invalid API key. Please check your OPENROUTER_API_KEY (or VITE_OPENROUTER_API_KEY).".to_string(),
                 402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
@@ -159,8 +157,7 @@ impl OpenRouterService {
 
         if let Some(choice) = result.choices.first() {
             let content = choice.message.content.clone();
-            
-            // Check for empty content
+
             if content.trim().is_empty() {
                 eprintln!("[WARN] [openrouter] Model returned empty content. Finish reason: {:?}", choice.finish_reason);
                 return Err(format!(
@@ -168,8 +165,8 @@ impl OpenRouterService {
                     choice.finish_reason
                 ));
             }
-            
-            eprintln!("[INFO] [openrouter] Response received, tokens used: {:?}, content length: {} chars", 
+
+            eprintln!("[INFO] [openrouter] Response received, tokens used: {:?}, content length: {} chars",
                 result.usage, content.len());
             Ok(content)
         } else {
@@ -318,6 +315,7 @@ mod tests {
     #[test]
     fn default_model_is_claude_sonnet() {
         std::env::remove_var("VITE_DEFAULT_LLM_MODEL");
+        std::env::remove_var("DEFAULT_LLM_MODEL");
         let svc = OpenRouterService::new();
         assert_eq!(svc.default_model, "anthropic/claude-3-sonnet-20240229");
     }
