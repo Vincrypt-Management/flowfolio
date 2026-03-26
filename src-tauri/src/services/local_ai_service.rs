@@ -64,19 +64,40 @@ impl LocalAiService {
         self.ready.load(Ordering::Relaxed)
     }
 
-    /// Kick off download + load in background. Returns immediately.
-    /// Accepts the directory where the GGUF will be stored.
-    pub fn init_in_background(&self, models_dir: PathBuf) {
+    /// Kick off load (and optional download) in background. Returns immediately.
+    ///
+    /// - `bundled_model`: path to the GGUF bundled inside the app resources (checked first).
+    /// - `download_dir`: directory to download the GGUF into if the bundled copy is absent.
+    pub fn init_in_background(&self, bundled_model: Option<PathBuf>, download_dir: PathBuf) {
         let client = self.client.clone();
         let ready = self.ready.clone();
         let tx_cell = self.tx.clone();
 
         tokio::spawn(async move {
-            // 1. Ensure model file is present.
-            let model_path = models_dir.join(MODEL_FILENAME);
-            if let Err(e) = download_if_needed(&client, &model_path).await {
-                eprintln!("[LOCAL_AI] Download failed: {e}");
-                return;
+            // 1. Resolve which model file to use — bundled copy first, download fallback.
+            let model_path = if let Some(ref bp) = bundled_model {
+                if let Ok(meta) = tokio::fs::metadata(bp).await {
+                    if meta.len() > 10 * 1_048_576 {
+                        eprintln!("[LOCAL_AI] Using bundled model: {:?}", bp);
+                        bp.clone()
+                    } else {
+                        eprintln!("[LOCAL_AI] Bundled model looks incomplete — will download.");
+                        download_dir.join(MODEL_FILENAME)
+                    }
+                } else {
+                    eprintln!("[LOCAL_AI] Bundled model not found — will download.");
+                    download_dir.join(MODEL_FILENAME)
+                }
+            } else {
+                download_dir.join(MODEL_FILENAME)
+            };
+
+            // Download only if the resolved path doesn't already exist.
+            if model_path != bundled_model.unwrap_or_default() {
+                if let Err(e) = download_if_needed(&client, &model_path).await {
+                    eprintln!("[LOCAL_AI] Download failed: {e}");
+                    return;
+                }
             }
 
             // 2. Load model in a blocking thread (llama.cpp is not async).

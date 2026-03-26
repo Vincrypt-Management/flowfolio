@@ -74,3 +74,4 @@ release/
 *.deb
 *.AppImage
 *.idsig
+src-tauri/models/*.gguf

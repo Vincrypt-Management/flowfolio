@@ -16,6 +16,8 @@
     "lint": "tsc --noEmit && eslint src/",
     "lint:fix": "eslint src/ --fix && prettier --write src/",
     "format": "prettier --write src/",
+    "download:models": "node scripts/download-models.mjs",
+    "tauri:build": "npm run download:models && tauri build --config src-tauri/tauri-release.conf.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

@@ -337,9 +337,13 @@ pub fn run() {
                     }
                 }
 
-                // Kick off local model download + load in background.
-                let models_dir = data_dir.join("models");
-                LOCAL_AI_SERVICE.init_in_background(models_dir);
+                // Kick off local model load/download in background.
+                // Prefer the copy bundled inside the app resources (installed with the app).
+                // Fall back to downloading into the app data directory on first run.
+                let download_dir = data_dir.join("models");
+                let bundled_model = app_handle.path().resource_dir().ok()
+                    .map(|r| r.join("models").join("gemma-3-1b-it-Q4_K_M.gguf"));
+                LOCAL_AI_SERVICE.init_in_background(bundled_model, download_dir);
             });
 
             Ok(())
