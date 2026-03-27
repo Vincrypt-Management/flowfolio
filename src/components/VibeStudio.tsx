@@ -1,10 +1,11 @@
-import { useReducer, useRef, useEffect, useMemo, memo } from "react";
+import { useReducer, useRef, useEffect, useMemo, memo, useState } from "react";
 import { useIsMounted } from '../hooks/useIsMounted';
 import { saveFile } from '../shared/utils/fileSystem';
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage, streamChat } from "../services/openrouter";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
 import { invokeWithResilience } from "../services/apiClient";
+import { isMobile } from "../services/tauri";
 import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
 import { useToast } from "./Toast";
@@ -254,6 +255,11 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
   const { addToast } = useToast();
   const { isAdvanced } = useUserMode();
   const [state, dispatch] = useReducer(vibeStudioReducer, initialVibeStudioState);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+
+  useEffect(() => {
+    isMobile().then(setIsMobileDevice);
+  }, []);
 
   const {
     prompt,
@@ -1748,7 +1754,7 @@ Be conversational but professional. Cite specific data points from the portfolio
             </div>
           </div>
 
-          {isAdvanced && chatMode && (
+          {isAdvanced && chatMode && !isMobileDevice && (
             <PremiumGate tier="ai">
             <div className="chat-section">
               <div className="chat-header">

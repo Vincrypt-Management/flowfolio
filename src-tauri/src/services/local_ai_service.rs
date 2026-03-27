@@ -46,10 +46,23 @@ pub struct LocalAiService {
     ready: Arc<AtomicBool>,
     /// Sender to the dedicated inference thread. None until model is loaded.
     tx: Arc<Mutex<Option<mpsc::SyncSender<InferenceMsg>>>>,
+    /// True on platforms where local AI is unsupported (e.g. Android).
+    disabled: bool,
 }
 
 impl LocalAiService {
     pub fn new() -> Self {
+        #[cfg(target_os = "android")]
+        {
+            tracing::info!("Local AI not available on Android — returning disabled service");
+            return Self {
+                client: Client::new(),
+                ready: Arc::new(AtomicBool::new(false)),
+                tx: Arc::new(Mutex::new(None)),
+                disabled: true,
+            };
+        }
+        #[cfg(not(target_os = "android"))]
         Self {
             client: Client::builder()
                 .timeout(std::time::Duration::from_secs(600))
@@ -57,6 +70,7 @@ impl LocalAiService {
                 .expect("Failed to create HTTP client"),
             ready: Arc::new(AtomicBool::new(false)),
             tx: Arc::new(Mutex::new(None)),
+            disabled: false,
         }
     }
 
@@ -70,6 +84,10 @@ impl LocalAiService {
     /// - `bundled_model`: path to the GGUF bundled inside the app resources (checked first).
     /// - `download_dir`: directory to download the GGUF into if the bundled copy is absent.
     pub fn init_in_background(&self, bundled_model: Option<PathBuf>, download_dir: PathBuf) {
+        if self.disabled {
+            tracing::info!("Local AI disabled on this platform — skipping init.");
+            return;
+        }
         let client = self.client.clone();
         let ready = self.ready.clone();
         let tx_cell = self.tx.clone();
@@ -154,6 +172,9 @@ impl LocalAiService {
 
     /// Send a chat request to the local model.
     pub async fn chat(&self, messages: Vec<OpenRouterMessage>) -> Result<String, String> {
+        if self.disabled {
+            return Err("Local AI is not available on this platform".to_string());
+        }
         if !self.is_ready() {
             return Err(
                 "Local AI not ready (model may still be downloading).".to_string()
