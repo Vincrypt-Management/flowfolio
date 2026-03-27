@@ -15,13 +15,33 @@ use tauri_plugin_store::StoreExt;
 
 // ==================== API KEY MANAGEMENT ====================
 
+/// Maps store key names (lowercase, used in api-keys.json) to the env-var names
+/// that data providers use when calling get_api_key(). These must stay in sync
+/// with API_KEY_NAMES in lib.rs and the key objects in SettingsPage.tsx.
+const STORE_TO_ENV_KEY: &[(&str, &str)] = &[
+    ("alpaca_key",        "ALPACA_API_KEY"),
+    ("alpaca_secret",     "ALPACA_SECRET_KEY"),
+    ("finnhub_key",       "FINNHUB_API_KEY"),
+    ("fmp_key",           "FMP_API_KEY"),
+    ("tiingo_key",        "TIINGO_API_KEY"),
+    ("twelve_data_key",   "TWELVE_DATA_API_KEY"),
+    ("polygon_key",       "POLYGON_API_KEY"),
+    ("alpha_vantage_key", "ALPHA_VANTAGE_API_KEY"),
+    ("openrouter_key",    "OPENROUTER_API_KEY"),
+];
+
 /// Write API keys from the store into RUNTIME_KEYS so data providers can use them.
-/// Only non-empty values are written.
+/// Only non-empty values are written. Store key names (e.g. "finnhub_key") are
+/// translated to env-var names (e.g. "FINNHUB_API_KEY") via STORE_TO_ENV_KEY.
 pub(crate) fn populate_runtime_keys(keys: HashMap<String, String>) {
     let mut guard = crate::RUNTIME_KEYS.write();
-    for (k, v) in keys {
-        if !v.is_empty() {
-            guard.insert(k, v);
+    for (store_key, value) in keys {
+        if value.is_empty() {
+            continue;
+        }
+        // Translate store name to env-var name; skip keys without a known mapping
+        if let Some(&(_, env_key)) = STORE_TO_ENV_KEY.iter().find(|&&(sk, _)| sk == store_key) {
+            guard.insert(env_key.to_string(), value);
         }
     }
 }
@@ -385,7 +405,9 @@ mod populate_keys_tests {
     fn test_populate_runtime_keys_from_map() {
         use crate::RUNTIME_KEYS;
         let mut keys = std::collections::HashMap::new();
-        keys.insert("FINNHUB_API_KEY".to_string(), "test_key_abc".to_string());
+        // Pass the store key name (lowercase); populate_runtime_keys translates it
+        // to the env-var name "FINNHUB_API_KEY" that data providers look up.
+        keys.insert("finnhub_key".to_string(), "test_key_abc".to_string());
         populate_runtime_keys(keys);
         let guard = RUNTIME_KEYS.read();
         assert_eq!(guard.get("FINNHUB_API_KEY"), Some(&"test_key_abc".to_string()));
