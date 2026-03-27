@@ -96,7 +96,7 @@ pub async fn ai_chat_stream(
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
 
-    let api_key = crate::core::encrypted_env::get_env_var("OPENROUTER_API_KEY")
+    let api_key = crate::get_api_key("OPENROUTER_API_KEY")
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
     let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".to_string());

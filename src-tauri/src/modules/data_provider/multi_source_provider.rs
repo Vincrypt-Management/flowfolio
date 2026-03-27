@@ -89,16 +89,15 @@ pub struct MultiSourceProvider {
 
 impl MultiSourceProvider {
     pub fn new() -> Self {
-        // Load API keys from environment
-        use crate::core::encrypted_env::get_env_var;
-        let alpaca_key = get_env_var("ALPACA_API_KEY");
-        let alpaca_secret = get_env_var("ALPACA_SECRET_KEY");
-        let polygon_key = get_env_var("POLYGON_API_KEY");
-        let alphavantage_key = get_env_var("ALPHA_VANTAGE_API_KEY");
-        let finnhub_key = get_env_var("FINNHUB_API_KEY");
-        let fmp_key = get_env_var("FMP_API_KEY");
-        let tiingo_key = get_env_var("TIINGO_API_KEY");
-        let twelve_data_key = get_env_var("TWELVE_DATA_API_KEY");
+        // Load API keys from environment (RUNTIME_KEYS first, then encrypted env fallback)
+        let alpaca_key = crate::get_api_key("ALPACA_API_KEY");
+        let alpaca_secret = crate::get_api_key("ALPACA_SECRET_KEY");
+        let polygon_key = crate::get_api_key("POLYGON_API_KEY");
+        let alphavantage_key = crate::get_api_key("ALPHA_VANTAGE_API_KEY");
+        let finnhub_key = crate::get_api_key("FINNHUB_API_KEY");
+        let fmp_key = crate::get_api_key("FMP_API_KEY");
+        let tiingo_key = crate::get_api_key("TIINGO_API_KEY");
+        let twelve_data_key = crate::get_api_key("TWELVE_DATA_API_KEY");
         
         tracing::info!("Multi-Source Provider initialized");
         tracing::info!(

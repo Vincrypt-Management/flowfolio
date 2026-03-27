@@ -72,8 +72,7 @@ pub struct FundamentalDataService {
 impl FundamentalDataService {
     /// Create new service
     pub fn new() -> Self {
-        use crate::core::encrypted_env::get_env_var;
-        let alpha_vantage_key = get_env_var("ALPHA_VANTAGE_API_KEY");
+        let alpha_vantage_key = crate::get_api_key("ALPHA_VANTAGE_API_KEY");
         
         Self {
             alpha_vantage_key,
