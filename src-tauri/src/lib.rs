@@ -381,6 +381,9 @@ mod runtime_keys_tests {
 
     #[test]
     fn test_get_api_key_runtime_takes_priority_over_env() {
+        // Pre-cleanup in case a prior run leaked state
+        RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
+        std::env::remove_var("TEST_FLOWFOLIO_PRIO");
         std::env::set_var("TEST_FLOWFOLIO_PRIO", "from_env");
         RUNTIME_KEYS.write().insert("TEST_FLOWFOLIO_PRIO".to_string(), "from_runtime".to_string());
         assert_eq!(get_api_key("TEST_FLOWFOLIO_PRIO"), Some("from_runtime".to_string()));
