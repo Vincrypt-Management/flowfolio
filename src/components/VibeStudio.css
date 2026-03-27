@@ -2493,3 +2493,32 @@
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
+
+/* Mobile: larger range slider thumb and track for touch */
+@media (max-width: 768px) {
+  input[type="range"] {
+    height: 44px;
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 10px 0;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    border: none;
+  }
+}

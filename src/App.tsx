@@ -48,6 +48,7 @@ import {
   Newspaper
 } from "lucide-react";
 import "./App.css";
+import "./styles/mobile.css";
 import "./styles/optimizer.css";
 import "./styles/liveProgress.css";
 

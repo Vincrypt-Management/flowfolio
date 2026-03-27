@@ -1,0 +1,131 @@
+/* FlowFolio Mobile Responsive Overrides
+ * Breakpoints: 768px (tablet), 390px (iPhone SE minimum)
+ * Goal: Usable on mobile, not beautiful — that's 0.4.1
+ */
+
+/* ─── Layout: sidebar becomes bottom nav ─── */
+@media (max-width: 768px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    height: 64px;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    z-index: 100;
+    border-top: 1px solid var(--border-color);
+    border-right: none;
+    padding: 0 8px;
+    align-items: center;
+    gap: 0;
+  }
+
+  .sidebar-item {
+    flex: 1;
+    flex-direction: column;
+    min-width: 44px;
+    height: 56px;
+    font-size: 10px;
+    gap: 2px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .sidebar-item-label {
+    display: block;
+    font-size: 9px;
+  }
+
+  /* Main content area gets bottom padding for the nav bar */
+  .main-content {
+    padding-bottom: 72px;
+  }
+}
+
+/* ─── Cards: stack vertically ─── */
+@media (max-width: 768px) {
+  .dashboard-grid,
+  .portfolio-grid,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    margin-bottom: 12px;
+  }
+}
+
+/* ─── Touch targets: minimum 44pt ─── */
+@media (max-width: 768px) {
+  button,
+  .btn-primary,
+  .btn-secondary,
+  .btn-icon,
+  .sidebar-item,
+  [role="button"],
+  .tab-item,
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Input fields — easier to tap */
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="number"],
+  input[type="url"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+}
+
+/* ─── Typography scaling ─── */
+@media (max-width: 390px) {
+  body {
+    font-size: 13px;
+  }
+
+  h1.page-title {
+    font-size: 1.25rem;
+  }
+
+  h2 {
+    font-size: 1.1rem;
+  }
+
+  .page-header {
+    padding: 12px 16px;
+  }
+}
+
+/* ─── Charts: scrollable on small screens ─── */
+@media (max-width: 768px) {
+  .recharts-wrapper,
+  .chart-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ─── Tables: horizontal scroll ─── */
+@media (max-width: 768px) {
+  .table-container,
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
