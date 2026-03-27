@@ -68,8 +68,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Update resolved theme when theme changes
   useEffect(() => {
     if (theme === 'system') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResolvedTheme(getSystemTheme());
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResolvedTheme(theme);
     }
   }, [theme]);

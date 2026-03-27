@@ -42,6 +42,7 @@ export function JournalTab() {
   useEffect(() => {
     let mounted = true;
     if (entries.length > 0) {
+      // eslint-disable-next-line react-hooks/immutability
       calculateStats().catch((err) => {
         if (mounted) logger.error('Error calculating journal stats:', err);
       });

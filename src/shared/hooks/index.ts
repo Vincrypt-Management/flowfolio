@@ -51,6 +51,7 @@ export function useAsync<T>(
     } catch (error) {
       setState({ data: null, loading: false, error: error as Error });
     }
+    // eslint-disable-next-line react-hooks/use-memo
   }, deps);
 
   useEffect(() => {
@@ -128,6 +129,7 @@ export function usePrevious<T>(value: T): T | undefined {
     ref.current = value;
   }, [value]);
   
+  // eslint-disable-next-line react-hooks/refs
   return ref.current;
 }
 

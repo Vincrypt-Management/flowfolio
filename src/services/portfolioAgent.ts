@@ -2149,7 +2149,7 @@ JSON FORMATTING RULES:
 - String values in "double quotes"
 - Numbers without quotes (15.0 not "15.0")
 - allocation must be a number between 0 and 100
-- Use escape sequences for quotes in strings (\")
+- Use escape sequences for quotes in strings (")
 - No trailing commas
 - riskLevel must be exactly: "Low", "Medium", or "High"
 

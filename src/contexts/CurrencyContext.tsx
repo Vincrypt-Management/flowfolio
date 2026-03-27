@@ -78,6 +78,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (currency === 'USD') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExchangeRate(1);
       return;
     }

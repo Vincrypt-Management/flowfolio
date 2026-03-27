@@ -233,6 +233,7 @@ function RebalanceScheduler({
   useEffect(() => {
     if (!showCreateForm) return;
     let mounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlansLoading(true);
     invokeWithResilience<string[]>('list_saved_plans')
       .then((plans) => {

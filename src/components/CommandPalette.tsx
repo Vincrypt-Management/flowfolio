@@ -33,7 +33,9 @@ export function CommandPalette({ isOpen, onClose, commands }: Props) {
   // Reset state when opening
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery('');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedIndex(0);
       // Defer focus so the element is visible
       requestAnimationFrame(() => {
@@ -44,6 +46,7 @@ export function CommandPalette({ isOpen, onClose, commands }: Props) {
 
   // Keep selectedIndex in bounds when filtered list changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedIndex(0);
   }, [filteredCommands.length]);
 

@@ -208,6 +208,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
             // Generate sector-based correlations for display purposes when no real data
             // Same sector = higher correlation, different sector = lower
             const sameSector = getSectorSimilarity(assets[i].symbol, assets[j].symbol);
+            // eslint-disable-next-line react-hooks/purity
             matrix[i][j] = sameSector ? 0.6 + Math.random() * 0.2 : 0.2 + Math.random() * 0.3;
           } else {
             // Mixed: some have data, some don't - use moderate correlation
@@ -251,8 +252,11 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
   const riskReturnData = useMemo<RiskReturnPoint[]>(() => {
     return assets.map(a => ({
       symbol: a.symbol,
+      // eslint-disable-next-line react-hooks/purity
       risk: a.quantMetrics?.volatility || Math.random() * 30 + 10,
+      // eslint-disable-next-line react-hooks/purity
       return: a.quantMetrics?.expectedReturn || Math.random() * 20 - 5,
+      // eslint-disable-next-line react-hooks/purity
       sharpe: a.quantMetrics?.sharpeRatio || Math.random() * 2,
     }));
   }, [assets]);

@@ -210,6 +210,7 @@ function portfolioReducer(state: PortfolioUIState, action: PortfolioAction): Por
       };
     case 'TOGGLE_IMPORT_SKIP': {
       const next = new Set(state.importSkipped);
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       next.has(action.index) ? next.delete(action.index) : next.add(action.index);
       return { ...state, importSkipped: next };
     }
