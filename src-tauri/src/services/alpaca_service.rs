@@ -82,8 +82,8 @@ impl AlpacaService {
     /// Create new Alpaca service
     pub fn new() -> Self {
         use crate::core::encrypted_env::get_env_var;
-        let api_key = get_env_var("ALPACA_API_KEY");
-        let api_secret = get_env_var("ALPACA_SECRET_KEY");
+        let api_key = crate::get_api_key("ALPACA_API_KEY");
+        let api_secret = crate::get_api_key("ALPACA_SECRET_KEY");
         let is_paper = get_env_var("ALPACA_PAPER_TRADING")
             .map(|v| v == "true")
             .unwrap_or(true); // Default to paper trading for safety
