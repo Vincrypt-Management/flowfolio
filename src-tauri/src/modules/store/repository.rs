@@ -53,6 +53,7 @@ impl Repository {
     }
 
     // Price operations
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_price(&self, symbol_id: i64, date: &str, open: f64, high: f64, low: f64, close: f64, volume: i64) -> Result<i64> {
         let result = sqlx::query(
             "INSERT OR REPLACE INTO prices_daily (symbol_id, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)"

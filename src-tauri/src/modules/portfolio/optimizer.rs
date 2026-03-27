@@ -400,7 +400,7 @@ impl PortfolioOptimizer {
 
         // Take top candidates
         let num_recommendations = (total_to_reallocate / 1000.0).ceil() as usize;
-        let num_recommendations = num_recommendations.max(3).min(10);
+        let num_recommendations = num_recommendations.clamp(3, 10);
 
         candidates
             .into_iter()
@@ -433,16 +433,16 @@ impl PortfolioOptimizer {
         let mut score = 0.0;
 
         // Sharpe ratio contribution (0-30 points)
-        score += (metrics.sharpe_ratio * 15.0).min(30.0).max(0.0);
+        score += (metrics.sharpe_ratio * 15.0).clamp(0.0, 30.0);
 
         // Return contribution (0-25 points)
-        score += (metrics.annualized_return * 0.5).min(25.0).max(0.0);
+        score += (metrics.annualized_return * 0.5).clamp(0.0, 25.0);
 
         // Low volatility bonus (0-15 points)
-        score += ((50.0 - metrics.volatility) * 0.3).min(15.0).max(0.0);
+        score += ((50.0 - metrics.volatility) * 0.3).clamp(0.0, 15.0);
 
         // Low drawdown bonus (0-15 points)
-        score += ((40.0 - metrics.max_drawdown) * 0.375).min(15.0).max(0.0);
+        score += ((40.0 - metrics.max_drawdown) * 0.375).clamp(0.0, 15.0);
 
         // Signal bonus (0-15 points)
         score += match metrics.signal.as_str() {

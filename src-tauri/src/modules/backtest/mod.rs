@@ -288,8 +288,8 @@ impl BacktestEngine {
     fn should_rebalance(month: usize, frequency: &str) -> bool {
         match frequency {
             "monthly" => true,
-            "quarterly" => month % 3 == 0,
-            "yearly" => month % 12 == 0,
+            "quarterly" => month.is_multiple_of(3),
+            "yearly" => month.is_multiple_of(12),
             _ => false,
         }
     }

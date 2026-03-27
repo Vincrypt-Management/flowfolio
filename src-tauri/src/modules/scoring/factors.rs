@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Raw financial metrics extracted from fundamentals
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct FinancialMetrics {
     // Valuation
     pub market_cap: Option<f64>,
@@ -221,47 +222,47 @@ impl FinancialMetrics {
     
     fn normalize_roe(&self, roe: f64) -> f64 {
         // ROE: 0% = 0, 15% = 50, 30%+ = 100
-        (roe / 0.30 * 100.0).min(100.0).max(0.0)
+        (roe / 0.30 * 100.0).clamp(0.0, 100.0)
     }
     
     fn normalize_roic(&self, roic: f64) -> f64 {
         // ROIC: 0% = 0, 12% = 50, 25%+ = 100
-        (roic / 0.25 * 100.0).min(100.0).max(0.0)
+        (roic / 0.25 * 100.0).clamp(0.0, 100.0)
     }
     
     fn normalize_margin(&self, margin: f64) -> f64 {
         // Operating margin: 0% = 0, 15% = 50, 30%+ = 100
-        (margin / 0.30 * 100.0).min(100.0).max(0.0)
+        (margin / 0.30 * 100.0).clamp(0.0, 100.0)
     }
     
     fn normalize_debt(&self, debt: f64) -> f64 {
         // Debt/Equity: 0 = 100, 1.0 = 50, 2.0+ = 0 (inverted)
-        (100.0 - (debt / 2.0 * 100.0)).max(0.0).min(100.0)
+        (100.0 - (debt / 2.0 * 100.0)).clamp(0.0, 100.0)
     }
     
     fn normalize_pe(&self, pe: f64) -> f64 {
         // P/E: 5 = 100, 15 = 50, 30+ = 0 (lower is better)
-        (100.0 - ((pe - 5.0) / 25.0 * 100.0)).max(0.0).min(100.0)
+        (100.0 - ((pe - 5.0) / 25.0 * 100.0)).clamp(0.0, 100.0)
     }
     
     fn normalize_pb(&self, pb: f64) -> f64 {
         // P/B: 0.5 = 100, 2.0 = 50, 5.0+ = 0
-        (100.0 - ((pb - 0.5) / 4.5 * 100.0)).max(0.0).min(100.0)
+        (100.0 - ((pb - 0.5) / 4.5 * 100.0)).clamp(0.0, 100.0)
     }
     
     fn normalize_ps(&self, ps: f64) -> f64 {
         // P/S: 0.5 = 100, 2.0 = 50, 5.0+ = 0
-        (100.0 - ((ps - 0.5) / 4.5 * 100.0)).max(0.0).min(100.0)
+        (100.0 - ((ps - 0.5) / 4.5 * 100.0)).clamp(0.0, 100.0)
     }
     
     fn normalize_growth(&self, growth: f64) -> f64 {
         // Growth: -10% = 0, 10% = 50, 30%+ = 100
-        ((growth + 0.10) / 0.40 * 100.0).max(0.0).min(100.0)
+        ((growth + 0.10) / 0.40 * 100.0).clamp(0.0, 100.0)
     }
     
     fn normalize_dividend_yield(&self, yield_val: f64) -> f64 {
         // Yield: 0% = 0, 3% = 50, 6%+ = 100
-        (yield_val / 0.06 * 100.0).max(0.0).min(100.0)
+        (yield_val / 0.06 * 100.0).clamp(0.0, 100.0)
     }
     
     fn normalize_payout_ratio(&self, payout: f64) -> f64 {
@@ -317,7 +318,7 @@ impl MomentumMetrics {
     
     fn normalize_return(&self, ret: f64) -> f64 {
         // Return: -20% = 0, 0% = 50, 40%+ = 100
-        ((ret + 0.20) / 0.60 * 100.0).max(0.0).min(100.0)
+        ((ret + 0.20) / 0.60 * 100.0).clamp(0.0, 100.0)
     }
 }
 
@@ -645,31 +646,3 @@ mod tests {
     }
 }
 
-impl Default for FinancialMetrics {
-    fn default() -> Self {
-        Self {
-            market_cap: None,
-            pe_ratio: None,
-            pb_ratio: None,
-            ps_ratio: None,
-            price_to_book: None,
-            roe: None,
-            roa: None,
-            roic: None,
-            gross_margin: None,
-            operating_margin: None,
-            net_margin: None,
-            revenue_growth_yoy: None,
-            earnings_growth_yoy: None,
-            revenue_growth_3y: None,
-            eps_growth_3y: None,
-            dividend_yield: None,
-            payout_ratio: None,
-            debt_to_equity: None,
-            current_ratio: None,
-            quick_ratio: None,
-            revenue: None,
-            earnings: None,
-        }
-    }
-}

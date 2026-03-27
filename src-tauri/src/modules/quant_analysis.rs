@@ -508,9 +508,9 @@ impl QuantAnalyzer {
             let change = closes[i] - closes[i - 1];
             if change > 0.0 {
                 avg_gain = avg_gain * (1.0 - smoothing) + change * smoothing;
-                avg_loss = avg_loss * (1.0 - smoothing);
+                avg_loss *= 1.0 - smoothing;
             } else {
-                avg_gain = avg_gain * (1.0 - smoothing);
+                avg_gain *= 1.0 - smoothing;
                 avg_loss = avg_loss * (1.0 - smoothing) + (-change) * smoothing;
             }
         }
@@ -625,7 +625,7 @@ impl QuantAnalyzer {
         };
 
         // Calculate confidence (higher when factors agree, lower with high volatility)
-        let base_confidence = ((normalized_score.abs() + 0.2) * 80.0).min(95.0).max(10.0);
+        let base_confidence = ((normalized_score.abs() + 0.2) * 80.0).clamp(10.0, 95.0);
         let vol_penalty = (volatility / 100.0).min(0.3); // Up to 30% penalty for high vol
         let confidence = base_confidence * (1.0 - vol_penalty);
 
@@ -966,9 +966,9 @@ impl QuantAnalyzer {
         let mut total_corr = 0.0;
         let mut count = 0;
 
-        for i in 0..n {
-            for j in (i + 1)..n {
-                total_corr += correlation_matrix[i][j].abs();
+        for (i, row) in correlation_matrix.iter().enumerate() {
+            for val in row.iter().skip(i + 1) {
+                total_corr += val.abs();
                 count += 1;
             }
         }

@@ -324,10 +324,10 @@ pub async fn generate_optimization_report_live(
 /// Helper function to calculate a quick score for candidates
 pub(crate) fn calculate_quick_score(metrics: &QuantMetrics) -> f64 {
     let mut score = 0.0;
-    score += (metrics.sharpe_ratio * 15.0).min(30.0).max(0.0);
-    score += (metrics.annualized_return * 0.5).min(25.0).max(0.0);
-    score += ((50.0 - metrics.volatility) * 0.3).min(15.0).max(0.0);
-    score += ((40.0 - metrics.max_drawdown) * 0.375).min(15.0).max(0.0);
+    score += (metrics.sharpe_ratio * 15.0).clamp(0.0, 30.0);
+    score += (metrics.annualized_return * 0.5).clamp(0.0, 25.0);
+    score += ((50.0 - metrics.volatility) * 0.3).clamp(0.0, 15.0);
+    score += ((40.0 - metrics.max_drawdown) * 0.375).clamp(0.0, 15.0);
     score += match metrics.signal.as_str() {
         "STRONG BUY" => 15.0,
         "BUY" => 10.0,
@@ -656,6 +656,7 @@ pub async fn delete_universe(id: String) -> Result<(), String> {
 // ==================== TRANSACTION HISTORY ====================
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn record_transaction(
     id: String, portfolio_name: String, symbol: String,
     action: String, shares: f64, price: f64, total: f64,

@@ -108,6 +108,7 @@ impl Default for RetryConfig {
 }
 
 /// Application configuration
+#[derive(Default)]
 pub struct AppConfig {
     pub cache: CacheConfig,
     pub rate_limits: RateLimitConfig,
@@ -115,16 +116,6 @@ pub struct AppConfig {
     pub retry: RetryConfig,
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            cache: CacheConfig::default(),
-            rate_limits: RateLimitConfig::default(),
-            circuit_breaker: CircuitBreakerConfig::default(),
-            retry: RetryConfig::default(),
-        }
-    }
-}
 
 impl AppConfig {
     /// Create configuration from environment variables

@@ -334,7 +334,7 @@ impl Journal {
                 for (key, value) in &entry.metadata {
                     md.push_str(&format!("- {}: {}\n", key, value));
                 }
-                md.push_str("\n");
+                md.push('\n');
             }
 
             md.push_str("---\n\n");

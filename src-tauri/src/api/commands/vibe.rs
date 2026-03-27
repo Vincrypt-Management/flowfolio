@@ -237,7 +237,7 @@ pub(crate) fn momentum_score_from_rsi(rsi: f64, signal: &str) -> f64 {
         _ => 0.0,
     };
 
-    (rsi_score + signal_adj).max(0.0).min(100.0)
+    (rsi_score + signal_adj).clamp(0.0, 100.0)
 }
 
 pub(crate) fn quality_score_from_sharpe(sharpe: f64, volatility: f64) -> f64 {
@@ -257,7 +257,7 @@ pub(crate) fn quality_score_from_sharpe(sharpe: f64, volatility: f64) -> f64 {
         _ => -10.0,
     };
 
-    (sharpe_score + vol_adj).max(0.0).min(100.0)
+    (sharpe_score + vol_adj).clamp(0.0, 100.0)
 }
 
 pub(crate) fn value_score_from_vol(volatility: f64, max_drawdown: f64) -> f64 {
@@ -276,7 +276,7 @@ pub(crate) fn value_score_from_vol(volatility: f64, max_drawdown: f64) -> f64 {
         _ => -20.0,
     };
 
-    (vol_score + dd_adj).max(0.0_f64).min(100.0_f64)
+    (vol_score + dd_adj).clamp(0.0_f64, 100.0_f64)
 }
 
 pub(crate) fn growth_score_from_return(annualized_return: f64) -> f64 {

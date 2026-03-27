@@ -185,6 +185,7 @@ impl DatabaseCacheService {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn set_cached_quant_metrics(
         &self,
         symbol: &str,

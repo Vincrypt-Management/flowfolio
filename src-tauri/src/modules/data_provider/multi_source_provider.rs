@@ -178,7 +178,7 @@ impl MultiSourceProvider {
             if total == 0 {
                 return 100;
             }
-            (successes * 100 / total) as u32
+            successes * 100 / total
         } else {
             100 // New provider, assume healthy
         }

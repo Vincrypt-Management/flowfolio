@@ -413,18 +413,18 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
                     "piotroskiFScore": piotroski_f,
                     "grahamNumber": graham_number,
                     "marginOfSafety": margin_of_safety,
-                    "valueScore": v_score.max(0.0).min(100.0),
-                    "qualityScore": q_score.max(0.0).min(100.0),
-                    "growthScore": g_score.max(0.0).min(100.0),
+                    "valueScore": v_score.clamp(0.0, 100.0),
+                    "qualityScore": q_score.clamp(0.0, 100.0),
+                    "growthScore": g_score.clamp(0.0, 100.0),
                     "dataSource": fund.source,
                     "lastUpdated": fund.last_updated,
                 });
 
-                (v_score.max(0.0).min(100.0), q_score.max(0.0).min(100.0), g_score.max(0.0).min(100.0), fundamentals)
+                (v_score.clamp(0.0, 100.0), q_score.clamp(0.0, 100.0), g_score.clamp(0.0, 100.0), fundamentals)
             } else {
-                let v_score = 50.0 + (sharpe * 10.0).min(30.0).max(-30.0);
-                let q_score = 50.0 + (annualized_return / 2.0).min(30.0).max(-30.0);
-                let g_score = 50.0 + (annualized_return / 3.0).min(25.0).max(-25.0);
+                let v_score = 50.0 + (sharpe * 10.0).clamp(-30.0, 30.0);
+                let q_score = 50.0 + (annualized_return / 2.0).clamp(-30.0, 30.0);
+                let g_score = 50.0 + (annualized_return / 3.0).clamp(-25.0, 25.0);
 
                 let fundamentals = serde_json::json!({
                     "peRatio": null,
@@ -458,14 +458,14 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
                     "piotroskiFScore": null,
                     "grahamNumber": null,
                     "marginOfSafety": null,
-                    "valueScore": v_score.max(0.0).min(100.0),
-                    "qualityScore": q_score.max(0.0).min(100.0),
-                    "growthScore": g_score.max(0.0).min(100.0),
+                    "valueScore": v_score.clamp(0.0, 100.0),
+                    "qualityScore": q_score.clamp(0.0, 100.0),
+                    "growthScore": g_score.clamp(0.0, 100.0),
                     "dataSource": "estimated",
                     "lastUpdated": chrono::Utc::now().to_rfc3339(),
                 });
 
-                (v_score.max(0.0).min(100.0), q_score.max(0.0).min(100.0), g_score.max(0.0).min(100.0), fundamentals)
+                (v_score.clamp(0.0, 100.0), q_score.clamp(0.0, 100.0), g_score.clamp(0.0, 100.0), fundamentals)
             };
 
         result["fundamentals"] = fundamentals_json;
@@ -623,16 +623,12 @@ pub(crate) fn get_etf_info(symbol: &str, is_bond: bool) -> (String, String, Opti
 pub(crate) fn get_estimated_expense_ratio(symbol: &str) -> Option<f64> {
     let symbol_upper = symbol.to_uppercase();
 
-    if symbol_upper.starts_with("V") || symbol_upper.starts_with("SCH") || symbol_upper.starts_with("FI") {
+    if symbol_upper.starts_with("V") || symbol_upper.starts_with("SCH") || symbol_upper.starts_with("FI")
+        || symbol_upper == "IVV" || symbol_upper == "IEFA" || symbol_upper == "IEMG" || symbol_upper == "AGG"
+    {
         Some(0.03)
     }
-    else if symbol_upper == "IVV" || symbol_upper == "IEFA" || symbol_upper == "IEMG" || symbol_upper == "AGG" {
-        Some(0.03)
-    }
-    else if symbol_upper == "SPY" || symbol_upper == "QQQ" || symbol_upper == "DIA" {
-        Some(0.09)
-    }
-    else if symbol_upper.starts_with("XL") {
+    else if symbol_upper == "SPY" || symbol_upper == "QQQ" || symbol_upper == "DIA" || symbol_upper.starts_with("XL") {
         Some(0.09)
     }
     else if symbol_upper.starts_with("ARK") {
@@ -656,19 +652,19 @@ pub(crate) fn calculate_altman_z_estimate(fund: &FundamentalMetrics) -> Option<f
     let mut components = 0;
 
     if let Some(current_ratio) = fund.current_ratio {
-        let a = (current_ratio - 1.0).max(0.0).min(0.5) / 2.0;
+        let a = (current_ratio - 1.0).clamp(0.0, 0.5) / 2.0;
         score += 1.2 * a;
         components += 1;
     }
 
     if let Some(roa) = fund.return_on_assets {
-        let b = roa.max(-0.3).min(0.3);
+        let b = roa.clamp(-0.3, 0.3);
         score += 1.4 * b;
         components += 1;
     }
 
     if let Some(op_margin) = fund.operating_margin {
-        let c = op_margin.max(-0.2).min(0.3);
+        let c = op_margin.clamp(-0.2, 0.3);
         score += 3.3 * c;
         components += 1;
     }
@@ -684,7 +680,7 @@ pub(crate) fn calculate_altman_z_estimate(fund: &FundamentalMetrics) -> Option<f
     if let Some(profit_margin) = fund.profit_margin {
         if let Some(roa) = fund.return_on_assets {
             if profit_margin.abs() > 0.01 {
-                let e = (roa / profit_margin).max(0.0).min(3.0);
+                let e = (roa / profit_margin).clamp(0.0, 3.0);
                 score += 1.0 * e;
                 components += 1;
             }
@@ -693,7 +689,7 @@ pub(crate) fn calculate_altman_z_estimate(fund: &FundamentalMetrics) -> Option<f
 
     if components >= 3 {
         let normalized_score = score * (5.0 / components as f64);
-        Some(normalized_score.max(0.0).min(5.0))
+        Some(normalized_score.clamp(0.0, 5.0))
     } else {
         None
     }
@@ -719,7 +715,7 @@ pub(crate) fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<
         if fcf > 0.0 { score += 1; }
     }
 
-    if fund.free_cash_flow.is_some() && fund.profit_margin.map_or(false, |m| m > 0.0) {
+    if fund.free_cash_flow.is_some() && fund.profit_margin.is_some_and(|m| m > 0.0) {
         criteria_checked += 1;
         if fund.free_cash_flow.unwrap_or(0.0) > 0.0 { score += 1; }
     }
@@ -734,7 +730,7 @@ pub(crate) fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<
         if cr > 1.5 { score += 1; }
     }
 
-    if fund.profit_margin.map_or(false, |m| m > 0.05) {
+    if fund.profit_margin.is_some_and(|m| m > 0.05) {
         criteria_checked += 1;
         score += 1;
     }
@@ -751,7 +747,7 @@ pub(crate) fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<
 
     if criteria_checked >= 5 {
         let scaled_score = (score as f64 * 9.0 / criteria_checked as f64).round() as i32;
-        Some(scaled_score.min(9).max(0))
+        Some(scaled_score.clamp(0, 9))
     } else {
         None
     }
@@ -789,9 +785,9 @@ pub(crate) fn assess_dividend_safety(fund: &FundamentalMetrics) -> Option<String
     }
 
     let payout = fund.payout_ratio.unwrap_or(0.5);
-    let has_good_cashflow = fund.free_cash_flow.map_or(false, |f| f > 0.0);
-    let is_profitable = fund.profit_margin.map_or(false, |m| m > 0.05);
-    let low_debt = fund.debt_to_equity.map_or(true, |d| d < 1.5);
+    let has_good_cashflow = fund.free_cash_flow.is_some_and(|f| f > 0.0);
+    let is_profitable = fund.profit_margin.is_some_and(|m| m > 0.05);
+    let low_debt = fund.debt_to_equity.is_none_or(|d| d < 1.5);
 
     let safety = if payout < 0.4 && has_good_cashflow && is_profitable && low_debt {
         "very_safe"

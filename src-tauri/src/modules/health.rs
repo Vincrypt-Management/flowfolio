@@ -158,7 +158,7 @@ impl HealthMonitor {
     pub fn record_provider_request(&self, provider: &str, success: bool, latency_us: u64) {
         let metrics = self.provider_metrics
             .entry(provider.to_string())
-            .or_insert_with(ProviderMetricsInner::default);
+            .or_default();
         
         metrics.total.fetch_add(1, Ordering::SeqCst);
         metrics.total_latency_us.fetch_add(latency_us, Ordering::SeqCst);

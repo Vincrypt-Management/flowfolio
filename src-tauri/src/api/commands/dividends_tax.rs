@@ -7,6 +7,7 @@ use std::collections::HashMap;
 // ==================== DIVIDEND TRACKING ====================
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn record_dividend(
     id: String, portfolio_name: String, symbol: String,
     amount_per_share: f64, total_amount: f64, shares_held: f64,
