@@ -3,8 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Raw financial metrics extracted from fundamentals
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FinancialMetrics {
     // Valuation
     pub market_cap: Option<f64>,
@@ -12,7 +11,7 @@ pub struct FinancialMetrics {
     pub pb_ratio: Option<f64>,
     pub ps_ratio: Option<f64>,
     pub price_to_book: Option<f64>,
-    
+
     // Profitability
     pub roe: Option<f64>,  // Return on Equity
     pub roa: Option<f64>,  // Return on Assets
@@ -20,22 +19,22 @@ pub struct FinancialMetrics {
     pub gross_margin: Option<f64>,
     pub operating_margin: Option<f64>,
     pub net_margin: Option<f64>,
-    
+
     // Growth
     pub revenue_growth_yoy: Option<f64>,
     pub earnings_growth_yoy: Option<f64>,
     pub revenue_growth_3y: Option<f64>,
     pub eps_growth_3y: Option<f64>,
-    
+
     // Dividends
     pub dividend_yield: Option<f64>,
     pub payout_ratio: Option<f64>,
-    
+
     // Financial Health
     pub debt_to_equity: Option<f64>,
     pub current_ratio: Option<f64>,
     pub quick_ratio: Option<f64>,
-    
+
     // Size
     pub revenue: Option<f64>,
     pub earnings: Option<f64>,
@@ -58,7 +57,7 @@ impl FinancialMetrics {
     pub fn quality_score(&self) -> Option<f64> {
         let mut components = Vec::new();
         let mut weights = Vec::new();
-        
+
         // ROE component (30% weight)
         if let Some(roe) = self.roe {
             if roe > 0.0 {
@@ -66,7 +65,7 @@ impl FinancialMetrics {
                 weights.push(0.30);
             }
         }
-        
+
         // ROIC component (30% weight)
         if let Some(roic) = self.roic {
             if roic > 0.0 {
@@ -74,7 +73,7 @@ impl FinancialMetrics {
                 weights.push(0.30);
             }
         }
-        
+
         // Operating margin component (20% weight)
         if let Some(margin) = self.operating_margin {
             if margin > 0.0 {
@@ -82,24 +81,25 @@ impl FinancialMetrics {
                 weights.push(0.20);
             }
         }
-        
+
         // Debt to equity component (20% weight, inverted - lower is better)
         if let Some(debt) = self.debt_to_equity {
             components.push(self.normalize_debt(debt));
             weights.push(0.20);
         }
-        
+
         if components.is_empty() {
             return None;
         }
-        
+
         // Weighted average
         let total_weight: f64 = weights.iter().sum();
-        let weighted_sum: f64 = components.iter()
+        let weighted_sum: f64 = components
+            .iter()
             .zip(weights.iter())
             .map(|(c, w)| c * w)
             .sum();
-        
+
         Some(weighted_sum / total_weight)
     }
 
@@ -108,7 +108,7 @@ impl FinancialMetrics {
     pub fn value_score(&self) -> Option<f64> {
         let mut components = Vec::new();
         let mut weights = Vec::new();
-        
+
         // P/E ratio component (40% weight)
         if let Some(pe) = self.pe_ratio {
             if pe > 0.0 {
@@ -116,7 +116,7 @@ impl FinancialMetrics {
                 weights.push(0.40);
             }
         }
-        
+
         // P/B ratio component (30% weight)
         if let Some(pb) = self.pb_ratio {
             if pb > 0.0 {
@@ -124,7 +124,7 @@ impl FinancialMetrics {
                 weights.push(0.30);
             }
         }
-        
+
         // P/S ratio component (30% weight)
         if let Some(ps) = self.ps_ratio {
             if ps > 0.0 {
@@ -132,63 +132,65 @@ impl FinancialMetrics {
                 weights.push(0.30);
             }
         }
-        
+
         if components.is_empty() {
             return None;
         }
-        
+
         let total_weight: f64 = weights.iter().sum();
-        let weighted_sum: f64 = components.iter()
+        let weighted_sum: f64 = components
+            .iter()
             .zip(weights.iter())
             .map(|(c, w)| c * w)
             .sum();
-        
+
         Some(weighted_sum / total_weight)
     }
-    
+
     /// Calculate growth factor score (0-100)
     /// Based on: Revenue growth, earnings growth
     pub fn growth_score(&self) -> Option<f64> {
         let mut components = Vec::new();
         let mut weights = Vec::new();
-        
+
         // Revenue growth YoY (40% weight)
         if let Some(growth) = self.revenue_growth_yoy {
             components.push(self.normalize_growth(growth));
             weights.push(0.40);
         }
-        
+
         // Earnings growth YoY (40% weight)
         if let Some(growth) = self.earnings_growth_yoy {
             components.push(self.normalize_growth(growth));
             weights.push(0.40);
         }
-        
+
         // 3-year average (20% weight)
         if let Some(growth) = self.revenue_growth_3y {
             components.push(self.normalize_growth(growth));
             weights.push(0.20);
         }
-        
+
         if components.is_empty() {
             return None;
         }
-        
+
         let total_weight: f64 = weights.iter().sum();
-        let weighted_sum: f64 = components.iter()
+        let weighted_sum: f64 = components
+            .iter()
             .zip(weights.iter())
             .map(|(c, w)| c * w)
             .sum();
-        
+
         Some(weighted_sum / total_weight)
     }
-    
+
     /// Calculate dividend factor score (0-100)
     /// Based on: Yield, payout ratio sustainability
     pub fn dividend_score(&self) -> Option<f64> {
         let mut components = Vec::new();
         let mut weights = Vec::new();
-        
+
         // Dividend yield (60% weight)
         if let Some(yield_val) = self.dividend_yield {
             if yield_val > 0.0 {
@@ -196,7 +198,7 @@ impl FinancialMetrics {
                 weights.push(0.60);
             }
         }
-        
+
         // Payout ratio sustainability (40% weight)
         if let Some(payout) = self.payout_ratio {
             if payout > 0.0 {
@@ -204,67 +206,68 @@ impl FinancialMetrics {
                 weights.push(0.40);
             }
         }
-        
+
         if components.is_empty() {
             return None;
         }
-        
+
         let total_weight: f64 = weights.iter().sum();
-        let weighted_sum: f64 = components.iter()
+        let weighted_sum: f64 = components
+            .iter()
             .zip(weights.iter())
             .map(|(c, w)| c * w)
             .sum();
-        
+
         Some(weighted_sum / total_weight)
     }
-    
+
     // Normalization helpers (0-100 scale)
-    
+
     fn normalize_roe(&self, roe: f64) -> f64 {
         // ROE: 0% = 0, 15% = 50, 30%+ = 100
         (roe / 0.30 * 100.0).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_roic(&self, roic: f64) -> f64 {
         // ROIC: 0% = 0, 12% = 50, 25%+ = 100
         (roic / 0.25 * 100.0).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_margin(&self, margin: f64) -> f64 {
         // Operating margin: 0% = 0, 15% = 50, 30%+ = 100
         (margin / 0.30 * 100.0).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_debt(&self, debt: f64) -> f64 {
         // Debt/Equity: 0 = 100, 1.0 = 50, 2.0+ = 0 (inverted)
         (100.0 - (debt / 2.0 * 100.0)).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_pe(&self, pe: f64) -> f64 {
         // P/E: 5 = 100, 15 = 50, 30+ = 0 (lower is better)
         (100.0 - ((pe - 5.0) / 25.0 * 100.0)).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_pb(&self, pb: f64) -> f64 {
         // P/B: 0.5 = 100, 2.0 = 50, 5.0+ = 0
         (100.0 - ((pb - 0.5) / 4.5 * 100.0)).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_ps(&self, ps: f64) -> f64 {
         // P/S: 0.5 = 100, 2.0 = 50, 5.0+ = 0
         (100.0 - ((ps - 0.5) / 4.5 * 100.0)).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_growth(&self, growth: f64) -> f64 {
         // Growth: -10% = 0, 10% = 50, 30%+ = 100
         ((growth + 0.10) / 0.40 * 100.0).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_dividend_yield(&self, yield_val: f64) -> f64 {
         // Yield: 0% = 0, 3% = 50, 6%+ = 100
         (yield_val / 0.06 * 100.0).clamp(0.0, 100.0)
     }
-    
+
     fn normalize_payout_ratio(&self, payout: f64) -> f64 {
         // Payout: 30% = 100, 60% = 75, 90% = 25, 100%+ = 0
         // Sweet spot: 30-60% (sustainable)
@@ -284,38 +287,39 @@ impl MomentumMetrics {
     pub fn momentum_score(&self) -> Option<f64> {
         let mut components = Vec::new();
         let mut weights = Vec::new();
-        
+
         // 3-month return (30% weight - most recent)
         if let Some(ret) = self.return_3m {
             components.push(self.normalize_return(ret));
             weights.push(0.30);
         }
-        
+
         // 6-month return (35% weight)
         if let Some(ret) = self.return_6m {
             components.push(self.normalize_return(ret));
             weights.push(0.35);
         }
-        
+
         // 12-month return (35% weight)
         if let Some(ret) = self.return_12m {
             components.push(self.normalize_return(ret));
             weights.push(0.35);
         }
-        
+
         if components.is_empty() {
             return None;
         }
-        
+
         let total_weight: f64 = weights.iter().sum();
-        let weighted_sum: f64 = components.iter()
+        let weighted_sum: f64 = components
+            .iter()
             .zip(weights.iter())
             .map(|(c, w)| c * w)
             .sum();
-        
+
         Some(weighted_sum / total_weight)
     }
-    
+
     fn normalize_return(&self, ret: f64) -> f64 {
         // Return: -20% = 0, 0% = 50, 40%+ = 100
         ((ret + 0.20) / 0.60 * 100.0).clamp(0.0, 100.0)
@@ -499,8 +503,8 @@ mod tests {
     #[test]
     fn test_dividend_score_good_yield() {
         let metrics = FinancialMetrics {
-            dividend_yield: Some(0.04),   // 4% — above 3% midpoint
-            payout_ratio: Some(0.50),     // sustainable range
+            dividend_yield: Some(0.04), // 4% — above 3% midpoint
+            payout_ratio: Some(0.50),   // sustainable range
             ..Default::default()
         };
         let score = metrics.dividend_score().unwrap();
@@ -622,7 +626,10 @@ mod tests {
     #[test]
     fn test_normalize_roe_midpoint() {
         // ROE = 0.15 → 0.15/0.30 * 100 = 50
-        let m = FinancialMetrics { roe: Some(0.15), ..Default::default() };
+        let m = FinancialMetrics {
+            roe: Some(0.15),
+            ..Default::default()
+        };
         // quality_score only uses ROE when it's the single component
         // We compute via quality_score with only roe set
         let score = m.quality_score().unwrap();
@@ -632,7 +639,10 @@ mod tests {
     #[test]
     fn test_normalize_debt_midpoint() {
         // debt=1.0 → 100 - (1.0/2.0)*100 = 50
-        let m = FinancialMetrics { debt_to_equity: Some(1.0), ..Default::default() };
+        let m = FinancialMetrics {
+            debt_to_equity: Some(1.0),
+            ..Default::default()
+        };
         let score = m.quality_score().unwrap();
         assert!(approx_eq(score, 50.0, 0.1));
     }
@@ -640,9 +650,11 @@ mod tests {
     #[test]
     fn test_normalize_pb_midpoint() {
         // P/B = 0.5 → 100 - (0.5-0.5)/4.5*100 = 100
-        let m = FinancialMetrics { pb_ratio: Some(0.5), ..Default::default() };
+        let m = FinancialMetrics {
+            pb_ratio: Some(0.5),
+            ..Default::default()
+        };
         let score = m.value_score().unwrap();
         assert!(approx_eq(score, 100.0, 0.1));
     }
 }
-

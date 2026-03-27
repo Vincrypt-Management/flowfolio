@@ -11,9 +11,9 @@
 
 use futures::StreamExt;
 #[cfg(not(target_os = "android"))]
-use llama_cpp::{LlamaModel, LlamaParams, SessionParams};
-#[cfg(not(target_os = "android"))]
 use llama_cpp::standard_sampler::StandardSampler;
+#[cfg(not(target_os = "android"))]
+use llama_cpp::{LlamaModel, LlamaParams, SessionParams};
 use reqwest::Client;
 use std::path::PathBuf;
 use std::sync::{
@@ -97,80 +97,80 @@ impl LocalAiService {
         tokio::spawn(async move {
             #[cfg(not(target_os = "android"))]
             {
-            // 1. Resolve which model file to use — bundled copy first, download fallback.
-            let model_path = if let Some(ref bp) = bundled_model {
-                if let Ok(meta) = tokio::fs::metadata(bp).await {
-                    if meta.len() > 10 * 1_048_576 {
-                        eprintln!("[LOCAL_AI] Using bundled model: {:?}", bp);
-                        bp.clone()
+                // 1. Resolve which model file to use — bundled copy first, download fallback.
+                let model_path = if let Some(ref bp) = bundled_model {
+                    if let Ok(meta) = tokio::fs::metadata(bp).await {
+                        if meta.len() > 10 * 1_048_576 {
+                            eprintln!("[LOCAL_AI] Using bundled model: {:?}", bp);
+                            bp.clone()
+                        } else {
+                            eprintln!("[LOCAL_AI] Bundled model looks incomplete — will download.");
+                            download_dir.join(MODEL_FILENAME)
+                        }
                     } else {
-                        eprintln!("[LOCAL_AI] Bundled model looks incomplete — will download.");
+                        eprintln!("[LOCAL_AI] Bundled model not found — will download.");
                         download_dir.join(MODEL_FILENAME)
                     }
                 } else {
-                    eprintln!("[LOCAL_AI] Bundled model not found — will download.");
                     download_dir.join(MODEL_FILENAME)
-                }
-            } else {
-                download_dir.join(MODEL_FILENAME)
-            };
+                };
 
-            // Download only if the resolved path doesn't already exist.
-            if model_path != bundled_model.unwrap_or_default() {
-                if let Err(e) = download_if_needed(&client, &model_path).await {
-                    eprintln!("[LOCAL_AI] Download failed: {e}");
-                    return;
-                }
-            }
-
-            // 2. Load model in a blocking thread (llama.cpp is not async).
-            let mp = model_path.clone();
-            let (actor_tx, actor_rx) = mpsc::sync_channel::<InferenceMsg>(8);
-
-            let load_result = tokio::task::spawn_blocking(move || {
-                eprintln!("[LOCAL_AI] Loading GGUF from {:?}...", mp);
-                let model = LlamaModel::load_from_file(&mp, LlamaParams::default())
-                    .map_err(|e| format!("Failed to load model: {e}"))?;
-                eprintln!("[LOCAL_AI] Model loaded — starting inference actor.");
-                Ok::<LlamaModel, String>(model)
-            })
-            .await;
-
-            let model = match load_result {
-                Ok(Ok(m)) => m,
-                Ok(Err(e)) => {
-                    eprintln!("[LOCAL_AI] Load error: {e}");
-                    return;
-                }
-                Err(e) => {
-                    eprintln!("[LOCAL_AI] Spawn error: {e}");
-                    return;
-                }
-            };
-
-            // 3. Store the sender, mark ready.
-            {
-                let mut guard = tx_cell.lock().unwrap();
-                *guard = Some(actor_tx);
-            }
-            ready.store(true, Ordering::Relaxed);
-            eprintln!("[LOCAL_AI] gemma3:1b ready for inference.");
-
-            // 4. Run inference actor loop in this blocking thread.
-            //    (model lives here — no Send requirement across threads.)
-            tokio::task::spawn_blocking(move || {
-                while let Ok(msg) = actor_rx.recv() {
-                    match msg {
-                        InferenceMsg::Chat { prompt, reply } => {
-                            let result = run_inference(&model, &prompt);
-                            let _ = reply.send(result);
-                        }
+                // Download only if the resolved path doesn't already exist.
+                if model_path != bundled_model.unwrap_or_default() {
+                    if let Err(e) = download_if_needed(&client, &model_path).await {
+                        eprintln!("[LOCAL_AI] Download failed: {e}");
+                        return;
                     }
                 }
-                eprintln!("[LOCAL_AI] Inference actor shut down.");
-            })
-            .await
-            .ok();
+
+                // 2. Load model in a blocking thread (llama.cpp is not async).
+                let mp = model_path.clone();
+                let (actor_tx, actor_rx) = mpsc::sync_channel::<InferenceMsg>(8);
+
+                let load_result = tokio::task::spawn_blocking(move || {
+                    eprintln!("[LOCAL_AI] Loading GGUF from {:?}...", mp);
+                    let model = LlamaModel::load_from_file(&mp, LlamaParams::default())
+                        .map_err(|e| format!("Failed to load model: {e}"))?;
+                    eprintln!("[LOCAL_AI] Model loaded — starting inference actor.");
+                    Ok::<LlamaModel, String>(model)
+                })
+                .await;
+
+                let model = match load_result {
+                    Ok(Ok(m)) => m,
+                    Ok(Err(e)) => {
+                        eprintln!("[LOCAL_AI] Load error: {e}");
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("[LOCAL_AI] Spawn error: {e}");
+                        return;
+                    }
+                };
+
+                // 3. Store the sender, mark ready.
+                {
+                    let mut guard = tx_cell.lock().unwrap();
+                    *guard = Some(actor_tx);
+                }
+                ready.store(true, Ordering::Relaxed);
+                eprintln!("[LOCAL_AI] gemma3:1b ready for inference.");
+
+                // 4. Run inference actor loop in this blocking thread.
+                //    (model lives here — no Send requirement across threads.)
+                tokio::task::spawn_blocking(move || {
+                    while let Ok(msg) = actor_rx.recv() {
+                        match msg {
+                            InferenceMsg::Chat { prompt, reply } => {
+                                let result = run_inference(&model, &prompt);
+                                let _ = reply.send(result);
+                            }
+                        }
+                    }
+                    eprintln!("[LOCAL_AI] Inference actor shut down.");
+                })
+                .await
+                .ok();
             } // end #[cfg(not(target_os = "android"))]
         });
     }
@@ -181,9 +181,7 @@ impl LocalAiService {
             return Err("Local AI is not available on this platform".to_string());
         }
         if !self.is_ready() {
-            return Err(
-                "Local AI not ready (model may still be downloading).".to_string()
-            );
+            return Err("Local AI not ready (model may still be downloading).".to_string());
         }
 
         let prompt = format_chatml_prompt(&messages);
@@ -193,7 +191,10 @@ impl LocalAiService {
             let guard = self.tx.lock().unwrap();
             match guard.as_ref() {
                 Some(tx) => tx
-                    .send(InferenceMsg::Chat { prompt, reply: reply_tx })
+                    .send(InferenceMsg::Chat {
+                        prompt,
+                        reply: reply_tx,
+                    })
                     .map_err(|_| "Inference actor is unavailable.".to_string())?,
                 None => return Err("Inference actor not started.".to_string()),
             }
@@ -270,7 +271,10 @@ async fn download_if_needed(client: &Client, dest: &PathBuf) -> Result<(), Strin
     // Check if file already exists and has non-zero size.
     if let Ok(meta) = fs::metadata(dest).await {
         if meta.len() > 0 {
-            eprintln!("[LOCAL_AI] GGUF already present ({} MB).", meta.len() / 1_048_576);
+            eprintln!(
+                "[LOCAL_AI] GGUF already present ({} MB).",
+                meta.len() / 1_048_576
+            );
             return Ok(());
         }
     }
@@ -313,13 +317,22 @@ async fn download_if_needed(client: &Client, dest: &PathBuf) -> Result<(), Strin
         if total > 0 {
             let pct = downloaded * 100 / total;
             if pct >= last_log_pct + 10 {
-                eprintln!("[LOCAL_AI] Download: {pct}% ({} / {} MB)", downloaded / 1_048_576, total / 1_048_576);
+                eprintln!(
+                    "[LOCAL_AI] Download: {pct}% ({} / {} MB)",
+                    downloaded / 1_048_576,
+                    total / 1_048_576
+                );
                 last_log_pct = pct;
             }
         }
     }
 
-    file.flush().await.map_err(|e| format!("Flush error: {e}"))?;
-    eprintln!("[LOCAL_AI] Download complete ({} MB).", downloaded / 1_048_576);
+    file.flush()
+        .await
+        .map_err(|e| format!("Flush error: {e}"))?;
+    eprintln!(
+        "[LOCAL_AI] Download complete ({} MB).",
+        downloaded / 1_048_576
+    );
     Ok(())
 }

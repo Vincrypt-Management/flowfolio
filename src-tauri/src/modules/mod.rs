@@ -1,16 +1,16 @@
-pub mod store;
-pub mod data_provider;
-pub mod rate_limiter;
-pub mod plan_compiler;
-pub mod scoring;
-pub mod portfolio;
 pub mod backtest;
+pub mod data_provider;
 pub mod journal;
+pub mod plan_compiler;
+pub mod portfolio;
 pub mod quant_analysis;
+pub mod rate_limiter;
+pub mod scoring;
+pub mod store;
 
 // Infrastructure modules
-pub mod error;
 pub mod circuit_breaker;
-pub mod retry;
+pub mod error;
 pub mod health;
 pub mod progress;
+pub mod retry;

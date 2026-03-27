@@ -106,7 +106,7 @@ impl RetryExecutor {
 
         loop {
             attempts += 1;
-            
+
             let result = if let Some(timeout) = self.config.attempt_timeout {
                 match tokio::time::timeout(timeout, f()).await {
                     Ok(r) => r,
@@ -129,7 +129,7 @@ impl RetryExecutor {
                                     total_delay,
                                 };
                             }
-                            Err(e) => Err(e)
+                            Err(e) => Err(e),
                         }
                     }
                 }
@@ -161,7 +161,9 @@ impl RetryExecutor {
                     // Calculate delay with jitter
                     let delay = if self.config.jitter {
                         let jitter_factor = 0.5 + rand_factor() * 0.5; // 0.5 to 1.0
-                        Duration::from_millis((current_delay.as_millis() as f64 * jitter_factor) as u64)
+                        Duration::from_millis(
+                            (current_delay.as_millis() as f64 * jitter_factor) as u64,
+                        )
                     } else {
                         current_delay
                     };
@@ -172,7 +174,8 @@ impl RetryExecutor {
                     total_delay += delay;
 
                     // Calculate next delay with exponential backoff
-                    let next_delay_ms = (current_delay.as_millis() as f64 * self.config.backoff_multiplier) as u64;
+                    let next_delay_ms =
+                        (current_delay.as_millis() as f64 * self.config.backoff_multiplier) as u64;
                     current_delay = Duration::from_millis(next_delay_ms).min(self.config.max_delay);
                 }
             }
@@ -218,7 +221,9 @@ impl RetryExecutor {
 
                     let delay = if self.config.jitter {
                         let jitter_factor = 0.5 + rand_factor() * 0.5;
-                        Duration::from_millis((current_delay.as_millis() as f64 * jitter_factor) as u64)
+                        Duration::from_millis(
+                            (current_delay.as_millis() as f64 * jitter_factor) as u64,
+                        )
                     } else {
                         current_delay
                     };
@@ -226,7 +231,8 @@ impl RetryExecutor {
                     sleep(delay).await;
                     total_delay += delay;
 
-                    let next_delay_ms = (current_delay.as_millis() as f64 * self.config.backoff_multiplier) as u64;
+                    let next_delay_ms =
+                        (current_delay.as_millis() as f64 * self.config.backoff_multiplier) as u64;
                     current_delay = Duration::from_millis(next_delay_ms).min(self.config.max_delay);
                 }
             }
@@ -301,17 +307,19 @@ mod tests {
 
         let executor = RetryExecutor::new(config);
 
-        let result = executor.execute(|| {
-            let c = counter_clone.clone();
-            async move {
-                let count = c.fetch_add(1, Ordering::SeqCst);
-                if count < 2 {
-                    Err("Not ready yet")
-                } else {
-                    Ok("Success!")
+        let result = executor
+            .execute(|| {
+                let c = counter_clone.clone();
+                async move {
+                    let count = c.fetch_add(1, Ordering::SeqCst);
+                    if count < 2 {
+                        Err("Not ready yet")
+                    } else {
+                        Ok("Success!")
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
 
         assert!(result.result.is_ok());
         assert_eq!(result.attempts, 3);
@@ -330,9 +338,8 @@ mod tests {
 
         let executor = RetryExecutor::new(config);
 
-        let result: RetryResult<(), &str> = executor.execute(|| async {
-            Err("Always fails")
-        }).await;
+        let result: RetryResult<(), &str> =
+            executor.execute(|| async { Err("Always fails") }).await;
 
         assert!(result.result.is_err());
         assert_eq!(result.attempts, 3);
@@ -395,9 +402,7 @@ mod tests {
         };
         let executor = RetryExecutor::new(config);
 
-        let result: RetryResult<i32, &str> = executor.execute(|| async {
-            Ok(42)
-        }).await;
+        let result: RetryResult<i32, &str> = executor.execute(|| async { Ok(42) }).await;
 
         assert!(result.result.is_ok());
         assert_eq!(result.result.unwrap(), 42);
@@ -417,9 +422,7 @@ mod tests {
         };
         let executor = RetryExecutor::new(config);
 
-        let result: RetryResult<(), &str> = executor.execute(|| async {
-            Err("fail")
-        }).await;
+        let result: RetryResult<(), &str> = executor.execute(|| async { Err("fail") }).await;
 
         assert!(result.result.is_err());
         // With 3 max retries: attempts 1 and 2 trigger delays (attempt 3 is the last)
@@ -553,13 +556,19 @@ mod tests {
         let executor = RetryExecutor::new(config);
         let counter = Arc::new(AtomicU32::new(0));
         let cc = counter.clone();
-        let result: RetryResult<i32, &str> = executor.execute(|| {
-            let c = cc.clone();
-            async move {
-                let n = c.fetch_add(1, Ordering::SeqCst);
-                if n < 1 { Err("retry") } else { Ok(7) }
-            }
-        }).await;
+        let result: RetryResult<i32, &str> = executor
+            .execute(|| {
+                let c = cc.clone();
+                async move {
+                    let n = c.fetch_add(1, Ordering::SeqCst);
+                    if n < 1 {
+                        Err("retry")
+                    } else {
+                        Ok(7)
+                    }
+                }
+            })
+            .await;
         assert_eq!(result.result.unwrap(), 7);
         assert_eq!(result.attempts, 2);
     }
@@ -578,16 +587,22 @@ mod tests {
         let executor = RetryExecutor::new(config);
         let counter = Arc::new(AtomicU32::new(0));
         let cc = counter.clone();
-        let result: RetryResult<i32, String> = executor.execute_with_predicate(
-            || {
-                let c = cc.clone();
-                async move {
-                    let n = c.fetch_add(1, Ordering::SeqCst);
-                    if n < 2 { Err("transient".to_string()) } else { Ok(42) }
-                }
-            },
-            |_| true,
-        ).await;
+        let result: RetryResult<i32, String> = executor
+            .execute_with_predicate(
+                || {
+                    let c = cc.clone();
+                    async move {
+                        let n = c.fetch_add(1, Ordering::SeqCst);
+                        if n < 2 {
+                            Err("transient".to_string())
+                        } else {
+                            Ok(42)
+                        }
+                    }
+                },
+                |_| true,
+            )
+            .await;
         assert_eq!(result.result.unwrap(), 42);
         assert_eq!(result.attempts, 3);
     }
@@ -622,10 +637,12 @@ mod tests {
         };
         let executor = RetryExecutor::new(config);
         // Operation that sleeps longer than timeout
-        let result: RetryResult<i32, &str> = executor.execute(|| async {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            Ok(1)
-        }).await;
+        let result: RetryResult<i32, &str> = executor
+            .execute(|| async {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                Ok(1)
+            })
+            .await;
         // Result may be ok or err depending on timing, but we exercised the timeout path
         let _ = result;
     }
@@ -645,13 +662,15 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        let result: RetryResult<(), &str> = executor.execute(|| {
-            let c = counter_clone.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Err("fail")
-            }
-        }).await;
+        let result: RetryResult<(), &str> = executor
+            .execute(|| {
+                let c = counter_clone.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err("fail")
+                }
+            })
+            .await;
 
         assert!(result.result.is_err());
         assert_eq!(result.attempts, 1);

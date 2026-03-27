@@ -1,7 +1,9 @@
 // API Commands - Journal
 // Extracted from lib.rs
 
-use crate::modules::journal::{Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff};
+use crate::modules::journal::{
+    Journal, JournalEntry, JournalFilter, JournalStats, PlanVersionDiff,
+};
 
 /// Create a journal entry
 #[tauri::command]
@@ -28,7 +30,11 @@ pub fn log_strategy_change(
     old_plan: String,
     new_plan: String,
 ) -> Result<JournalEntry, String> {
-    Ok(Journal::log_strategy_change(&change_description, &old_plan, &new_plan))
+    Ok(Journal::log_strategy_change(
+        &change_description,
+        &old_plan,
+        &new_plan,
+    ))
 }
 
 /// Log a trade decision
@@ -68,7 +74,12 @@ pub fn compare_plan_versions(
     from_version: String,
     to_version: String,
 ) -> Result<PlanVersionDiff, String> {
-    Ok(Journal::compare_plans(&old_plan, &new_plan, &from_version, &to_version))
+    Ok(Journal::compare_plans(
+        &old_plan,
+        &new_plan,
+        &from_version,
+        &to_version,
+    ))
 }
 
 /// Filter journal entries
@@ -82,16 +93,12 @@ pub fn filter_journal_entries(
 
 /// Calculate journal statistics
 #[tauri::command]
-pub fn calculate_journal_stats(
-    entries: Vec<JournalEntry>,
-) -> Result<JournalStats, String> {
+pub fn calculate_journal_stats(entries: Vec<JournalEntry>) -> Result<JournalStats, String> {
     Ok(Journal::calculate_stats(&entries))
 }
 
 /// Export journal to markdown
 #[tauri::command]
-pub fn export_journal_markdown(
-    entries: Vec<JournalEntry>,
-) -> Result<String, String> {
+pub fn export_journal_markdown(entries: Vec<JournalEntry>) -> Result<String, String> {
     Ok(Journal::export_to_markdown(&entries))
 }

@@ -1,11 +1,11 @@
 // API Commands - Vibe Studio
 // Extracted from lib.rs
 
+use crate::core::validation::validate_symbols;
 use crate::modules::{
     plan_compiler::{PlanCompiler, VibePlanScript},
-    scoring::{ScoringConfig, SymbolScore, FactorScore},
+    scoring::{FactorScore, ScoringConfig, SymbolScore},
 };
-use crate::core::validation::validate_symbols;
 use crate::{ENHANCED_MARKET_SERVICE, OPENROUTER_SERVICE, SAVED_PLANS};
 use std::collections::HashMap;
 
@@ -24,8 +24,7 @@ pub fn list_templates() -> Vec<String> {
 /// Get a specific template by name
 #[tauri::command]
 pub fn get_template(name: String) -> Result<VibePlanScript, String> {
-    PlanCompiler::get_template(&name)
-        .ok_or_else(|| format!("Template '{}' not found", name))
+    PlanCompiler::get_template(&name).ok_or_else(|| format!("Template '{}' not found", name))
 }
 
 /// Compile a prompt into a VibePlan using AI
@@ -52,8 +51,7 @@ pub async fn compile_plan(prompt: String) -> Result<VibePlanScript, String> {
 /// Validate a VibePlan
 #[tauri::command]
 pub fn validate_plan(plan: VibePlanScript) -> Result<(), String> {
-    PlanCompiler::validate(&plan)
-        .map_err(|e| e.to_string())
+    PlanCompiler::validate(&plan).map_err(|e| e.to_string())
 }
 
 /// Get scoring configuration for a plan
@@ -104,7 +102,8 @@ pub async fn score_symbols_batch(
                 }
 
                 if let Some(weight) = config.factor_weights.get("quality") {
-                    let normalized = quality_score_from_sharpe(metrics.sharpe_ratio, metrics.volatility);
+                    let normalized =
+                        quality_score_from_sharpe(metrics.sharpe_ratio, metrics.volatility);
                     let contribution = normalized * weight;
                     factors.push(FactorScore {
                         name: "quality".to_string(),
@@ -155,9 +154,14 @@ pub async fn score_symbols_batch(
                     "{}: Score {:.1}/100\n\
                     RSI: {:.1} | Sharpe: {:.2} | Vol: {:.1}% | Return: {:.1}%\n\
                     Signal: {} (Confidence: {:.0}%)",
-                    symbol, total_score,
-                    metrics.rsi, metrics.sharpe_ratio, metrics.volatility, metrics.annualized_return,
-                    metrics.signal, metrics.confidence
+                    symbol,
+                    total_score,
+                    metrics.rsi,
+                    metrics.sharpe_ratio,
+                    metrics.volatility,
+                    metrics.annualized_return,
+                    metrics.signal,
+                    metrics.confidence
                 );
 
                 scores.push(SymbolScore {
@@ -178,7 +182,11 @@ pub async fn score_symbols_batch(
         }
     }
 
-    scores.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap_or(std::cmp::Ordering::Equal));
+    scores.sort_by(|a, b| {
+        b.total_score
+            .partial_cmp(&a.total_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     Ok(scores)
 }
@@ -198,7 +206,8 @@ pub async fn save_plan(plan: VibePlanScript) -> Result<String, String> {
 #[tauri::command]
 pub async fn load_plan(name: String) -> Result<VibePlanScript, String> {
     let plans = SAVED_PLANS.lock().await;
-    plans.get(&name)
+    plans
+        .get(&name)
         .cloned()
         .ok_or_else(|| format!("Plan '{}' not found", name))
 }
@@ -214,7 +223,8 @@ pub async fn list_saved_plans() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn delete_plan(name: String) -> Result<(), String> {
     let mut plans = SAVED_PLANS.lock().await;
-    plans.remove(&name)
+    plans
+        .remove(&name)
         .map(|_| ())
         .ok_or_else(|| format!("Plan '{}' not found", name))
 }

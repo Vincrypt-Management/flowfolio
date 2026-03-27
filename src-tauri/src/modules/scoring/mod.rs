@@ -3,8 +3,8 @@
 pub mod factors;
 pub mod parser;
 
-use serde::{Deserialize, Serialize};
 use factors::{FinancialMetrics, MomentumMetrics};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Factor scores for a symbol
@@ -38,8 +38,10 @@ impl Default for ScoringConfig {
         weights.insert("value".to_string(), 0.25);
         weights.insert("momentum".to_string(), 0.25);
         weights.insert("growth".to_string(), 0.25);
-        
-        Self { factor_weights: weights }
+
+        Self {
+            factor_weights: weights,
+        }
     }
 }
 
@@ -52,11 +54,11 @@ impl ScoringEngine {
     pub fn new(config: ScoringConfig) -> Self {
         Self { config }
     }
-    
+
     pub fn with_default_config() -> Self {
         Self::new(ScoringConfig::default())
     }
-    
+
     /// Calculate comprehensive score for a symbol
     pub fn calculate_score(
         &self,
@@ -67,7 +69,7 @@ impl ScoringEngine {
         let mut factors = Vec::new();
         let mut total_contribution = 0.0;
         let mut total_weight = 0.0;
-        
+
         // Quality factor
         if let Some(weight) = self.config.factor_weights.get("quality") {
             if let Some(score) = financial_metrics.quality_score() {
@@ -83,7 +85,7 @@ impl ScoringEngine {
                 total_weight += weight;
             }
         }
-        
+
         // Value factor
         if let Some(weight) = self.config.factor_weights.get("value") {
             if let Some(score) = financial_metrics.value_score() {
@@ -99,7 +101,7 @@ impl ScoringEngine {
                 total_weight += weight;
             }
         }
-        
+
         // Growth factor
         if let Some(weight) = self.config.factor_weights.get("growth") {
             if let Some(score) = financial_metrics.growth_score() {
@@ -115,7 +117,7 @@ impl ScoringEngine {
                 total_weight += weight;
             }
         }
-        
+
         // Momentum factor
         if let Some(weight) = self.config.factor_weights.get("momentum") {
             if let Some(score) = momentum_metrics.momentum_score() {
@@ -131,7 +133,7 @@ impl ScoringEngine {
                 total_weight += weight;
             }
         }
-        
+
         // Dividend factor (if configured)
         if let Some(weight) = self.config.factor_weights.get("dividend") {
             if let Some(score) = financial_metrics.dividend_score() {
@@ -147,17 +149,17 @@ impl ScoringEngine {
                 total_weight += weight;
             }
         }
-        
+
         // Calculate final score (normalized to 0-100)
         let total_score = if total_weight > 0.0 {
             total_contribution / total_weight
         } else {
             0.0
         };
-        
+
         // Generate explanation
         let explanation = self.generate_explanation(&factors, total_score);
-        
+
         SymbolScore {
             symbol: symbol.to_string(),
             total_score,
@@ -165,17 +167,21 @@ impl ScoringEngine {
             explanation,
         }
     }
-    
+
     /// Generate human-readable explanation
     fn generate_explanation(&self, factors: &[FactorScore], total_score: f64) -> String {
         let mut parts = Vec::new();
-        
+
         parts.push(format!("Overall Score: {:.1}/100", total_score));
-        
+
         // Sort factors by contribution (descending)
         let mut sorted_factors = factors.to_vec();
-        sorted_factors.sort_by(|a, b| b.contribution.partial_cmp(&a.contribution).unwrap_or(std::cmp::Ordering::Equal));
-        
+        sorted_factors.sort_by(|a, b| {
+            b.contribution
+                .partial_cmp(&a.contribution)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         parts.push("Factor Breakdown:".to_string());
         for factor in &sorted_factors {
             parts.push(format!(
@@ -186,7 +192,7 @@ impl ScoringEngine {
                 factor.contribution
             ));
         }
-        
+
         // Interpretation
         if total_score >= 80.0 {
             parts.push("Strong candidate across all factors".to_string());
@@ -197,10 +203,10 @@ impl ScoringEngine {
         } else {
             parts.push("Below average on key metrics".to_string());
         }
-        
+
         parts.join("\n")
     }
-    
+
     /// Calculate scores for multiple symbols
     pub fn score_batch(
         &self,
@@ -213,11 +219,13 @@ impl ScoringEngine {
             })
             .collect()
     }
-    
+
     /// Rank symbols by total score (descending)
     pub fn rank_symbols(&self, mut scores: Vec<SymbolScore>) -> Vec<SymbolScore> {
         scores.sort_by(|a, b| {
-            b.total_score.partial_cmp(&a.total_score).unwrap_or(std::cmp::Ordering::Equal)
+            b.total_score
+                .partial_cmp(&a.total_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         scores
     }
@@ -394,7 +402,9 @@ mod tests {
     fn test_custom_scoring_config_only_quality() {
         let mut weights = HashMap::new();
         weights.insert("quality".to_string(), 1.0);
-        let config = ScoringConfig { factor_weights: weights };
+        let config = ScoringConfig {
+            factor_weights: weights,
+        };
         let engine = ScoringEngine::new(config);
 
         let score = engine.calculate_score("TEST", &sample_financial(), &sample_momentum());
@@ -406,7 +416,9 @@ mod tests {
     fn test_dividend_factor_included_when_weight_configured() {
         let mut weights = HashMap::new();
         weights.insert("dividend".to_string(), 1.0);
-        let config = ScoringConfig { factor_weights: weights };
+        let config = ScoringConfig {
+            factor_weights: weights,
+        };
         let engine = ScoringEngine::new(config);
 
         let financial = FinancialMetrics {

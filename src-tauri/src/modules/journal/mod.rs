@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +61,7 @@ impl Journal {
         tags: Vec<String>,
     ) -> JournalEntry {
         let id = format!("{}-{}", Utc::now().timestamp(), uuid::Uuid::new_v4());
-        
+
         JournalEntry {
             id,
             timestamp: Utc::now().to_rfc3339(),
@@ -96,11 +96,7 @@ impl Journal {
     }
 
     /// Create a trade decision entry
-    pub fn log_trade_decision(
-        symbol: &str,
-        action: &str,
-        rationale: &str,
-    ) -> JournalEntry {
+    pub fn log_trade_decision(symbol: &str, action: &str, rationale: &str) -> JournalEntry {
         let mut metadata = HashMap::new();
         metadata.insert("symbol".to_string(), symbol.to_string());
         metadata.insert("action".to_string(), action.to_string());
@@ -117,14 +113,14 @@ impl Journal {
     }
 
     /// Create a rebalance entry
-    pub fn log_rebalance(
-        trigger_reason: &str,
-        actions_summary: &str,
-    ) -> JournalEntry {
+    pub fn log_rebalance(trigger_reason: &str, actions_summary: &str) -> JournalEntry {
         Self::create_entry(
             "rebalance",
             "Portfolio Rebalanced",
-            &format!("Trigger: {}\n\nActions:\n{}", trigger_reason, actions_summary),
+            &format!(
+                "Trigger: {}\n\nActions:\n{}",
+                trigger_reason, actions_summary
+            ),
             None,
             vec!["rebalance".to_string()],
         )
@@ -153,18 +149,8 @@ impl Journal {
 
     /// Create a reflection entry
     #[allow(dead_code)]
-    pub fn log_reflection(
-        title: &str,
-        content: &str,
-        tags: Vec<String>,
-    ) -> JournalEntry {
-        Self::create_entry(
-            "reflection",
-            title,
-            content,
-            None,
-            tags,
-        )
+    pub fn log_reflection(title: &str, content: &str, tags: Vec<String>) -> JournalEntry {
+        Self::create_entry("reflection", title, content, None, tags)
     }
 
     /// Generate plan version diff
@@ -222,8 +208,14 @@ impl Journal {
 
     fn generate_diff_summary(changes: &[PlanChange]) -> String {
         let additions = changes.iter().filter(|c| c.change_type == "added").count();
-        let removals = changes.iter().filter(|c| c.change_type == "removed").count();
-        let modifications = changes.iter().filter(|c| c.change_type == "modified").count();
+        let removals = changes
+            .iter()
+            .filter(|c| c.change_type == "removed")
+            .count();
+        let modifications = changes
+            .iter()
+            .filter(|c| c.change_type == "modified")
+            .count();
 
         format!(
             "Plan updated: {} addition(s), {} removal(s), {} modification(s)",
@@ -232,11 +224,9 @@ impl Journal {
     }
 
     /// Filter journal entries
-    pub fn filter_entries(
-        entries: &[JournalEntry],
-        filter: &JournalFilter,
-    ) -> Vec<JournalEntry> {
-        entries.iter()
+    pub fn filter_entries(entries: &[JournalEntry], filter: &JournalFilter) -> Vec<JournalEntry> {
+        entries
+            .iter()
             .filter(|entry| {
                 // Filter by event type
                 if let Some(ref types) = filter.event_types {
@@ -267,8 +257,9 @@ impl Journal {
                 // Search query
                 if let Some(ref query) = filter.search_query {
                     let query_lower = query.to_lowercase();
-                    if !entry.title.to_lowercase().contains(&query_lower) &&
-                       !entry.content.to_lowercase().contains(&query_lower) {
+                    if !entry.title.to_lowercase().contains(&query_lower)
+                        && !entry.content.to_lowercase().contains(&query_lower)
+                    {
                         return false;
                     }
                 }
@@ -315,14 +306,17 @@ impl Journal {
     /// Export entries to markdown
     pub fn export_to_markdown(entries: &[JournalEntry]) -> String {
         let mut md = String::from("# Investment Journal\n\n");
-        md.push_str(&format!("Generated: {}\n\n", Utc::now().format("%Y-%m-%d %H:%M:%S")));
+        md.push_str(&format!(
+            "Generated: {}\n\n",
+            Utc::now().format("%Y-%m-%d %H:%M:%S")
+        ));
         md.push_str(&format!("Total Entries: {}\n\n", entries.len()));
         md.push_str("---\n\n");
 
         for entry in entries {
             md.push_str(&format!("## {} ({})\n\n", entry.title, entry.event_type));
             md.push_str(&format!("**Date:** {}\n\n", entry.timestamp));
-            
+
             if !entry.tags.is_empty() {
                 md.push_str(&format!("**Tags:** {}\n\n", entry.tags.join(", ")));
             }
@@ -396,20 +390,44 @@ mod tests {
     #[test]
     fn test_calculate_stats() {
         let entries = vec![
-            Journal::create_entry("trade", "Trade 1", "Content", None, vec!["stock".to_string()]),
-            Journal::create_entry("trade", "Trade 2", "Content", None, vec!["stock".to_string()]),
-            Journal::create_entry("review", "Review", "Content", None, vec!["quarterly".to_string()]),
+            Journal::create_entry(
+                "trade",
+                "Trade 1",
+                "Content",
+                None,
+                vec!["stock".to_string()],
+            ),
+            Journal::create_entry(
+                "trade",
+                "Trade 2",
+                "Content",
+                None,
+                vec!["stock".to_string()],
+            ),
+            Journal::create_entry(
+                "review",
+                "Review",
+                "Content",
+                None,
+                vec!["quarterly".to_string()],
+            ),
         ];
 
         let stats = Journal::calculate_stats(&entries);
-        
+
         assert_eq!(stats.total_entries, 3);
         assert_eq!(*stats.entries_by_type.get("trade").unwrap(), 2);
         assert_eq!(*stats.entries_by_type.get("review").unwrap(), 1);
     }
 
     // Helper to create entries with specific fields for testing
-    fn make_entry(event_type: &str, title: &str, content: &str, tags: Vec<&str>, timestamp: &str) -> JournalEntry {
+    fn make_entry(
+        event_type: &str,
+        title: &str,
+        content: &str,
+        tags: Vec<&str>,
+        timestamp: &str,
+    ) -> JournalEntry {
         JournalEntry {
             id: format!("test-{}", title),
             timestamp: timestamp.to_string(),
@@ -427,9 +445,27 @@ mod tests {
     #[test]
     fn test_filter_by_tags() {
         let entries = vec![
-            make_entry("trade", "Buy AAPL", "content", vec!["stock", "tech"], "2024-03-01T00:00:00Z"),
-            make_entry("trade", "Buy MSFT", "content", vec!["stock", "tech"], "2024-03-02T00:00:00Z"),
-            make_entry("review", "Q1 Review", "content", vec!["quarterly"], "2024-03-15T00:00:00Z"),
+            make_entry(
+                "trade",
+                "Buy AAPL",
+                "content",
+                vec!["stock", "tech"],
+                "2024-03-01T00:00:00Z",
+            ),
+            make_entry(
+                "trade",
+                "Buy MSFT",
+                "content",
+                vec!["stock", "tech"],
+                "2024-03-02T00:00:00Z",
+            ),
+            make_entry(
+                "review",
+                "Q1 Review",
+                "content",
+                vec!["quarterly"],
+                "2024-03-15T00:00:00Z",
+            ),
         ];
         let filter = JournalFilter {
             event_types: None,
@@ -465,9 +501,27 @@ mod tests {
     #[test]
     fn test_filter_by_search_query() {
         let entries = vec![
-            make_entry("trade", "Buy Apple Stock", "Great fundamentals", vec![], "2024-03-01T00:00:00Z"),
-            make_entry("trade", "Sell Google", "Overvalued", vec![], "2024-03-02T00:00:00Z"),
-            make_entry("review", "Monthly Review", "apple performance was good", vec![], "2024-03-15T00:00:00Z"),
+            make_entry(
+                "trade",
+                "Buy Apple Stock",
+                "Great fundamentals",
+                vec![],
+                "2024-03-01T00:00:00Z",
+            ),
+            make_entry(
+                "trade",
+                "Sell Google",
+                "Overvalued",
+                vec![],
+                "2024-03-02T00:00:00Z",
+            ),
+            make_entry(
+                "review",
+                "Monthly Review",
+                "apple performance was good",
+                vec![],
+                "2024-03-15T00:00:00Z",
+            ),
         ];
         let filter = JournalFilter {
             event_types: None,
@@ -500,9 +554,27 @@ mod tests {
     #[test]
     fn test_filter_combined() {
         let entries = vec![
-            make_entry("trade", "Buy AAPL", "good stock", vec!["tech"], "2024-03-01T00:00:00Z"),
-            make_entry("trade", "Sell AAPL", "bad stock", vec!["tech"], "2024-06-01T00:00:00Z"),
-            make_entry("review", "Review", "content", vec!["quarterly"], "2024-03-15T00:00:00Z"),
+            make_entry(
+                "trade",
+                "Buy AAPL",
+                "good stock",
+                vec!["tech"],
+                "2024-03-01T00:00:00Z",
+            ),
+            make_entry(
+                "trade",
+                "Sell AAPL",
+                "bad stock",
+                vec!["tech"],
+                "2024-06-01T00:00:00Z",
+            ),
+            make_entry(
+                "review",
+                "Review",
+                "content",
+                vec!["quarterly"],
+                "2024-03-15T00:00:00Z",
+            ),
         ];
         let filter = JournalFilter {
             event_types: Some(vec!["trade".to_string()]),
@@ -529,15 +601,37 @@ mod tests {
     #[test]
     fn test_stats_tag_frequency() {
         let entries = vec![
-            make_entry("trade", "T1", "c", vec!["stock", "tech"], "2024-03-01T00:00:00Z"),
+            make_entry(
+                "trade",
+                "T1",
+                "c",
+                vec!["stock", "tech"],
+                "2024-03-01T00:00:00Z",
+            ),
             make_entry("trade", "T2", "c", vec!["stock"], "2024-03-02T00:00:00Z"),
-            make_entry("review", "R1", "c", vec!["quarterly", "tech"], "2024-03-15T00:00:00Z"),
+            make_entry(
+                "review",
+                "R1",
+                "c",
+                vec!["quarterly", "tech"],
+                "2024-03-15T00:00:00Z",
+            ),
         ];
         let stats = Journal::calculate_stats(&entries);
         // stock: 2, tech: 2, quarterly: 1
-        let stock_count = stats.common_tags.iter().find(|(t, _)| t == "stock").map(|(_, c)| *c).unwrap_or(0);
+        let stock_count = stats
+            .common_tags
+            .iter()
+            .find(|(t, _)| t == "stock")
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
         assert_eq!(stock_count, 2);
-        let tech_count = stats.common_tags.iter().find(|(t, _)| t == "tech").map(|(_, c)| *c).unwrap_or(0);
+        let tech_count = stats
+            .common_tags
+            .iter()
+            .find(|(t, _)| t == "tech")
+            .map(|(_, c)| *c)
+            .unwrap_or(0);
         assert_eq!(tech_count, 2);
     }
 
@@ -560,7 +654,11 @@ mod tests {
         let old = "line1\nline2";
         let new = "line1\nline2\nline3";
         let diff = Journal::compare_plans(old, new, "v1", "v2");
-        let additions: Vec<_> = diff.changes.iter().filter(|c| c.change_type == "added").collect();
+        let additions: Vec<_> = diff
+            .changes
+            .iter()
+            .filter(|c| c.change_type == "added")
+            .collect();
         assert_eq!(additions.len(), 1);
         assert_eq!(additions[0].new_value, "line3");
     }
@@ -570,7 +668,11 @@ mod tests {
         let old = "line1\nline2\nline3";
         let new = "line1\nline2";
         let diff = Journal::compare_plans(old, new, "v1", "v2");
-        let removals: Vec<_> = diff.changes.iter().filter(|c| c.change_type == "removed").collect();
+        let removals: Vec<_> = diff
+            .changes
+            .iter()
+            .filter(|c| c.change_type == "removed")
+            .collect();
         assert_eq!(removals.len(), 1);
         assert_eq!(removals[0].old_value, "line3");
     }
@@ -587,8 +689,16 @@ mod tests {
         let old = "alpha\nbeta";
         let new = "gamma\ndelta";
         let diff = Journal::compare_plans(old, new, "v1", "v2");
-        let additions: Vec<_> = diff.changes.iter().filter(|c| c.change_type == "added").collect();
-        let removals: Vec<_> = diff.changes.iter().filter(|c| c.change_type == "removed").collect();
+        let additions: Vec<_> = diff
+            .changes
+            .iter()
+            .filter(|c| c.change_type == "added")
+            .collect();
+        let removals: Vec<_> = diff
+            .changes
+            .iter()
+            .filter(|c| c.change_type == "removed")
+            .collect();
         assert_eq!(additions.len(), 2);
         assert_eq!(removals.len(), 2);
     }
@@ -599,7 +709,11 @@ mod tests {
         let new = "line1\n\nline3";
         let diff = Journal::compare_plans(old, new, "v1", "v2");
         // Empty lines are skipped in change detection
-        let additions: Vec<_> = diff.changes.iter().filter(|c| c.change_type == "added").collect();
+        let additions: Vec<_> = diff
+            .changes
+            .iter()
+            .filter(|c| c.change_type == "added")
+            .collect();
         assert_eq!(additions.len(), 1);
         assert_eq!(additions[0].new_value, "line3");
     }
@@ -609,10 +723,30 @@ mod tests {
     #[test]
     fn test_diff_summary() {
         let changes = vec![
-            PlanChange { field: "f".to_string(), old_value: "".to_string(), new_value: "x".to_string(), change_type: "added".to_string() },
-            PlanChange { field: "f".to_string(), old_value: "".to_string(), new_value: "y".to_string(), change_type: "added".to_string() },
-            PlanChange { field: "f".to_string(), old_value: "z".to_string(), new_value: "".to_string(), change_type: "removed".to_string() },
-            PlanChange { field: "f".to_string(), old_value: "a".to_string(), new_value: "b".to_string(), change_type: "modified".to_string() },
+            PlanChange {
+                field: "f".to_string(),
+                old_value: "".to_string(),
+                new_value: "x".to_string(),
+                change_type: "added".to_string(),
+            },
+            PlanChange {
+                field: "f".to_string(),
+                old_value: "".to_string(),
+                new_value: "y".to_string(),
+                change_type: "added".to_string(),
+            },
+            PlanChange {
+                field: "f".to_string(),
+                old_value: "z".to_string(),
+                new_value: "".to_string(),
+                change_type: "removed".to_string(),
+            },
+            PlanChange {
+                field: "f".to_string(),
+                old_value: "a".to_string(),
+                new_value: "b".to_string(),
+                change_type: "modified".to_string(),
+            },
         ];
         let summary = Journal::generate_diff_summary(&changes);
         assert!(summary.contains("2 addition(s)"));
@@ -639,8 +773,16 @@ mod tests {
 
     #[test]
     fn test_export_to_markdown_with_entries() {
-        let mut entry = make_entry("trade", "Buy AAPL", "Great stock", vec!["tech", "buy"], "2024-03-01T00:00:00Z");
-        entry.metadata.insert("symbol".to_string(), "AAPL".to_string());
+        let mut entry = make_entry(
+            "trade",
+            "Buy AAPL",
+            "Great stock",
+            vec!["tech", "buy"],
+            "2024-03-01T00:00:00Z",
+        );
+        entry
+            .metadata
+            .insert("symbol".to_string(), "AAPL".to_string());
 
         let md = Journal::export_to_markdown(&[entry]);
         assert!(md.contains("## Buy AAPL (trade)"));
@@ -652,7 +794,13 @@ mod tests {
 
     #[test]
     fn test_export_to_markdown_no_tags() {
-        let entry = make_entry("review", "Review", "Content here", vec![], "2024-03-01T00:00:00Z");
+        let entry = make_entry(
+            "review",
+            "Review",
+            "Content here",
+            vec![],
+            "2024-03-01T00:00:00Z",
+        );
         let md = Journal::export_to_markdown(&[entry]);
         assert!(!md.contains("**Tags:**"));
     }
@@ -679,7 +827,11 @@ mod tests {
 
     #[test]
     fn test_log_review() {
-        let entry = Journal::log_review("Quarterly", "Everything looks good", vec!["item1".to_string(), "item2".to_string()]);
+        let entry = Journal::log_review(
+            "Quarterly",
+            "Everything looks good",
+            vec!["item1".to_string(), "item2".to_string()],
+        );
         assert_eq!(entry.event_type, "review");
         assert!(entry.title.contains("Quarterly"));
         assert_eq!(entry.metadata.get("action_items").unwrap(), "item1, item2");
@@ -687,7 +839,11 @@ mod tests {
 
     #[test]
     fn test_log_reflection() {
-        let entry = Journal::log_reflection("My Thoughts", "Reflecting on decisions", vec!["personal".to_string()]);
+        let entry = Journal::log_reflection(
+            "My Thoughts",
+            "Reflecting on decisions",
+            vec!["personal".to_string()],
+        );
         assert_eq!(entry.event_type, "reflection");
         assert_eq!(entry.title, "My Thoughts");
         assert_eq!(entry.content, "Reflecting on decisions");

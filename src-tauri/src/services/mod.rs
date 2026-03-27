@@ -1,11 +1,11 @@
+pub mod alpaca_service;
 pub mod db_cache;
 pub mod enhanced_market_service;
-pub mod openrouter_service;
-pub mod local_ai_service;
-pub mod alpaca_service;
 pub mod fundamental_service;
-pub use enhanced_market_service::EnhancedMarketDataService;
-pub use openrouter_service::OpenRouterService;
-pub use local_ai_service::LocalAiService;
+pub mod local_ai_service;
+pub mod openrouter_service;
 pub use alpaca_service::AlpacaService;
+pub use enhanced_market_service::EnhancedMarketDataService;
 pub use fundamental_service::{FundamentalDataService, FundamentalMetrics};
+pub use local_ai_service::LocalAiService;
+pub use openrouter_service::OpenRouterService;

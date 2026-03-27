@@ -1,9 +1,8 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static SYMBOL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[A-Z0-9.\-]{1,10}$").expect("invalid regex")
-});
+static SYMBOL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[A-Z0-9.\-]{1,10}$").expect("invalid regex"));
 
 /// Validate a ticker symbol. Allows uppercase letters, digits, dots, hyphens. 1-10 chars.
 pub fn validate_symbol(symbol: &str) -> Result<(), String> {

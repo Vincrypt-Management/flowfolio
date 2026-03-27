@@ -49,15 +49,16 @@ pub fn log(level: LogLevel, _module: &str, message: &str) {
     match level {
         LogLevel::Trace => tracing::trace!("{}", message),
         LogLevel::Debug => tracing::debug!("{}", message),
-        LogLevel::Info  => tracing::info!("{}", message),
-        LogLevel::Warn  => tracing::warn!("{}", message),
+        LogLevel::Info => tracing::info!("{}", message),
+        LogLevel::Warn => tracing::warn!("{}", message),
         LogLevel::Error => tracing::error!("{}", message),
     }
 }
 
 /// Log with context data
 pub fn log_with_context(level: LogLevel, _module: &str, message: &str, context: &[(&str, &str)]) {
-    let ctx_str: String = context.iter()
+    let ctx_str: String = context
+        .iter()
         .map(|(k, v)| format!("{}={}", k, v))
         .collect::<Vec<_>>()
         .join(" ");
@@ -71,8 +72,8 @@ pub fn log_with_context(level: LogLevel, _module: &str, message: &str, context: 
     match level {
         LogLevel::Trace => tracing::trace!("{}", full_message),
         LogLevel::Debug => tracing::debug!("{}", full_message),
-        LogLevel::Info  => tracing::info!("{}", full_message),
-        LogLevel::Warn  => tracing::warn!("{}", full_message),
+        LogLevel::Info => tracing::info!("{}", full_message),
+        LogLevel::Warn => tracing::warn!("{}", full_message),
         LogLevel::Error => tracing::error!("{}", full_message),
     }
 }
@@ -166,7 +167,12 @@ mod tests {
 
     #[test]
     fn test_log_with_context_empty() {
-        log_with_context(LogLevel::Info, "test_module", "message with no context", &[]);
+        log_with_context(
+            LogLevel::Info,
+            "test_module",
+            "message with no context",
+            &[],
+        );
     }
 
     #[test]

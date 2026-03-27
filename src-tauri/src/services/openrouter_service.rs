@@ -92,8 +92,9 @@ impl OpenRouterService {
         temperature: Option<f64>,
         max_tokens: Option<u32>,
     ) -> Result<String, String> {
-        let api_key = self.api_key.as_ref()
-            .ok_or_else(|| "OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env file.".to_string())?;
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            "OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env file.".to_string()
+        })?;
 
         // Validate API key format (should start with sk-)
         if !api_key.starts_with("sk-") {
@@ -130,27 +131,30 @@ impl OpenRouterService {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             tracing::error!(status = %status, body = %error_text, "OpenRouter API error");
-            
+
             // Provide more helpful error messages
             let user_error = match status.as_u16() {
                 401 => "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string(),
-                402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
+                402 => "Insufficient credits. Please add credits to your OpenRouter account."
+                    .to_string(),
                 429 => "Rate limited. Please wait a moment and try again.".to_string(),
-                500..=599 => format!("OpenRouter server error ({}). The service may be temporarily unavailable.", status),
+                500..=599 => format!(
+                    "OpenRouter server error ({}). The service may be temporarily unavailable.",
+                    status
+                ),
                 _ => format!("OpenRouter API error {}: {}", status, error_text),
             };
             return Err(user_error);
         }
 
-        let result: OpenRouterResponse = response.json().await
-            .map_err(|e| {
-                tracing::error!(error = %e, "Failed to parse OpenRouter response");
-                format!("Failed to parse AI response: {}", e)
-            })?;
+        let result: OpenRouterResponse = response.json().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to parse OpenRouter response");
+            format!("Failed to parse AI response: {}", e)
+        })?;
 
         if let Some(choice) = result.choices.first() {
             let content = choice.message.content.clone();
-            
+
             // Check for empty content
             if content.trim().is_empty() {
                 tracing::warn!(finish_reason = ?choice.finish_reason, "Model returned empty content");
@@ -159,7 +163,7 @@ impl OpenRouterService {
                     choice.finish_reason
                 ));
             }
-            
+
             tracing::info!(tokens = ?result.usage, content_len = content.len(), "OpenRouter response received");
             Ok(content)
         } else {
@@ -169,7 +173,10 @@ impl OpenRouterService {
     }
 
     /// Generate portfolio insight
-    pub async fn generate_portfolio_insight(&self, portfolio_data: serde_json::Value) -> Result<String, String> {
+    pub async fn generate_portfolio_insight(
+        &self,
+        portfolio_data: serde_json::Value,
+    ) -> Result<String, String> {
         let messages = vec![
             OpenRouterMessage {
                 role: "system".to_string(),
@@ -206,7 +213,10 @@ impl OpenRouterService {
     }
 
     /// Compile a natural language prompt into a VibePlan
-    pub async fn compile_plan_from_prompt(&self, prompt: &str) -> Result<serde_json::Value, String> {
+    pub async fn compile_plan_from_prompt(
+        &self,
+        prompt: &str,
+    ) -> Result<serde_json::Value, String> {
         let system_prompt = r#"You are a financial plan compiler. Convert the user's natural language investment strategy description into a structured JSON plan.
 
 Output ONLY valid JSON with this exact structure (no markdown, no explanation):
@@ -262,16 +272,21 @@ Allocation methods: equal_weight, score_weighted, value_weighted, yield_weighted
         ];
 
         let response = self.chat(messages, None, Some(0.3), Some(2000)).await?;
-        
+
         // Parse the response as JSON
-        let cleaned = response.trim()
+        let cleaned = response
+            .trim()
             .trim_start_matches("```json")
             .trim_start_matches("```")
             .trim_end_matches("```")
             .trim();
-        
-        serde_json::from_str(cleaned)
-            .map_err(|e| format!("Failed to parse plan JSON: {}. Response was: {}", e, cleaned))
+
+        serde_json::from_str(cleaned).map_err(|e| {
+            format!(
+                "Failed to parse plan JSON: {}. Response was: {}",
+                e, cleaned
+            )
+        })
     }
 }
 

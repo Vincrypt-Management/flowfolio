@@ -1,9 +1,9 @@
 // Database Cache Service
 // Provides local SQLite caching for market data to reduce API calls
 
-use sqlx::{Pool, Sqlite, Row};
-use chrono::{Utc, Duration};
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::{Pool, Row, Sqlite};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedPrice {
@@ -77,11 +77,11 @@ impl DatabaseCacheService {
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self {
             pool,
-            price_ttl_hours: 1,        // Prices refresh every hour
-            quant_ttl_hours: 6,        // Quant metrics refresh every 6 hours
+            price_ttl_hours: 1,         // Prices refresh every hour
+            quant_ttl_hours: 6,         // Quant metrics refresh every 6 hours
             fundamentals_ttl_hours: 24, // Fundamentals refresh daily
-            sentiment_ttl_hours: 4,    // Sentiment refresh every 4 hours
-            analyst_ttl_hours: 24,     // Analyst ratings refresh daily
+            sentiment_ttl_hours: 4,     // Sentiment refresh every 4 hours
+            analyst_ttl_hours: 24,      // Analyst ratings refresh daily
         }
     }
 
@@ -97,7 +97,9 @@ impl DatabaseCacheService {
             return cache_age < Duration::hours(ttl_hours);
         }
         // Try parsing without timezone
-        if let Ok(cached_time) = chrono::NaiveDateTime::parse_from_str(updated_at, "%Y-%m-%d %H:%M:%S") {
+        if let Ok(cached_time) =
+            chrono::NaiveDateTime::parse_from_str(updated_at, "%Y-%m-%d %H:%M:%S")
+        {
             let now = Utc::now().naive_utc();
             let cache_age = now.signed_duration_since(cached_time);
             return cache_age < Duration::hours(ttl_hours);
@@ -106,10 +108,10 @@ impl DatabaseCacheService {
     }
 
     // ========== PRICE CACHE ==========
-    
+
     pub async fn get_cached_price(&self, symbol: &str) -> Option<CachedPrice> {
         let result = sqlx::query(
-            "SELECT symbol, current_price, updated_at FROM price_cache WHERE symbol = ?"
+            "SELECT symbol, current_price, updated_at FROM price_cache WHERE symbol = ?",
         )
         .bind(symbol)
         .fetch_optional(&self.pool)
@@ -134,13 +136,13 @@ impl DatabaseCacheService {
 
     pub async fn set_cached_price(&self, symbol: &str, price: f64) -> Result<(), String> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
+
         sqlx::query(
             "INSERT INTO price_cache (symbol, current_price, updated_at) 
              VALUES (?, ?, ?)
              ON CONFLICT(symbol) DO UPDATE SET 
              current_price = excluded.current_price,
-             updated_at = excluded.updated_at"
+             updated_at = excluded.updated_at",
         )
         .bind(symbol)
         .bind(price)
@@ -153,14 +155,12 @@ impl DatabaseCacheService {
     }
 
     // ========== QUANT METRICS CACHE ==========
-    
+
     pub async fn get_cached_quant_metrics(&self, symbol: &str) -> Option<CachedQuantMetrics> {
-        let result = sqlx::query(
-            "SELECT * FROM quant_metrics_cache WHERE symbol = ?"
-        )
-        .bind(symbol)
-        .fetch_optional(&self.pool)
-        .await;
+        let result = sqlx::query("SELECT * FROM quant_metrics_cache WHERE symbol = ?")
+            .bind(symbol)
+            .fetch_optional(&self.pool)
+            .await;
 
         match result {
             Ok(Some(row)) => {
@@ -198,7 +198,7 @@ impl DatabaseCacheService {
         confidence: f64,
     ) -> Result<(), String> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
+
         sqlx::query(
             "INSERT INTO quant_metrics_cache 
              (symbol, sharpe_ratio, annualized_return, volatility, max_drawdown, rsi, signal, confidence, updated_at) 
@@ -239,15 +239,13 @@ impl DatabaseCacheService {
             .fetch_optional(&self.pool)
             .await
             .ok()??;
-        
+
         let symbol_id: i64 = symbol_row.get("id");
 
-        let result = sqlx::query(
-            "SELECT * FROM fundamentals_overview WHERE symbol_id = ?"
-        )
-        .bind(symbol_id)
-        .fetch_optional(&self.pool)
-        .await;
+        let result = sqlx::query("SELECT * FROM fundamentals_overview WHERE symbol_id = ?")
+            .bind(symbol_id)
+            .fetch_optional(&self.pool)
+            .await;
 
         match result {
             Ok(Some(row)) => {
@@ -276,12 +274,10 @@ impl DatabaseCacheService {
 
     #[allow(dead_code)]
     pub async fn get_cached_sentiment(&self, symbol: &str) -> Option<CachedSentiment> {
-        let result = sqlx::query(
-            "SELECT * FROM sentiment_cache WHERE symbol = ?"
-        )
-        .bind(symbol)
-        .fetch_optional(&self.pool)
-        .await;
+        let result = sqlx::query("SELECT * FROM sentiment_cache WHERE symbol = ?")
+            .bind(symbol)
+            .fetch_optional(&self.pool)
+            .await;
 
         match result {
             Ok(Some(row)) => {
@@ -313,7 +309,7 @@ impl DatabaseCacheService {
         buzz_score: f64,
     ) -> Result<(), String> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
+
         sqlx::query(
             "INSERT INTO sentiment_cache 
              (symbol, overall_sentiment, sentiment_score, news_count, buzz_score, updated_at) 
@@ -323,7 +319,7 @@ impl DatabaseCacheService {
              sentiment_score = excluded.sentiment_score,
              news_count = excluded.news_count,
              buzz_score = excluded.buzz_score,
-             updated_at = excluded.updated_at"
+             updated_at = excluded.updated_at",
         )
         .bind(symbol)
         .bind(overall_sentiment)
@@ -342,12 +338,10 @@ impl DatabaseCacheService {
 
     #[allow(dead_code)]
     pub async fn get_cached_analyst_rating(&self, symbol: &str) -> Option<CachedAnalystRating> {
-        let result = sqlx::query(
-            "SELECT * FROM analyst_cache WHERE symbol = ?"
-        )
-        .bind(symbol)
-        .fetch_optional(&self.pool)
-        .await;
+        let result = sqlx::query("SELECT * FROM analyst_cache WHERE symbol = ?")
+            .bind(symbol)
+            .fetch_optional(&self.pool)
+            .await;
 
         match result {
             Ok(Some(row)) => {
@@ -381,7 +375,7 @@ impl DatabaseCacheService {
         number_of_analysts: i32,
     ) -> Result<(), String> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
+
         sqlx::query(
             "INSERT INTO analyst_cache 
              (symbol, consensus_rating, target_price_mean, target_price_high, target_price_low, number_of_analysts, updated_at) 
@@ -409,20 +403,23 @@ impl DatabaseCacheService {
     }
 
     // ========== HISTORICAL PRICES CACHE ==========
-    
-    pub async fn get_cached_historical_prices(&self, symbol: &str) -> Option<Vec<(String, f64, f64, f64, f64, i64)>> {
+
+    pub async fn get_cached_historical_prices(
+        &self,
+        symbol: &str,
+    ) -> Option<Vec<(String, f64, f64, f64, f64, i64)>> {
         // Get symbol_id
         let symbol_row = sqlx::query("SELECT id FROM symbols WHERE ticker = ?")
             .bind(symbol)
             .fetch_optional(&self.pool)
             .await
             .ok()??;
-        
+
         let symbol_id: i64 = symbol_row.get("id");
 
         // Check if we have recent data (within 1 day)
         let latest = sqlx::query(
-            "SELECT date FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT 1"
+            "SELECT date FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT 1",
         )
         .bind(symbol_id)
         .fetch_optional(&self.pool)
@@ -430,12 +427,12 @@ impl DatabaseCacheService {
         .ok()??;
 
         let latest_date: String = latest.get("date");
-        
+
         // Parse and check if data is fresh (within 1 day for historical data)
         if let Ok(cached_date) = chrono::NaiveDate::parse_from_str(&latest_date, "%Y-%m-%d") {
             let today = Utc::now().date_naive();
             let days_old = today.signed_duration_since(cached_date).num_days();
-            
+
             // If data is more than 2 days old on a weekday, it's stale
             if days_old > 2 {
                 return None;
@@ -448,7 +445,7 @@ impl DatabaseCacheService {
              FROM prices_daily 
              WHERE symbol_id = ? 
              ORDER BY date DESC 
-             LIMIT 365"
+             LIMIT 365",
         )
         .bind(symbol_id)
         .fetch_all(&self.pool)
@@ -496,7 +493,7 @@ impl DatabaseCacheService {
             .fetch_one(&self.pool)
             .await
             .map_err(|e| format!("Failed to get symbol id: {}", e))?;
-        
+
         let symbol_id: i64 = symbol_row.get("id");
 
         // Insert prices in batches
@@ -509,7 +506,7 @@ impl DatabaseCacheService {
                  high = excluded.high,
                  low = excluded.low,
                  close = excluded.close,
-                 volume = excluded.volume"
+                 volume = excluded.volume",
             )
             .bind(symbol_id)
             .bind(date)
@@ -526,10 +523,10 @@ impl DatabaseCacheService {
     }
 
     // ========== UTILITY METHODS ==========
-    
+
     pub async fn clear_expired_cache(&self) -> Result<(), String> {
         let now = Utc::now();
-        
+
         // Clear expired price cache
         let price_cutoff = (now - Duration::hours(self.price_ttl_hours))
             .format("%Y-%m-%d %H:%M:%S")
@@ -578,26 +575,27 @@ impl DatabaseCacheService {
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
-        
+
         let quant: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM quant_metrics_cache")
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
-        
+
         let sentiment: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sentiment_cache")
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
-        
+
         let analyst: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM analyst_cache")
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
-        
-        let historical: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT symbol_id) FROM prices_daily")
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or(0);
+
+        let historical: i64 =
+            sqlx::query_scalar("SELECT COUNT(DISTINCT symbol_id) FROM prices_daily")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
 
         (prices, quant, sentiment, analyst, historical)
     }
@@ -621,8 +619,11 @@ mod tests {
                 symbol TEXT NOT NULL UNIQUE,
                 current_price REAL NOT NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS quant_metrics_cache (
@@ -636,8 +637,11 @@ mod tests {
                 signal TEXT NOT NULL DEFAULT 'HOLD',
                 confidence REAL NOT NULL DEFAULT 0,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS sentiment_cache (
@@ -649,8 +653,11 @@ mod tests {
                 buzz_score REAL NOT NULL DEFAULT 0,
                 raw_json TEXT,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS analyst_cache (
@@ -667,8 +674,11 @@ mod tests {
                 sell INTEGER NOT NULL DEFAULT 0,
                 strong_sell INTEGER NOT NULL DEFAULT 0,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS symbols (
@@ -679,8 +689,11 @@ mod tests {
                 currency TEXT,
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS prices_daily (
@@ -694,8 +707,11 @@ mod tests {
                 adj_close REAL,
                 volume INTEGER NOT NULL,
                 UNIQUE(symbol_id, date)
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS fundamentals_overview (
@@ -710,8 +726,11 @@ mod tests {
                 roic REAL,
                 raw_json TEXT NOT NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         pool
     }
@@ -763,7 +782,9 @@ mod tests {
         let pool = setup_db().await;
         let svc = DatabaseCacheService::new(pool);
 
-        svc.set_cached_quant_metrics("AAPL", 1.5, 12.0, 20.0, 15.0, 55.0, "BUY", 80.0).await.unwrap();
+        svc.set_cached_quant_metrics("AAPL", 1.5, 12.0, 20.0, 15.0, 55.0, "BUY", 80.0)
+            .await
+            .unwrap();
         let result = svc.get_cached_quant_metrics("AAPL").await;
         assert!(result.is_some());
         let m = result.unwrap();
@@ -785,7 +806,9 @@ mod tests {
         let pool = setup_db().await;
         let svc = DatabaseCacheService::new(pool);
 
-        svc.set_cached_sentiment("AAPL", "bullish", 0.75, 10, 0.85).await.unwrap();
+        svc.set_cached_sentiment("AAPL", "bullish", 0.75, 10, 0.85)
+            .await
+            .unwrap();
         let result = svc.get_cached_sentiment("AAPL").await;
         assert!(result.is_some());
         let s = result.unwrap();
@@ -806,7 +829,9 @@ mod tests {
         let pool = setup_db().await;
         let svc = DatabaseCacheService::new(pool);
 
-        svc.set_cached_analyst_rating("AAPL", "BUY", Some(200.0), Some(220.0), Some(180.0), 15).await.unwrap();
+        svc.set_cached_analyst_rating("AAPL", "BUY", Some(200.0), Some(220.0), Some(180.0), 15)
+            .await
+            .unwrap();
         let result = svc.get_cached_analyst_rating("AAPL").await;
         assert!(result.is_some());
         let r = result.unwrap();
@@ -841,9 +866,15 @@ mod tests {
 
         svc.set_cached_price("AAPL", 150.0).await.unwrap();
         svc.set_cached_price("MSFT", 300.0).await.unwrap();
-        svc.set_cached_quant_metrics("AAPL", 1.5, 12.0, 20.0, 15.0, 55.0, "BUY", 80.0).await.unwrap();
-        svc.set_cached_sentiment("GOOG", "neutral", 0.5, 5, 0.5).await.unwrap();
-        svc.set_cached_analyst_rating("MSFT", "HOLD", None, None, None, 10).await.unwrap();
+        svc.set_cached_quant_metrics("AAPL", 1.5, 12.0, 20.0, 15.0, 55.0, "BUY", 80.0)
+            .await
+            .unwrap();
+        svc.set_cached_sentiment("GOOG", "neutral", 0.5, 5, 0.5)
+            .await
+            .unwrap();
+        svc.set_cached_analyst_rating("MSFT", "HOLD", None, None, None, 10)
+            .await
+            .unwrap();
 
         let (prices, quant, sentiment, analyst, _historical) = svc.get_cache_stats().await;
         assert_eq!(prices, 2);
@@ -907,9 +938,13 @@ mod tests {
 
         // Insert a symbol directly
         sqlx::query("INSERT INTO symbols (ticker, status) VALUES ('AAPL', 'active')")
-            .execute(&pool).await.unwrap();
+            .execute(&pool)
+            .await
+            .unwrap();
         let sym_id: i64 = sqlx::query_scalar("SELECT id FROM symbols WHERE ticker = 'AAPL'")
-            .fetch_one(&pool).await.unwrap();
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
         // Insert fundamentals directly with fresh timestamp
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -939,11 +974,18 @@ mod tests {
         let today = Utc::now().date_naive();
         let date_str = today.format("%Y-%m-%d").to_string();
 
-        let prices = vec![
-            (date_str.clone(), 148.0_f64, 152.0_f64, 147.0_f64, 150.0_f64, 1_000_000_i64),
-        ];
+        let prices = vec![(
+            date_str.clone(),
+            148.0_f64,
+            152.0_f64,
+            147.0_f64,
+            150.0_f64,
+            1_000_000_i64,
+        )];
 
-        svc.set_cached_historical_prices("AAPL", &prices).await.unwrap();
+        svc.set_cached_historical_prices("AAPL", &prices)
+            .await
+            .unwrap();
         let result = svc.get_cached_historical_prices("AAPL").await;
         assert!(result.is_some());
         let fetched = result.unwrap();
@@ -965,11 +1007,29 @@ mod tests {
         let svc = DatabaseCacheService::new(pool);
 
         let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
-        let prices1 = vec![(today.clone(), 148.0_f64, 152.0_f64, 147.0_f64, 150.0_f64, 1_000_000_i64)];
-        let prices2 = vec![(today.clone(), 155.0_f64, 160.0_f64, 154.0_f64, 158.0_f64, 2_000_000_i64)];
+        let prices1 = vec![(
+            today.clone(),
+            148.0_f64,
+            152.0_f64,
+            147.0_f64,
+            150.0_f64,
+            1_000_000_i64,
+        )];
+        let prices2 = vec![(
+            today.clone(),
+            155.0_f64,
+            160.0_f64,
+            154.0_f64,
+            158.0_f64,
+            2_000_000_i64,
+        )];
 
-        svc.set_cached_historical_prices("AAPL", &prices1).await.unwrap();
-        svc.set_cached_historical_prices("AAPL", &prices2).await.unwrap();
+        svc.set_cached_historical_prices("AAPL", &prices1)
+            .await
+            .unwrap();
+        svc.set_cached_historical_prices("AAPL", &prices2)
+            .await
+            .unwrap();
 
         let result = svc.get_cached_historical_prices("AAPL").await;
         assert!(result.is_some());

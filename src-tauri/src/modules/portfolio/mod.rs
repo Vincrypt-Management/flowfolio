@@ -1,14 +1,12 @@
 #![allow(dead_code)]
 
-pub mod review;
 pub mod optimizer;
+pub mod review;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub use optimizer::{
-    PortfolioOptimizer, PortfolioOptimizationReport,
-};
+pub use optimizer::{PortfolioOptimizationReport, PortfolioOptimizer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Portfolio {
@@ -105,9 +103,7 @@ impl Portfolio {
     }
 
     pub fn calculate_total_value(&mut self) {
-        self.total_value = self.holdings.iter()
-            .map(|h| h.market_value)
-            .sum::<f64>() + self.cash;
+        self.total_value = self.holdings.iter().map(|h| h.market_value).sum::<f64>() + self.cash;
     }
 
     pub fn update_percentages(&mut self) {
@@ -128,7 +124,8 @@ impl Portfolio {
     }
 
     pub fn get_max_drift(&self) -> f64 {
-        self.holdings.iter()
+        self.holdings
+            .iter()
             .map(|h| h.drift_pct.abs())
             .fold(0.0, f64::max)
     }
@@ -143,7 +140,7 @@ impl Holding {
         target_pct: f64,
     ) -> Self {
         let market_value = shares * current_price;
-        
+
         Self {
             symbol,
             shares,
@@ -172,10 +169,11 @@ impl PortfolioManager {
         constraints: AllocationConstraints,
     ) -> AllocationPlan {
         let num_symbols = symbols.len() as f64;
-        let equal_pct = ((100.0 - constraints.cash_buffer_pct) / num_symbols)
-            .min(constraints.max_position_pct);
+        let equal_pct =
+            ((100.0 - constraints.cash_buffer_pct) / num_symbols).min(constraints.max_position_pct);
 
-        let allocations = symbols.into_iter()
+        let allocations = symbols
+            .into_iter()
             .map(|symbol| TargetAllocation {
                 symbol,
                 target_pct: equal_pct,
@@ -196,9 +194,7 @@ impl PortfolioManager {
         symbols_with_scores: Vec<(String, f64)>,
         constraints: AllocationConstraints,
     ) -> AllocationPlan {
-        let total_score: f64 = symbols_with_scores.iter()
-            .map(|(_, score)| score)
-            .sum();
+        let total_score: f64 = symbols_with_scores.iter().map(|(_, score)| score).sum();
 
         if total_score == 0.0 {
             // Fallback to equal weight
@@ -210,7 +206,8 @@ impl PortfolioManager {
 
         let investable_pct = 100.0 - constraints.cash_buffer_pct;
 
-        let allocations = symbols_with_scores.into_iter()
+        let allocations = symbols_with_scores
+            .into_iter()
             .map(|(symbol, score)| {
                 let raw_pct = (score / total_score) * investable_pct;
                 let target_pct = raw_pct
@@ -248,22 +245,25 @@ impl PortfolioManager {
         // For each target allocation, calculate how much to buy
         for target in &allocation_plan.allocations {
             let target_value = (target.target_pct / 100.0) * new_total;
-            
+
             // Find current holding
-            let current_value = portfolio.holdings.iter()
+            let current_value = portfolio
+                .holdings
+                .iter()
                 .find(|h| h.symbol == target.symbol)
                 .map(|h| h.market_value)
                 .unwrap_or(0.0);
 
             let needed_value = target_value - current_value;
 
-            if needed_value > 10.0 { // Minimum $10 purchase
+            if needed_value > 10.0 {
+                // Minimum $10 purchase
                 let price = prices.get(&target.symbol).unwrap_or(&100.0);
                 let shares = (needed_value / price).floor();
 
                 if shares > 0.0 {
                     let action = if current_value > 0.0 { "ADD" } else { "BUY" };
-                    
+
                     recommendations.push(BuyRecommendation {
                         symbol: target.symbol.clone(),
                         action: action.to_string(),
@@ -283,7 +283,9 @@ impl PortfolioManager {
 
         // Sort by largest gap first
         recommendations.sort_by(|a, b| {
-            b.amount.partial_cmp(&a.amount).unwrap_or(std::cmp::Ordering::Equal)
+            b.amount
+                .partial_cmp(&a.amount)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Update priorities
@@ -307,22 +309,17 @@ impl PortfolioManager {
     }
 
     /// Check if rebalancing is needed
-    pub fn check_rebalance(
-        portfolio: &Portfolio,
-        threshold_pct: f64,
-    ) -> RebalanceReport {
+    pub fn check_rebalance(portfolio: &Portfolio, threshold_pct: f64) -> RebalanceReport {
         let max_drift = portfolio.get_max_drift();
         let drift_detected = max_drift > threshold_pct;
 
         let actions = if drift_detected {
-            portfolio.holdings.iter()
+            portfolio
+                .holdings
+                .iter()
                 .filter(|h| h.drift_pct.abs() > threshold_pct)
                 .map(|h| {
-                    let action = if h.drift_pct > 0.0 {
-                        "SELL"
-                    } else {
-                        "BUY"
-                    };
+                    let action = if h.drift_pct > 0.0 { "SELL" } else { "BUY" };
 
                     let target_value = (h.target_pct / 100.0) * portfolio.total_value;
                     let amount = target_value - h.market_value;
@@ -371,10 +368,10 @@ mod tests {
         };
 
         let plan = PortfolioManager::equal_weight_allocation(symbols, constraints);
-        
+
         assert_eq!(plan.method, "equal_weight");
         assert_eq!(plan.allocations.len(), 3);
-        
+
         // Each should get ~31.67% (95% / 3)
         for alloc in plan.allocations {
             assert!((alloc.target_pct - 31.67).abs() < 0.1);
@@ -420,7 +417,9 @@ mod tests {
     fn test_total_value_with_cash() {
         let mut portfolio = Portfolio::new("Test".to_string());
         portfolio.cash = 500.0;
-        portfolio.holdings.push(Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0));
+        portfolio
+            .holdings
+            .push(Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0));
         portfolio.calculate_total_value();
         // 10 * 150 + 500 = 2000
         assert!((portfolio.total_value - 2000.0).abs() < f64::EPSILON);
@@ -437,7 +436,9 @@ mod tests {
     #[test]
     fn test_total_value_no_cash() {
         let mut portfolio = Portfolio::new("Test".to_string());
-        portfolio.holdings.push(Holding::new("AAPL".to_string(), 5.0, 100.0, 200.0, 100.0));
+        portfolio
+            .holdings
+            .push(Holding::new("AAPL".to_string(), 5.0, 100.0, 200.0, 100.0));
         portfolio.calculate_total_value();
         assert!((portfolio.total_value - 1000.0).abs() < f64::EPSILON);
     }
@@ -448,7 +449,9 @@ mod tests {
     fn test_update_percentages_zero_total() {
         let mut portfolio = Portfolio::new("Test".to_string());
         portfolio.total_value = 0.0;
-        portfolio.holdings.push(Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0));
+        portfolio
+            .holdings
+            .push(Holding::new("AAPL".to_string(), 10.0, 100.0, 150.0, 50.0));
         portfolio.update_percentages();
         // Should not panic, percentages unchanged
         assert!((portfolio.holdings[0].current_pct - 0.0).abs() < f64::EPSILON);
@@ -529,10 +532,7 @@ mod tests {
 
     #[test]
     fn test_score_weighted_allocation() {
-        let symbols = vec![
-            ("AAPL".to_string(), 80.0),
-            ("MSFT".to_string(), 20.0),
-        ];
+        let symbols = vec![("AAPL".to_string(), 80.0), ("MSFT".to_string(), 20.0)];
         let constraints = AllocationConstraints {
             max_position_pct: 50.0,
             min_position_pct: 5.0,
@@ -550,10 +550,7 @@ mod tests {
 
     #[test]
     fn test_score_weighted_allocation_zero_scores() {
-        let symbols = vec![
-            ("AAPL".to_string(), 0.0),
-            ("MSFT".to_string(), 0.0),
-        ];
+        let symbols = vec![("AAPL".to_string(), 0.0), ("MSFT".to_string(), 0.0)];
         let constraints = AllocationConstraints {
             max_position_pct: 50.0,
             min_position_pct: 1.0,
@@ -567,10 +564,7 @@ mod tests {
 
     #[test]
     fn test_score_weighted_min_position() {
-        let symbols = vec![
-            ("A".to_string(), 99.0),
-            ("B".to_string(), 1.0),
-        ];
+        let symbols = vec![("A".to_string(), 99.0), ("B".to_string(), 1.0)];
         let constraints = AllocationConstraints {
             max_position_pct: 80.0,
             min_position_pct: 5.0,
@@ -589,18 +583,38 @@ mod tests {
         let mut portfolio = Portfolio::new("Test".to_string());
         portfolio.total_value = 10000.0;
         portfolio.holdings.push(Holding {
-            symbol: "AAPL".to_string(), shares: 10.0, cost_basis: 100.0,
-            current_price: 150.0, market_value: 1500.0, target_pct: 30.0,
-            current_pct: 15.0, drift_pct: -15.0,
+            symbol: "AAPL".to_string(),
+            shares: 10.0,
+            cost_basis: 100.0,
+            current_price: 150.0,
+            market_value: 1500.0,
+            target_pct: 30.0,
+            current_pct: 15.0,
+            drift_pct: -15.0,
         });
 
         let plan = AllocationPlan {
             method: "equal_weight".to_string(),
             allocations: vec![
-                TargetAllocation { symbol: "AAPL".to_string(), target_pct: 30.0, score: 80.0, weight_reason: "test".to_string() },
-                TargetAllocation { symbol: "MSFT".to_string(), target_pct: 30.0, score: 75.0, weight_reason: "test".to_string() },
+                TargetAllocation {
+                    symbol: "AAPL".to_string(),
+                    target_pct: 30.0,
+                    score: 80.0,
+                    weight_reason: "test".to_string(),
+                },
+                TargetAllocation {
+                    symbol: "MSFT".to_string(),
+                    target_pct: 30.0,
+                    score: 75.0,
+                    weight_reason: "test".to_string(),
+                },
             ],
-            constraints: AllocationConstraints { max_position_pct: 50.0, min_position_pct: 1.0, max_sector_pct: None, cash_buffer_pct: 5.0 },
+            constraints: AllocationConstraints {
+                max_position_pct: 50.0,
+                min_position_pct: 1.0,
+                max_sector_pct: None,
+                cash_buffer_pct: 5.0,
+            },
         };
 
         let mut prices = HashMap::new();
@@ -617,10 +631,18 @@ mod tests {
         let portfolio = Portfolio::new("Empty".to_string());
         let plan = AllocationPlan {
             method: "equal_weight".to_string(),
-            allocations: vec![
-                TargetAllocation { symbol: "AAPL".to_string(), target_pct: 50.0, score: 80.0, weight_reason: "test".to_string() },
-            ],
-            constraints: AllocationConstraints { max_position_pct: 50.0, min_position_pct: 1.0, max_sector_pct: None, cash_buffer_pct: 5.0 },
+            allocations: vec![TargetAllocation {
+                symbol: "AAPL".to_string(),
+                target_pct: 50.0,
+                score: 80.0,
+                weight_reason: "test".to_string(),
+            }],
+            constraints: AllocationConstraints {
+                max_position_pct: 50.0,
+                min_position_pct: 1.0,
+                max_sector_pct: None,
+                cash_buffer_pct: 5.0,
+            },
         };
         let mut prices = HashMap::new();
         prices.insert("AAPL".to_string(), 150.0);

@@ -7,11 +7,11 @@
 // - modules/  : Feature modules (data_provider, scoring, backtest, portfolio, etc.)
 // - services/ : Service layer
 
-mod modules;
-mod services;
+mod api;
 pub mod core;
 mod infrastructure;
-mod api;
+mod modules;
+mod services;
 mod shared_types;
 
 use api::commands::*;
@@ -19,20 +19,17 @@ use api::commands::*;
 pub use shared_types::*;
 
 use modules::plan_compiler::VibePlanScript;
-use std::collections::HashMap;
-use services::{
-    EnhancedMarketDataService,
-    OpenRouterService,
-    LocalAiService,
-    AlpacaService,
-    FundamentalDataService,
-};
-use std::sync::Arc;
-use std::path::PathBuf;
-use tokio::sync::Mutex;
-use tauri::Manager;
-use std::sync::atomic::AtomicBool;
 use parking_lot::RwLock;
+use services::{
+    AlpacaService, EnhancedMarketDataService, FundamentalDataService, LocalAiService,
+    OpenRouterService,
+};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use tauri::Manager;
+use tokio::sync::Mutex;
 
 // ==================== GLOBAL STATE ====================
 
@@ -84,8 +81,15 @@ pub(crate) const STRONGHOLD_VAULT: &str = "flowfolio-vault.hold";
 
 pub(crate) const API_KEYS_STORE: &str = "api-keys.json";
 pub(crate) const API_KEY_NAMES: &[&str] = &[
-    "alpaca_key", "alpaca_secret", "finnhub_key", "fmp_key",
-    "tiingo_key", "twelve_data_key", "polygon_key", "alpha_vantage_key", "openrouter_key",
+    "alpaca_key",
+    "alpaca_secret",
+    "finnhub_key",
+    "fmp_key",
+    "tiingo_key",
+    "twelve_data_key",
+    "polygon_key",
+    "alpha_vantage_key",
+    "openrouter_key",
 ];
 
 // ==================== HELPER FUNCTIONS ====================
@@ -106,13 +110,14 @@ pub(crate) fn get_api_key(key: &str) -> Option<String> {
 
 pub(crate) async fn get_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
     let pool = DB_POOL.lock().await;
-    pool.clone().ok_or_else(|| "Database not initialized".to_string())
+    pool.clone()
+        .ok_or_else(|| "Database not initialized".to_string())
 }
 
 pub(crate) async fn get_user_tier() -> String {
     if let Some(pool) = DB_POOL.lock().await.as_ref() {
         if let Ok(Some(row)) = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM user_settings WHERE key = 'subscription_tier'"
+            "SELECT value FROM user_settings WHERE key = 'subscription_tier'",
         )
         .fetch_optional(pool)
         .await
@@ -174,7 +179,7 @@ pub fn run() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("flowfolio=info,warn"))
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("flowfolio=info,warn")),
         )
         .with_target(true)
         .try_init();
@@ -277,7 +282,6 @@ pub fn run() {
             get_fundamentals,
             get_fundamentals_batch,
             clear_fundamentals_cache,
-
             get_api_key_statuses,
             save_api_keys,
             load_keys_from_store,
@@ -333,14 +337,15 @@ pub fn run() {
                     return Ok(());
                 }
             };
-            app.handle().plugin(
-                tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build()
-            )?;
+            app.handle()
+                .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
 
             let app_handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
-                let data_dir = app_handle.path().app_data_dir()
+                let data_dir = app_handle
+                    .path()
+                    .app_data_dir()
                     .unwrap_or_else(|_| {
                         std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
                     })
@@ -363,7 +368,10 @@ pub fn run() {
                 // Prefer the copy bundled inside the app resources (installed with the app).
                 // Fall back to downloading into the app data directory on first run.
                 let download_dir = data_dir.join("models");
-                let bundled_model = app_handle.path().resource_dir().ok()
+                let bundled_model = app_handle
+                    .path()
+                    .resource_dir()
+                    .ok()
                     .map(|r| r.join("models").join("Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"));
                 LOCAL_AI_SERVICE.init_in_background(bundled_model, download_dir);
             });
@@ -371,7 +379,9 @@ pub fn run() {
             // Load user-configured API keys from store into runtime so data providers can use them immediately
             let app_handle_for_keys = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = crate::api::commands::settings::load_keys_from_store(app_handle_for_keys).await {
+                if let Err(e) =
+                    crate::api::commands::settings::load_keys_from_store(app_handle_for_keys).await
+                {
                     tracing::warn!("Failed to load API keys from store at startup: {}", e);
                 }
             });
@@ -386,15 +396,22 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::api::commands::vibe::*;
     use super::api::commands::market::*;
     use super::api::commands::portfolio::*;
+    use super::api::commands::vibe::*;
     use crate::modules::quant_analysis::QuantMetrics;
     use crate::services::FundamentalMetrics;
 
     // ===== Helper builders =====
 
-    fn make_quant_metrics(sharpe: f64, annual_return: f64, volatility: f64, max_dd: f64, rsi: f64, signal: &str) -> QuantMetrics {
+    fn make_quant_metrics(
+        sharpe: f64,
+        annual_return: f64,
+        volatility: f64,
+        max_dd: f64,
+        rsi: f64,
+        signal: &str,
+    ) -> QuantMetrics {
         QuantMetrics {
             symbol: "TEST".to_string(),
             sharpe_ratio: sharpe,
@@ -732,13 +749,39 @@ mod tests {
 
     #[test]
     fn test_altman_z_insufficient_components() {
-        let fund = make_fund(None, Some(0.1), None, None, None, None, None, None, None, None, None, None);
+        let fund = make_fund(
+            None,
+            Some(0.1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(calculate_altman_z_estimate(&fund).is_none());
     }
 
     #[test]
     fn test_altman_z_enough_components() {
-        let fund = make_fund(Some(0.15), Some(0.10), None, Some(0.5), Some(2.0), Some(0.20), None, None, None, None, None, None);
+        let fund = make_fund(
+            Some(0.15),
+            Some(0.10),
+            None,
+            Some(0.5),
+            Some(2.0),
+            Some(0.20),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         let z = calculate_altman_z_estimate(&fund);
         assert!(z.is_some());
         let val = z.unwrap();
@@ -747,7 +790,20 @@ mod tests {
 
     #[test]
     fn test_altman_z_safe_zone() {
-        let fund = make_fund(Some(0.20), Some(0.15), None, Some(0.3), Some(2.5), Some(0.25), None, None, None, None, None, None);
+        let fund = make_fund(
+            Some(0.20),
+            Some(0.15),
+            None,
+            Some(0.3),
+            Some(2.5),
+            Some(0.25),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         let z = calculate_altman_z_estimate(&fund);
         assert!(z.is_some());
     }
@@ -756,13 +812,39 @@ mod tests {
 
     #[test]
     fn test_piotroski_insufficient_criteria() {
-        let fund = make_fund(Some(0.1), None, None, None, None, None, None, None, None, None, None, None);
+        let fund = make_fund(
+            Some(0.1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         assert!(calculate_piotroski_estimate(&fund).is_none());
     }
 
     #[test]
     fn test_piotroski_strong_company() {
-        let fund = make_fund(Some(0.15), Some(0.10), Some(1_000_000.0), Some(0.5), Some(2.0), Some(0.15), Some(0.10), None, None, None, None, None);
+        let fund = make_fund(
+            Some(0.15),
+            Some(0.10),
+            Some(1_000_000.0),
+            Some(0.5),
+            Some(2.0),
+            Some(0.15),
+            Some(0.10),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         let score = calculate_piotroski_estimate(&fund);
         assert!(score.is_some());
         let val = score.unwrap();
@@ -771,7 +853,20 @@ mod tests {
 
     #[test]
     fn test_piotroski_weak_company() {
-        let fund = make_fund(Some(-0.10), Some(-0.05), Some(-500_000.0), Some(3.0), Some(0.8), Some(-0.05), Some(-0.10), None, None, None, None, None);
+        let fund = make_fund(
+            Some(-0.10),
+            Some(-0.05),
+            Some(-500_000.0),
+            Some(3.0),
+            Some(0.8),
+            Some(-0.05),
+            Some(-0.10),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         let score = calculate_piotroski_estimate(&fund);
         assert!(score.is_some());
         let val = score.unwrap();
@@ -782,19 +877,58 @@ mod tests {
 
     #[test]
     fn test_graham_number_no_eps() {
-        let fund = make_fund(None, None, None, None, None, None, None, None, Some(2.0), Some(20.0), None, None);
+        let fund = make_fund(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(2.0),
+            Some(20.0),
+            None,
+            None,
+        );
         assert!(calculate_graham_number(&fund).is_none());
     }
 
     #[test]
     fn test_graham_number_negative_eps() {
-        let fund = make_fund(None, None, None, None, None, None, None, Some(-1.0), Some(2.0), Some(20.0), None, None);
+        let fund = make_fund(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(-1.0),
+            Some(2.0),
+            Some(20.0),
+            None,
+            None,
+        );
         assert!(calculate_graham_number(&fund).is_none());
     }
 
     #[test]
     fn test_graham_number_valid() {
-        let fund = make_fund(None, None, None, None, None, None, None, Some(5.0), Some(2.0), Some(20.0), None, None);
+        let fund = make_fund(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(5.0),
+            Some(2.0),
+            Some(20.0),
+            None,
+            None,
+        );
         let g = calculate_graham_number(&fund);
         assert!(g.is_some());
         assert!((g.unwrap() - 75.0).abs() < 1.0);
@@ -802,7 +936,20 @@ mod tests {
 
     #[test]
     fn test_graham_number_no_pe() {
-        let fund = make_fund(None, None, None, None, None, None, None, Some(5.0), Some(2.0), None, None, None);
+        let fund = make_fund(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(5.0),
+            Some(2.0),
+            None,
+            None,
+            None,
+        );
         assert!(calculate_graham_number(&fund).is_none());
     }
 
@@ -810,27 +957,79 @@ mod tests {
 
     #[test]
     fn test_dividend_safety_no_yield() {
-        let fund = make_fund(None, None, None, None, None, None, None, None, None, None, Some(0.0), None);
+        let fund = make_fund(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(0.0),
+            None,
+        );
         assert!(assess_dividend_safety(&fund).is_none());
     }
 
     #[test]
     fn test_dividend_safety_very_safe() {
-        let fund = make_fund(Some(0.15), None, Some(1_000_000.0), Some(0.5), None, None, None, None, None, None, Some(0.03), Some(0.30));
+        let fund = make_fund(
+            Some(0.15),
+            None,
+            Some(1_000_000.0),
+            Some(0.5),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(0.03),
+            Some(0.30),
+        );
         let safety = assess_dividend_safety(&fund);
         assert_eq!(safety.as_deref(), Some("very_safe"));
     }
 
     #[test]
     fn test_dividend_safety_at_risk() {
-        let fund = make_fund(Some(-0.05), None, Some(-1.0), Some(2.0), None, None, None, None, None, None, Some(0.05), Some(0.90));
+        let fund = make_fund(
+            Some(-0.05),
+            None,
+            Some(-1.0),
+            Some(2.0),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(0.05),
+            Some(0.90),
+        );
         let safety = assess_dividend_safety(&fund);
         assert_eq!(safety.as_deref(), Some("at_risk"));
     }
 
     #[test]
     fn test_dividend_safety_cutting() {
-        let fund = make_fund(Some(-0.10), None, Some(-1.0), Some(3.0), None, None, None, None, None, None, Some(0.08), Some(1.20));
+        let fund = make_fund(
+            Some(-0.10),
+            None,
+            Some(-1.0),
+            Some(3.0),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(0.08),
+            Some(1.20),
+        );
         let safety = assess_dividend_safety(&fund);
         assert_eq!(safety.as_deref(), Some("cutting"));
     }
@@ -843,8 +1042,14 @@ mod runtime_keys_tests {
     #[test]
     fn test_get_api_key_runtime_takes_priority_over_env() {
         std::env::set_var("TEST_FLOWFOLIO_PRIO", "from_env");
-        RUNTIME_KEYS.write().insert("TEST_FLOWFOLIO_PRIO".to_string(), "from_runtime".to_string());
-        assert_eq!(get_api_key("TEST_FLOWFOLIO_PRIO"), Some("from_runtime".to_string()));
+        RUNTIME_KEYS.write().insert(
+            "TEST_FLOWFOLIO_PRIO".to_string(),
+            "from_runtime".to_string(),
+        );
+        assert_eq!(
+            get_api_key("TEST_FLOWFOLIO_PRIO"),
+            Some("from_runtime".to_string())
+        );
         RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
         std::env::remove_var("TEST_FLOWFOLIO_PRIO");
     }
@@ -852,7 +1057,10 @@ mod runtime_keys_tests {
     #[test]
     fn test_get_api_key_falls_back_to_env() {
         std::env::set_var("TEST_FLOWFOLIO_FALLBACK", "env_value");
-        assert_eq!(get_api_key("TEST_FLOWFOLIO_FALLBACK"), Some("env_value".to_string()));
+        assert_eq!(
+            get_api_key("TEST_FLOWFOLIO_FALLBACK"),
+            Some("env_value".to_string())
+        );
         std::env::remove_var("TEST_FLOWFOLIO_FALLBACK");
     }
 

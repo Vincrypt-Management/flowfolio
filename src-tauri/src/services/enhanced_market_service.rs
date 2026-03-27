@@ -2,17 +2,19 @@
 // Integrates multi-source provider with SQLite database caching
 // Features: Circuit breaker, retry logic, health monitoring, structured errors
 
-use crate::modules::data_provider::{MultiSourceProvider, HistoricalPrice};
-use crate::modules::quant_analysis::{QuantAnalyzer, QuantMetrics, HistoricalPrice as QuantHistoricalPrice};
-use crate::modules::circuit_breaker::{CircuitBreakerManager, CircuitBreakerConfig};
-use crate::modules::retry::{RetryExecutor, RetryConfig};
+use crate::modules::circuit_breaker::{CircuitBreakerConfig, CircuitBreakerManager};
+use crate::modules::data_provider::{HistoricalPrice, MultiSourceProvider};
 use crate::modules::health::HEALTH_MONITOR;
+use crate::modules::quant_analysis::{
+    HistoricalPrice as QuantHistoricalPrice, QuantAnalyzer, QuantMetrics,
+};
+use crate::modules::retry::{RetryConfig, RetryExecutor};
 use crate::services::db_cache::DatabaseCacheService;
+use sqlx::{Pool, Sqlite};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use sqlx::{Pool, Sqlite};
 
 /// Enhanced market data service with database caching and multi-source provider
 /// Industrial-grade features: circuit breaker, retry logic, health monitoring
@@ -117,7 +119,10 @@ impl EnhancedMarketDataService {
             if let Some(cached) = db_cache.get_cached_price(&symbol).await {
                 // Update memory cache
                 let mut cache = self.price_cache.write().await;
-                cache.insert(symbol.clone(), (cached.current_price, std::time::Instant::now()));
+                cache.insert(
+                    symbol.clone(),
+                    (cached.current_price, std::time::Instant::now()),
+                );
                 tracing::debug!(symbol = %symbol, price = cached.current_price, "Database cache hit");
                 return Ok(cached.current_price);
             }
@@ -125,31 +130,40 @@ impl EnhancedMarketDataService {
 
         // 3. Fetch from multi-source provider with circuit breaker
         tracing::debug!(symbol = %symbol, "Fetching from providers (with circuit breaker)");
-        
+
         let provider = self.provider.clone();
         let symbol_clone = symbol.clone();
-        
+
         // Use circuit breaker to protect against cascading failures
-        let result = self.circuit_breaker
+        let result = self
+            .circuit_breaker
             .execute("market_data", async move {
                 provider.get_market_data(&symbol_clone).await
             })
             .await;
-        
+
         let data = match result {
             Ok(data) => {
-                HEALTH_MONITOR.record_provider_request("market_data", true, start.elapsed().as_micros() as u64);
+                HEALTH_MONITOR.record_provider_request(
+                    "market_data",
+                    true,
+                    start.elapsed().as_micros() as u64,
+                );
                 data
             }
             Err(e) => {
-                HEALTH_MONITOR.record_provider_request("market_data", false, start.elapsed().as_micros() as u64);
+                HEALTH_MONITOR.record_provider_request(
+                    "market_data",
+                    false,
+                    start.elapsed().as_micros() as u64,
+                );
                 return Err(format!("Provider error: {}", e));
             }
         };
-        
+
         if let Some(quote) = data.quote {
             let price = quote.price;
-            
+
             // Update memory cache
             {
                 let mut cache = self.price_cache.write().await;
@@ -190,7 +204,11 @@ impl EnhancedMarketDataService {
             }
         }
 
-        tracing::debug!(cached = results.len(), total = symbols.len(), "Prices from memory cache");
+        tracing::debug!(
+            cached = results.len(),
+            total = symbols.len(),
+            "Prices from memory cache"
+        );
 
         // 2. Check database cache for remaining symbols
         let db_cache_opt = self.db_cache.read().await.clone();
@@ -201,7 +219,10 @@ impl EnhancedMarketDataService {
                     results.insert(symbol.clone(), cached.current_price);
                     // Update memory cache
                     let mut cache = self.price_cache.write().await;
-                    cache.insert(symbol.clone(), (cached.current_price, std::time::Instant::now()));
+                    cache.insert(
+                        symbol.clone(),
+                        (cached.current_price, std::time::Instant::now()),
+                    );
                 } else {
                     still_needed.push(symbol.clone());
                 }
@@ -209,17 +230,20 @@ impl EnhancedMarketDataService {
             symbols_to_fetch = still_needed;
         }
 
-        tracing::debug!(count = symbols_to_fetch.len(), "Prices still need fetching from providers");
+        tracing::debug!(
+            count = symbols_to_fetch.len(),
+            "Prices still need fetching from providers"
+        );
 
         // 3. Fetch remaining from providers
         if !symbols_to_fetch.is_empty() {
             let batch_data = self.provider.get_batch_market_data(symbols_to_fetch).await;
-            
+
             for (symbol, data) in batch_data {
                 if let Some(quote) = data.quote {
                     let price = quote.price;
                     results.insert(symbol.clone(), price);
-                    
+
                     // Update memory cache
                     {
                         let mut cache = self.price_cache.write().await;
@@ -235,21 +259,29 @@ impl EnhancedMarketDataService {
             }
         }
 
-        tracing::debug!(fetched = results.len(), total = symbols.len(), "Batch prices complete");
+        tracing::debug!(
+            fetched = results.len(),
+            total = symbols.len(),
+            "Batch prices complete"
+        );
         results
     }
 
     // ================== HISTORICAL DATA ==================
 
     /// Get historical prices for a symbol
-    pub async fn get_historical_prices(&self, symbol: &str) -> Result<Vec<HistoricalPrice>, String> {
+    pub async fn get_historical_prices(
+        &self,
+        symbol: &str,
+    ) -> Result<Vec<HistoricalPrice>, String> {
         let symbol = symbol.to_uppercase();
 
         // 1. Check database cache for historical data
         let db_cache_opt = self.db_cache.read().await.clone();
         if let Some(ref db_cache) = db_cache_opt {
             if let Some(cached) = db_cache.get_cached_historical_prices(&symbol).await {
-                let historical: Vec<HistoricalPrice> = cached.into_iter()
+                let historical: Vec<HistoricalPrice> = cached
+                    .into_iter()
                     .map(|(date, open, high, low, close, volume)| HistoricalPrice {
                         date,
                         open,
@@ -259,7 +291,7 @@ impl EnhancedMarketDataService {
                         volume,
                     })
                     .collect();
-                
+
                 if !historical.is_empty() {
                     tracing::debug!(symbol = %symbol, days = historical.len(), "Historical cache hit");
                     return Ok(historical);
@@ -270,7 +302,7 @@ impl EnhancedMarketDataService {
         // 2. Fetch from provider
         tracing::debug!(symbol = %symbol, "Fetching historical data from providers");
         let data = self.provider.get_market_data(&symbol).await?;
-        
+
         if data.historical.is_empty() {
             return Err(format!("No historical data available for {}", symbol));
         }
@@ -278,10 +310,14 @@ impl EnhancedMarketDataService {
         // 3. Save to database cache
         let db_cache_opt2 = self.db_cache.read().await.clone();
         if let Some(ref db_cache) = db_cache_opt2 {
-            let cache_data: Vec<(String, f64, f64, f64, f64, i64)> = data.historical.iter()
+            let cache_data: Vec<(String, f64, f64, f64, f64, i64)> = data
+                .historical
+                .iter()
                 .map(|h| (h.date.clone(), h.open, h.high, h.low, h.close, h.volume))
                 .collect();
-            let _ = db_cache.set_cached_historical_prices(&symbol, &cache_data).await;
+            let _ = db_cache
+                .set_cached_historical_prices(&symbol, &cache_data)
+                .await;
         }
 
         tracing::debug!(days = data.historical.len(), symbol = %symbol, source = %data.source, "Fetched historical data");
@@ -332,20 +368,21 @@ impl EnhancedMarketDataService {
                     win_rate: None,
                     daily_returns: None,
                 };
-                
+
                 // Update memory cache
                 let mut cache = self.quant_cache.write().await;
                 cache.insert(symbol.clone(), (metrics.clone(), std::time::Instant::now()));
-                
+
                 return Ok(metrics);
             }
         }
 
         // 3. Calculate from historical data
         let historical = self.get_historical_prices(&symbol).await?;
-        
+
         // Convert to quant analysis format
-        let quant_prices: Vec<QuantHistoricalPrice> = historical.iter()
+        let quant_prices: Vec<QuantHistoricalPrice> = historical
+            .iter()
             .map(|h| QuantHistoricalPrice {
                 date: h.date.clone(),
                 close: h.close,
@@ -363,16 +400,18 @@ impl EnhancedMarketDataService {
         // Update database cache
         let db_cache_opt2 = self.db_cache.read().await.clone();
         if let Some(ref db_cache) = db_cache_opt2 {
-            let _ = db_cache.set_cached_quant_metrics(
-                &symbol,
-                metrics.sharpe_ratio,
-                metrics.annualized_return,
-                metrics.volatility,
-                metrics.max_drawdown,
-                metrics.rsi,
-                &metrics.signal,
-                metrics.confidence,
-            ).await;
+            let _ = db_cache
+                .set_cached_quant_metrics(
+                    &symbol,
+                    metrics.sharpe_ratio,
+                    metrics.annualized_return,
+                    metrics.volatility,
+                    metrics.max_drawdown,
+                    metrics.rsi,
+                    &metrics.signal,
+                    metrics.confidence,
+                )
+                .await;
         }
 
         Ok(metrics)
@@ -381,9 +420,9 @@ impl EnhancedMarketDataService {
     /// Batch get quantitative metrics for multiple symbols
     pub async fn get_batch_quant_metrics(&self, symbols: Vec<String>) -> Vec<QuantMetrics> {
         use futures::stream::{self, StreamExt};
-        
+
         tracing::debug!(count = symbols.len(), "Getting quant metrics for symbols");
-        
+
         // Process symbols in parallel for faster response
         let results: Vec<QuantMetrics> = stream::iter(symbols.clone())
             .map(|symbol| async move {
@@ -405,7 +444,7 @@ impl EnhancedMarketDataService {
                         }
                     }
                 }
-                
+
                 // Return default metrics on failure
                 QuantMetrics {
                     symbol: symbol.clone(),
@@ -434,10 +473,17 @@ impl EnhancedMarketDataService {
             .buffer_unordered(5) // Process 5 symbols concurrently
             .collect()
             .await;
-        
-        let successful = results.iter().filter(|m| m.signal != "INSUFFICIENT DATA").count();
-        tracing::debug!(successful = successful, total = symbols.len(), "Batch quant metrics complete");
-        
+
+        let successful = results
+            .iter()
+            .filter(|m| m.signal != "INSUFFICIENT DATA")
+            .count();
+        tracing::debug!(
+            successful = successful,
+            total = symbols.len(),
+            "Batch quant metrics complete"
+        );
+
         results
     }
 
@@ -447,7 +493,7 @@ impl EnhancedMarketDataService {
     #[allow(dead_code)]
     pub async fn get_full_market_data(&self, symbol: &str) -> Result<FullMarketData, String> {
         let symbol = symbol.to_uppercase();
-        
+
         // Fetch all data in parallel
         let (price_result, historical_result, metrics_result) = tokio::join!(
             self.get_current_price(&symbol),
@@ -520,10 +566,10 @@ impl EnhancedMarketDataService {
     /// Prefetch data for symbols (background loading)
     pub async fn prefetch_symbols(&self, symbols: Vec<String>) {
         tracing::info!(count = symbols.len(), "Prefetching symbols");
-        
+
         // Fetch all data in background
         let _ = self.get_batch_prices(symbols.clone()).await;
-        
+
         tracing::debug!(count = symbols.len(), "Prefetch complete");
     }
 }
@@ -556,7 +602,10 @@ mod tests {
     #[tokio::test]
     async fn test_new_without_db_has_no_db_cache() {
         let svc = EnhancedMarketDataService::new_without_db();
-        assert!(svc.db_cache.read().await.is_none(), "db_cache should be None for new_without_db()");
+        assert!(
+            svc.db_cache.read().await.is_none(),
+            "db_cache should be None for new_without_db()"
+        );
     }
 
     #[tokio::test]
@@ -589,9 +638,18 @@ mod tests {
     async fn test_get_cache_stats_empty() {
         let svc = EnhancedMarketDataService::new_without_db();
         let stats = svc.get_cache_stats().await;
-        assert_eq!(stats.memory_prices, 0, "memory_prices should be 0 when cache is empty");
-        assert_eq!(stats.memory_quant, 0, "memory_quant should be 0 when cache is empty");
-        assert!(stats.db_stats.is_none(), "db_stats should be None without a database");
+        assert_eq!(
+            stats.memory_prices, 0,
+            "memory_prices should be 0 when cache is empty"
+        );
+        assert_eq!(
+            stats.memory_quant, 0,
+            "memory_quant should be 0 when cache is empty"
+        );
+        assert!(
+            stats.db_stats.is_none(),
+            "db_stats should be None without a database"
+        );
     }
 
     // ---- Test 3: get_cache_stats reflects manually populated price_cache ----
@@ -608,7 +666,10 @@ mod tests {
         }
 
         let stats = svc.get_cache_stats().await;
-        assert_eq!(stats.memory_prices, 3, "memory_prices should equal number of inserted entries");
+        assert_eq!(
+            stats.memory_prices, 3,
+            "memory_prices should equal number of inserted entries"
+        );
         assert_eq!(stats.memory_quant, 0, "memory_quant should still be 0");
     }
 
@@ -642,12 +703,18 @@ mod tests {
 
         {
             let mut cache = svc.quant_cache.write().await;
-            cache.insert("AAPL".to_string(), (dummy_metrics, std::time::Instant::now()));
+            cache.insert(
+                "AAPL".to_string(),
+                (dummy_metrics, std::time::Instant::now()),
+            );
         }
 
         let stats = svc.get_cache_stats().await;
         assert_eq!(stats.memory_prices, 0, "memory_prices should be 0");
-        assert_eq!(stats.memory_quant, 1, "memory_quant should equal number of inserted entries");
+        assert_eq!(
+            stats.memory_quant, 1,
+            "memory_quant should equal number of inserted entries"
+        );
     }
 
     // ---- Test 4: clear_all_caches empties the memory caches ----
@@ -665,14 +732,20 @@ mod tests {
 
         // Verify it's populated
         let stats_before = svc.get_cache_stats().await;
-        assert_eq!(stats_before.memory_prices, 2, "pre-condition: price cache should have 2 entries");
+        assert_eq!(
+            stats_before.memory_prices, 2,
+            "pre-condition: price cache should have 2 entries"
+        );
 
         // Clear caches
         svc.clear_all_caches().await;
 
         // Verify it's now empty
         let stats_after = svc.get_cache_stats().await;
-        assert_eq!(stats_after.memory_prices, 0, "price cache should be empty after clear_all_caches");
+        assert_eq!(
+            stats_after.memory_prices, 0,
+            "price cache should be empty after clear_all_caches"
+        );
     }
 
     #[tokio::test]
@@ -705,16 +778,25 @@ mod tests {
 
         {
             let mut cache = svc.quant_cache.write().await;
-            cache.insert("TSLA".to_string(), (dummy_metrics, std::time::Instant::now()));
+            cache.insert(
+                "TSLA".to_string(),
+                (dummy_metrics, std::time::Instant::now()),
+            );
         }
 
         let stats_before = svc.get_cache_stats().await;
-        assert_eq!(stats_before.memory_quant, 1, "pre-condition: quant cache should have 1 entry");
+        assert_eq!(
+            stats_before.memory_quant, 1,
+            "pre-condition: quant cache should have 1 entry"
+        );
 
         svc.clear_all_caches().await;
 
         let stats_after = svc.get_cache_stats().await;
-        assert_eq!(stats_after.memory_quant, 0, "quant cache should be empty after clear_all_caches");
+        assert_eq!(
+            stats_after.memory_quant, 0,
+            "quant cache should be empty after clear_all_caches"
+        );
     }
 
     // ---- Test 5: get_batch_prices with empty input returns empty HashMap ----
@@ -723,7 +805,10 @@ mod tests {
     async fn test_get_batch_prices_empty_input_returns_empty_map() {
         let svc = EnhancedMarketDataService::new_without_db();
         let result = svc.get_batch_prices(vec![]).await;
-        assert!(result.is_empty(), "get_batch_prices with empty input should return an empty HashMap");
+        assert!(
+            result.is_empty(),
+            "get_batch_prices with empty input should return an empty HashMap"
+        );
     }
 
     // ---- Test 6: Memory cache TTL - expired vs fresh entries ----

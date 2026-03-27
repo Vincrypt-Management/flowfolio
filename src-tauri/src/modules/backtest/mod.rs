@@ -1,5 +1,5 @@
+use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
-use chrono::{NaiveDate, Datelike};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,16 +92,17 @@ impl BacktestEngine {
         let mut current_date = start;
 
         // Initial buy - allocate initial cash
-        let initial_allocation = Self::calculate_allocation(&config.symbols, &config.allocation_method);
+        let initial_allocation =
+            Self::calculate_allocation(&config.symbols, &config.allocation_method);
         for (symbol, target_pct) in &initial_allocation {
             let amount = config.initial_cash * target_pct;
             let price = Self::get_price_at_date(symbol, current_date, &prices);
             let shares = (amount / price).floor();
-            
+
             if shares > 0.0 {
                 positions.insert(symbol.clone(), shares);
                 cash -= shares * price;
-                
+
                 trades.push(TradeRecord {
                     date: current_date.to_string(),
                     symbol: symbol.clone(),
@@ -115,7 +116,12 @@ impl BacktestEngine {
         }
 
         // Take initial snapshot
-        timeline.push(Self::create_snapshot(current_date, cash, &positions, &prices));
+        timeline.push(Self::create_snapshot(
+            current_date,
+            cash,
+            &positions,
+            &prices,
+        ));
 
         // Monthly loop
         for month in 0..duration_months {
@@ -130,7 +136,8 @@ impl BacktestEngine {
 
             // Allocate contribution
             let allocation = Self::calculate_allocation(&config.symbols, &config.allocation_method);
-            let portfolio_value = Self::calculate_portfolio_value(cash, &positions, current_date, &prices);
+            let portfolio_value =
+                Self::calculate_portfolio_value(cash, &positions, current_date, &prices);
 
             for (symbol, target_pct) in &allocation {
                 let position_shares = positions.get(symbol).copied().unwrap_or(0.0);
@@ -139,12 +146,13 @@ impl BacktestEngine {
                 let target_value = portfolio_value * target_pct;
                 let gap = target_value - current_value;
 
-                if gap > 50.0 { // Minimum $50 buy
+                if gap > 50.0 {
+                    // Minimum $50 buy
                     let shares_to_buy = (gap / price).floor();
                     if shares_to_buy > 0.0 && cash >= shares_to_buy * price {
                         *positions.entry(symbol.clone()).or_insert(0.0) += shares_to_buy;
                         cash -= shares_to_buy * price;
-                        
+
                         trades.push(TradeRecord {
                             date: current_date.to_string(),
                             symbol: symbol.clone(),
@@ -172,7 +180,12 @@ impl BacktestEngine {
             }
 
             // Take snapshot
-            timeline.push(Self::create_snapshot(current_date, cash, &positions, &prices));
+            timeline.push(Self::create_snapshot(
+                current_date,
+                cash,
+                &positions,
+                &prices,
+            ));
         }
 
         // Calculate metrics
@@ -211,7 +224,7 @@ impl BacktestEngine {
                 }
             }
         }
-        
+
         allocation
     }
 
@@ -220,13 +233,9 @@ impl BacktestEngine {
         date: NaiveDate,
         prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
     ) -> f64 {
-        prices.get(symbol)
-            .and_then(|data| {
-                data.iter()
-                    .rev()
-                    .find(|(d, _)| *d <= date)
-                    .map(|(_, p)| *p)
-            })
+        prices
+            .get(symbol)
+            .and_then(|data| data.iter().rev().find(|(d, _)| *d <= date).map(|(_, p)| *p))
             .unwrap_or(100.0) // Fallback to $100 if no data
     }
 
@@ -257,7 +266,7 @@ impl BacktestEngine {
             let price = Self::get_price_at_date(symbol, date, prices);
             let value = shares * price;
             total_value += value;
-            
+
             position_snapshots.push(PositionSnapshot {
                 symbol: symbol.clone(),
                 shares: *shares,
@@ -303,7 +312,7 @@ impl BacktestEngine {
         prices: &HashMap<String, Vec<(NaiveDate, f64)>>,
     ) -> Vec<TradeRecord> {
         let mut trades = Vec::new();
-        
+
         // Calculate current portfolio value
         let portfolio_value = Self::calculate_portfolio_value(*cash, positions, date, prices);
 
@@ -317,20 +326,20 @@ impl BacktestEngine {
             } else {
                 0.0
             };
-            
+
             let drift = (current_pct - (target_pct * 100.0)).abs();
-            
+
             if drift > threshold {
                 let target_value = portfolio_value * target_pct;
                 let difference = target_value - current_value;
-                
+
                 if difference.abs() > 50.0 {
                     if difference > 0.0 && *cash >= difference {
                         // Buy
                         let shares = (difference / price).floor();
                         *positions.entry(symbol.clone()).or_insert(0.0) += shares;
                         *cash -= shares * price;
-                        
+
                         trades.push(TradeRecord {
                             date: date.to_string(),
                             symbol: symbol.clone(),
@@ -347,7 +356,7 @@ impl BacktestEngine {
                             let shares_to_sell = shares.min(*current);
                             *current -= shares_to_sell;
                             *cash += shares_to_sell * price;
-                            
+
                             trades.push(TradeRecord {
                                 date: date.to_string(),
                                 symbol: symbol.clone(),
@@ -362,7 +371,7 @@ impl BacktestEngine {
                 }
             }
         }
-        
+
         trades
     }
 
@@ -414,7 +423,8 @@ impl BacktestEngine {
         }
 
         // Volatility (standard deviation of monthly returns)
-        let returns: Vec<f64> = timeline.windows(2)
+        let returns: Vec<f64> = timeline
+            .windows(2)
             .map(|w| {
                 if w[0].value > 0.0 {
                     ((w[1].value - w[0].value) / w[0].value) * 100.0
@@ -431,9 +441,11 @@ impl BacktestEngine {
         };
 
         let variance = if !returns.is_empty() {
-            returns.iter()
+            returns
+                .iter()
                 .map(|r| (r - mean_return).powi(2))
-                .sum::<f64>() / returns.len() as f64
+                .sum::<f64>()
+                / returns.len() as f64
         } else {
             0.0
         };
@@ -448,12 +460,9 @@ impl BacktestEngine {
         };
 
         // Turnover
-        let total_trade_volume: f64 = trades.iter()
-            .map(|t| t.amount)
-            .sum();
-        let avg_portfolio_value = timeline.iter()
-            .map(|s| s.value)
-            .sum::<f64>() / timeline.len() as f64;
+        let total_trade_volume: f64 = trades.iter().map(|t| t.amount).sum();
+        let avg_portfolio_value =
+            timeline.iter().map(|s| s.value).sum::<f64>() / timeline.len() as f64;
         let turnover = if avg_portfolio_value > 0.0 && years > 0.0 {
             (total_trade_volume / avg_portfolio_value / years) * 100.0
         } else {
@@ -487,9 +496,13 @@ impl BacktestEngine {
             Sharpe Ratio: {:.2}\n\
             Turnover: {:.1}%\n\
             Trades Executed: {}",
-            (NaiveDate::parse_from_str(&config.end_date, "%Y-%m-%d").ok()
-                .and_then(|e| NaiveDate::parse_from_str(&config.start_date, "%Y-%m-%d").ok()
-                    .map(|s| Self::months_between(s, e)))
+            (NaiveDate::parse_from_str(&config.end_date, "%Y-%m-%d")
+                .ok()
+                .and_then(
+                    |e| NaiveDate::parse_from_str(&config.start_date, "%Y-%m-%d")
+                        .ok()
+                        .map(|s| Self::months_between(s, e))
+                )
                 .unwrap_or(0)),
             config.allocation_method,
             config.rebalance_frequency,
@@ -720,7 +733,11 @@ mod tests {
     fn test_backtest_trade_amounts_positive() {
         let result = BacktestEngine::run_backtest(default_config(), HashMap::new());
         for trade in &result.trades {
-            assert!(trade.amount >= 0.0, "Trade amount negative: {}", trade.amount);
+            assert!(
+                trade.amount >= 0.0,
+                "Trade amount negative: {}",
+                trade.amount
+            );
         }
     }
 
@@ -770,7 +787,10 @@ mod tests {
         // calculate_allocation with empty symbols must return an empty HashMap,
         // not divide by zero or panic (guards the 1.0 / symbols.len() division).
         let allocation = BacktestEngine::calculate_allocation(&[], "equal_weight");
-        assert!(allocation.is_empty(), "Expected empty HashMap for empty symbols");
+        assert!(
+            allocation.is_empty(),
+            "Expected empty HashMap for empty symbols"
+        );
     }
 
     #[test]
@@ -782,8 +802,14 @@ mod tests {
             ..default_config()
         };
         let result = BacktestEngine::run_backtest(config, HashMap::new());
-        assert!(result.trades.is_empty(), "Expected no trades when symbols list is empty");
-        assert!(!result.timeline.is_empty(), "Timeline should still have an initial snapshot");
+        assert!(
+            result.trades.is_empty(),
+            "Expected no trades when symbols list is empty"
+        );
+        assert!(
+            !result.timeline.is_empty(),
+            "Timeline should still have an initial snapshot"
+        );
     }
 
     // --- calculate_allocation default case ---
@@ -868,9 +894,19 @@ mod tests {
         target.insert("AAPL".to_string(), 0.1_f64); // 10% target → underweight vs 100%
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
 
-        let trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0, &HashMap::new());
+        let trades = BacktestEngine::rebalance_portfolio(
+            &mut positions,
+            &mut cash,
+            &target,
+            date,
+            1.0,
+            &HashMap::new(),
+        );
 
-        assert!(trades.iter().any(|t| t.action == "SELL"), "Expected a SELL trade from overweight position");
+        assert!(
+            trades.iter().any(|t| t.action == "SELL"),
+            "Expected a SELL trade from overweight position"
+        );
     }
 
     #[test]
@@ -895,7 +931,14 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
 
         // portfolio_value = 0 (no cash, no positions) → line 298
-        let _trades = BacktestEngine::rebalance_portfolio(&mut positions, &mut cash, &target, date, 1.0, &HashMap::new());
+        let _trades = BacktestEngine::rebalance_portfolio(
+            &mut positions,
+            &mut cash,
+            &target,
+            date,
+            1.0,
+            &HashMap::new(),
+        );
         // Just verify no panic
     }
 

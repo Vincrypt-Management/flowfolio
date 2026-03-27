@@ -111,12 +111,19 @@ impl AlpacaService {
 
     /// Get account information
     pub async fn get_account(&self) -> Result<AlpacaAccount, String> {
-        let api_key = self.api_key.as_ref()
+        let api_key = self
+            .api_key
+            .as_ref()
             .ok_or_else(|| "Alpaca API key not configured".to_string())?;
-        let api_secret = self.api_secret.as_ref()
+        let api_secret = self
+            .api_secret
+            .as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
-        tracing::info!(mode = if self.is_paper { "paper" } else { "live" }, "Fetching Alpaca account info");
+        tracing::info!(
+            mode = if self.is_paper { "paper" } else { "live" },
+            "Fetching Alpaca account info"
+        );
 
         let response = crate::HTTP_CLIENT
             .get(format!("{}/v2/account", self.base_url()))
@@ -132,15 +139,21 @@ impl AlpacaService {
             return Err(format!("Alpaca API error {}: {}", status, error_text));
         }
 
-        response.json().await
+        response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse account response: {}", e))
     }
 
     /// Get all positions
     pub async fn get_positions(&self) -> Result<Vec<AlpacaPosition>, String> {
-        let api_key = self.api_key.as_ref()
+        let api_key = self
+            .api_key
+            .as_ref()
             .ok_or_else(|| "Alpaca API key not configured".to_string())?;
-        let api_secret = self.api_secret.as_ref()
+        let api_secret = self
+            .api_secret
+            .as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
         tracing::info!("Fetching Alpaca positions");
@@ -159,16 +172,22 @@ impl AlpacaService {
             return Err(format!("Alpaca API error {}: {}", status, error_text));
         }
 
-        response.json().await
+        response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse positions response: {}", e))
     }
 
     /// Get position for a specific symbol
     #[allow(dead_code)]
     pub async fn get_position(&self, symbol: &str) -> Result<AlpacaPosition, String> {
-        let api_key = self.api_key.as_ref()
+        let api_key = self
+            .api_key
+            .as_ref()
             .ok_or_else(|| "Alpaca API key not configured".to_string())?;
-        let api_secret = self.api_secret.as_ref()
+        let api_secret = self
+            .api_secret
+            .as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
         let response = crate::HTTP_CLIENT
@@ -185,15 +204,21 @@ impl AlpacaService {
             return Err(format!("Alpaca API error {}: {}", status, error_text));
         }
 
-        response.json().await
+        response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse position response: {}", e))
     }
 
     /// Get all orders
     pub async fn get_orders(&self, status: Option<&str>) -> Result<Vec<AlpacaOrder>, String> {
-        let api_key = self.api_key.as_ref()
+        let api_key = self
+            .api_key
+            .as_ref()
             .ok_or_else(|| "Alpaca API key not configured".to_string())?;
-        let api_secret = self.api_secret.as_ref()
+        let api_secret = self
+            .api_secret
+            .as_ref()
             .ok_or_else(|| "Alpaca API secret not configured".to_string())?;
 
         let mut url = format!("{}/v2/orders", self.base_url());
@@ -215,7 +240,9 @@ impl AlpacaService {
             return Err(format!("Alpaca API error {}: {}", status, error_text));
         }
 
-        response.json().await
+        response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse orders response: {}", e))
     }
 

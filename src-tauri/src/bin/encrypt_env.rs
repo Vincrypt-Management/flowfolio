@@ -48,7 +48,11 @@ fn main() {
         std::process::exit(1);
     });
 
-    println!("Input:  {} ({} bytes)", input_path.display(), plaintext.len());
+    println!(
+        "Input:  {} ({} bytes)",
+        input_path.display(),
+        plaintext.len()
+    );
 
     let encrypted = encrypt_string(&plaintext).unwrap_or_else(|e| {
         eprintln!("Encryption failed: {}", e);
@@ -60,7 +64,11 @@ fn main() {
         std::process::exit(1);
     });
 
-    println!("Output: {} ({} bytes)", output_path.display(), encrypted.len());
+    println!(
+        "Output: {} ({} bytes)",
+        output_path.display(),
+        encrypted.len()
+    );
     println!();
 
     println!("Verifying encryption...");

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use crate::modules::{
-    scoring::factors::{FinancialMetrics, MomentumMetrics},
     data_provider::CompanyOverview,
+    scoring::factors::{FinancialMetrics, MomentumMetrics},
     store::models::PriceDaily,
 };
 use anyhow::Result;
@@ -47,23 +47,23 @@ pub fn calculate_momentum_metrics(prices: &[PriceDaily]) -> Result<MomentumMetri
             avg_volume_30d: None,
         });
     }
-    
+
     // Prices should be sorted by date descending (most recent first)
     let latest = prices.first().unwrap();
     let latest_price = latest.close;
-    
+
     // Calculate returns
     let return_1m = calculate_return(prices, 21, latest_price); // ~1 month trading days
     let return_3m = calculate_return(prices, 63, latest_price); // ~3 months
     let return_6m = calculate_return(prices, 126, latest_price); // ~6 months
     let return_12m = calculate_return(prices, 252, latest_price); // ~12 months
-    
+
     // Calculate 30-day volatility
     let volatility_30d = calculate_volatility(prices, 30);
-    
+
     // Calculate average volume
     let avg_volume_30d = calculate_avg_volume(prices, 30);
-    
+
     Ok(MomentumMetrics {
         return_1m,
         return_3m,
@@ -74,16 +74,20 @@ pub fn calculate_momentum_metrics(prices: &[PriceDaily]) -> Result<MomentumMetri
     })
 }
 
-fn calculate_return(prices: &[PriceDaily], lookback_days: usize, current_price: f64) -> Option<f64> {
+fn calculate_return(
+    prices: &[PriceDaily],
+    lookback_days: usize,
+    current_price: f64,
+) -> Option<f64> {
     if prices.len() <= lookback_days {
         return None;
     }
-    
+
     let past_price = prices.get(lookback_days)?.close;
     if past_price == 0.0 {
         return None;
     }
-    
+
     Some((current_price - past_price) / past_price)
 }
 
@@ -91,12 +95,9 @@ fn calculate_volatility(prices: &[PriceDaily], window: usize) -> Option<f64> {
     if prices.len() < window {
         return None;
     }
-    
-    let recent_prices: Vec<f64> = prices.iter()
-        .take(window)
-        .map(|p| p.close)
-        .collect();
-    
+
+    let recent_prices: Vec<f64> = prices.iter().take(window).map(|p| p.close).collect();
+
     // Calculate daily returns
     let mut returns = Vec::new();
     for i in 1..recent_prices.len() {
@@ -105,17 +106,16 @@ fn calculate_volatility(prices: &[PriceDaily], window: usize) -> Option<f64> {
             returns.push(ret);
         }
     }
-    
+
     if returns.is_empty() {
         return None;
     }
-    
+
     // Calculate standard deviation of returns
     let mean: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
-    let variance: f64 = returns.iter()
-        .map(|r| (r - mean).powi(2))
-        .sum::<f64>() / returns.len() as f64;
-    
+    let variance: f64 =
+        returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
+
     Some(variance.sqrt())
 }
 
@@ -123,12 +123,9 @@ fn calculate_avg_volume(prices: &[PriceDaily], window: usize) -> Option<f64> {
     if prices.len() < window {
         return None;
     }
-    
-    let total_volume: i64 = prices.iter()
-        .take(window)
-        .map(|p| p.volume)
-        .sum();
-    
+
+    let total_volume: i64 = prices.iter().take(window).map(|p| p.volume).sum();
+
     Some(total_volume as f64 / window as f64)
 }
 
@@ -154,7 +151,7 @@ fn parse_optional_percentage(value: &Option<String>) -> Option<f64> {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
-    
+
     #[test]
     fn test_calculate_return() {
         let prices = vec![
@@ -181,16 +178,22 @@ mod tests {
                 volume: 1000000,
             },
         ];
-        
+
         let ret = calculate_return(&prices, 1, 110.0);
         assert!(ret.is_some());
         assert!((ret.unwrap() - 0.10).abs() < 0.01); // 10% return
     }
-    
+
     #[test]
     fn test_parse_percentage() {
-        assert_eq!(parse_optional_percentage(&Some("15%".to_string())), Some(0.15));
-        assert_eq!(parse_optional_percentage(&Some("0.15".to_string())), Some(0.15));
+        assert_eq!(
+            parse_optional_percentage(&Some("15%".to_string())),
+            Some(0.15)
+        );
+        assert_eq!(
+            parse_optional_percentage(&Some("0.15".to_string())),
+            Some(0.15)
+        );
         assert_eq!(parse_optional_percentage(&None), None);
     }
 
@@ -249,23 +252,31 @@ mod tests {
 
     #[test]
     fn test_volatility_constant_prices() {
-        let prices: Vec<PriceDaily> = (0..30).map(|i| {
-            make_price(&format!("2024-01-{:02}", (i % 28) + 1), 100.0, 1000)
-        }).collect();
+        let prices: Vec<PriceDaily> = (0..30)
+            .map(|i| make_price(&format!("2024-01-{:02}", (i % 28) + 1), 100.0, 1000))
+            .collect();
         let result = calculate_volatility(&prices, 30);
         assert!(result.is_some());
-        assert!((result.unwrap() - 0.0).abs() < 1e-10, "Constant prices -> zero volatility");
+        assert!(
+            (result.unwrap() - 0.0).abs() < 1e-10,
+            "Constant prices -> zero volatility"
+        );
     }
 
     #[test]
     fn test_volatility_varying_prices() {
-        let prices: Vec<PriceDaily> = (0..30).map(|i| {
-            let close = 100.0 + (i as f64 * 2.0);
-            make_price(&format!("2024-01-{:02}", (i % 28) + 1), close, 1000)
-        }).collect();
+        let prices: Vec<PriceDaily> = (0..30)
+            .map(|i| {
+                let close = 100.0 + (i as f64 * 2.0);
+                make_price(&format!("2024-01-{:02}", (i % 28) + 1), close, 1000)
+            })
+            .collect();
         let result = calculate_volatility(&prices, 30);
         assert!(result.is_some());
-        assert!(result.unwrap() > 0.0, "Varying prices should have positive volatility");
+        assert!(
+            result.unwrap() > 0.0,
+            "Varying prices should have positive volatility"
+        );
     }
 
     // ===== calculate_avg_volume tests =====
@@ -279,9 +290,15 @@ mod tests {
 
     #[test]
     fn test_avg_volume_basic() {
-        let prices: Vec<PriceDaily> = (0..30).map(|i| {
-            make_price(&format!("2024-01-{:02}", (i % 28) + 1), 100.0, (i + 1) as i64 * 1000)
-        }).collect();
+        let prices: Vec<PriceDaily> = (0..30)
+            .map(|i| {
+                make_price(
+                    &format!("2024-01-{:02}", (i % 28) + 1),
+                    100.0,
+                    (i + 1) as i64 * 1000,
+                )
+            })
+            .collect();
         let result = calculate_avg_volume(&prices, 30);
         assert!(result.is_some());
         // Average of 1000, 2000, ..., 30000 = 15500
@@ -291,9 +308,15 @@ mod tests {
 
     #[test]
     fn test_avg_volume_window_smaller_than_data() {
-        let prices: Vec<PriceDaily> = (0..50).map(|i| {
-            make_price(&format!("2024-{:02}-{:02}", (i / 28) + 1, (i % 28) + 1), 100.0, 1000)
-        }).collect();
+        let prices: Vec<PriceDaily> = (0..50)
+            .map(|i| {
+                make_price(
+                    &format!("2024-{:02}-{:02}", (i / 28) + 1, (i % 28) + 1),
+                    100.0,
+                    1000,
+                )
+            })
+            .collect();
         let result = calculate_avg_volume(&prices, 30);
         assert!(result.is_some());
         assert!((result.unwrap() - 1000.0).abs() < 1e-6);
@@ -308,7 +331,10 @@ mod tests {
 
     #[test]
     fn test_parse_optional_float_invalid() {
-        assert_eq!(parse_optional_float(&Some("not_a_number".to_string())), None);
+        assert_eq!(
+            parse_optional_float(&Some("not_a_number".to_string())),
+            None
+        );
     }
 
     #[test]
@@ -330,7 +356,10 @@ mod tests {
 
     #[test]
     fn test_parse_percentage_zero() {
-        assert_eq!(parse_optional_percentage(&Some("0%".to_string())), Some(0.0));
+        assert_eq!(
+            parse_optional_percentage(&Some("0%".to_string())),
+            Some(0.0)
+        );
     }
 
     #[test]
@@ -352,7 +381,13 @@ mod tests {
 
     // ===== parse_financial_metrics tests =====
 
-    fn make_overview(market_cap: Option<&str>, pe: Option<&str>, roe: Option<&str>, roic: Option<&str>, div: Option<&str>) -> CompanyOverview {
+    fn make_overview(
+        market_cap: Option<&str>,
+        pe: Option<&str>,
+        roe: Option<&str>,
+        roic: Option<&str>,
+        div: Option<&str>,
+    ) -> CompanyOverview {
         CompanyOverview {
             symbol: "TEST".to_string(),
             name: None,
@@ -401,13 +436,7 @@ mod tests {
 
     #[test]
     fn test_parse_financial_metrics_invalid_values() {
-        let overview = make_overview(
-            Some("not_a_number"),
-            Some("N/A"),
-            None,
-            None,
-            None,
-        );
+        let overview = make_overview(Some("not_a_number"), Some("N/A"), None, None, None);
         let metrics = parse_financial_metrics(&overview);
         assert!(metrics.market_cap.is_none());
         assert!(metrics.pe_ratio.is_none());
@@ -418,11 +447,14 @@ mod tests {
     #[test]
     fn test_volatility_all_zero_prices() {
         // All prices are 0 → the `if recent_prices[i - 1] != 0.0` guard skips all → returns is empty → returns None
-        let prices: Vec<PriceDaily> = (0..30).map(|i| {
-            make_price(&format!("2024-01-{:02}", (i % 28) + 1), 0.0, 0)
-        }).collect();
+        let prices: Vec<PriceDaily> = (0..30)
+            .map(|i| make_price(&format!("2024-01-{:02}", (i % 28) + 1), 0.0, 0))
+            .collect();
         let result = calculate_volatility(&prices, 30);
-        assert!(result.is_none(), "All-zero prices should return None volatility");
+        assert!(
+            result.is_none(),
+            "All-zero prices should return None volatility"
+        );
     }
 
     // ===== calculate_momentum_metrics test =====
@@ -439,13 +471,15 @@ mod tests {
     #[test]
     fn test_momentum_metrics_with_data() {
         // Create enough prices for at least 1m return (21+ days)
-        let prices: Vec<PriceDaily> = (0..30).map(|i| {
-            make_price(
-                &format!("2024-01-{:02}", (i % 28) + 1),
-                100.0 + i as f64,
-                10000,
-            )
-        }).collect();
+        let prices: Vec<PriceDaily> = (0..30)
+            .map(|i| {
+                make_price(
+                    &format!("2024-01-{:02}", (i % 28) + 1),
+                    100.0 + i as f64,
+                    10000,
+                )
+            })
+            .collect();
         let result = calculate_momentum_metrics(&prices).unwrap();
         assert!(result.return_1m.is_some());
         assert!(result.volatility_30d.is_some());

@@ -1,10 +1,10 @@
 // API Commands - Market Data
 // Extracted from lib.rs
 
-use crate::modules::quant_analysis::{QuantMetrics, QuantAnalyzer, DashboardData};
-use crate::services::enhanced_market_service::CacheStats;
 use crate::core::validation::{validate_symbol, validate_symbols};
-use crate::{ENHANCED_MARKET_SERVICE, FUNDAMENTAL_SERVICE, DB_INITIALIZED};
+use crate::modules::quant_analysis::{DashboardData, QuantAnalyzer, QuantMetrics};
+use crate::services::enhanced_market_service::CacheStats;
+use crate::{DB_INITIALIZED, ENHANCED_MARKET_SERVICE, FUNDAMENTAL_SERVICE};
 use std::collections::HashMap;
 
 /// Health check command
@@ -60,7 +60,8 @@ pub fn get_provider_status() -> String {
     ]);
     serde_json::json!({
         "providers": providers
-    }).to_string()
+    })
+    .to_string()
 }
 
 /// Get database initialization status
@@ -76,7 +77,9 @@ pub fn get_database_status() -> serde_json::Value {
 /// Get exchange rate between currencies
 #[tauri::command]
 pub async fn get_exchange_rate(from: String, to: String) -> Result<f64, String> {
-    if from == to { return Ok(1.0); }
+    if from == to {
+        return Ok(1.0);
+    }
     let client = crate::HTTP_CLIENT.clone();
     let url = format!(
         "https://api.exchangerate-api.com/v4/latest/{}",
@@ -111,7 +114,9 @@ pub async fn prefetch_symbols(symbols: Vec<String>) -> Result<(), String> {
 
 /// Get current prices for multiple symbols
 #[tauri::command]
-pub async fn get_current_prices_batch(symbols: Vec<String>) -> Result<HashMap<String, f64>, String> {
+pub async fn get_current_prices_batch(
+    symbols: Vec<String>,
+) -> Result<HashMap<String, f64>, String> {
     validate_symbols(&symbols)?;
     Ok(ENHANCED_MARKET_SERVICE.get_batch_prices(symbols).await)
 }
@@ -127,7 +132,9 @@ pub async fn get_current_price_single(symbol: String) -> Result<f64, String> {
 #[tauri::command]
 pub async fn get_quant_metrics_batch(symbols: Vec<String>) -> Result<Vec<QuantMetrics>, String> {
     validate_symbols(&symbols)?;
-    Ok(ENHANCED_MARKET_SERVICE.get_batch_quant_metrics(symbols).await)
+    Ok(ENHANCED_MARKET_SERVICE
+        .get_batch_quant_metrics(symbols)
+        .await)
 }
 
 /// Get single symbol quantitative metrics
@@ -150,7 +157,10 @@ pub async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, S
             Ok(prices) => {
                 let historical: Vec<QuantHistoricalPrice> = prices
                     .into_iter()
-                    .map(|p| QuantHistoricalPrice { date: p.date, close: p.close })
+                    .map(|p| QuantHistoricalPrice {
+                        date: p.date,
+                        close: p.close,
+                    })
                     .collect();
                 assets_data.push((symbol.clone(), historical));
             }
@@ -169,7 +179,10 @@ pub async fn get_dashboard_data(symbols: Vec<String>) -> Result<DashboardData, S
 
 /// Get historical price data for a symbol
 #[tauri::command]
-pub async fn get_historical_prices(symbol: String, days: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn get_historical_prices(
+    symbol: String,
+    days: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
     validate_symbol(&symbol)?;
     let days = days.unwrap_or(365);
 
@@ -180,19 +193,22 @@ pub async fn get_historical_prices(symbol: String, days: Option<usize>) -> Resul
             } else {
                 prices
             };
-            let result: Vec<serde_json::Value> = truncated.into_iter()
-                .map(|p| serde_json::json!({
-                    "date": p.date,
-                    "close": p.close,
-                    "open": p.open,
-                    "high": p.high,
-                    "low": p.low,
-                    "volume": p.volume,
-                }))
+            let result: Vec<serde_json::Value> = truncated
+                .into_iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "date": p.date,
+                        "close": p.close,
+                        "open": p.open,
+                        "high": p.high,
+                        "low": p.low,
+                        "volume": p.volume,
+                    })
+                })
                 .collect();
             Ok(result)
         }
-        Err(e) => Err(format!("Failed to get historical data: {}", e))
+        Err(e) => Err(format!("Failed to get historical data: {}", e)),
     }
 }
 
@@ -210,7 +226,9 @@ pub async fn test_data_connection() -> Result<serde_json::Value, String> {
 
     let metrics_result = ENHANCED_MARKET_SERVICE.get_quant_metrics(test_symbol).await;
     let metrics_ok = metrics_result.is_ok();
-    let signal = metrics_result.map(|m| m.signal).unwrap_or_else(|_| "FAILED".to_string());
+    let signal = metrics_result
+        .map(|m| m.signal)
+        .unwrap_or_else(|_| "FAILED".to_string());
 
     let cache_stats = ENHANCED_MARKET_SERVICE.get_cache_stats().await;
 
@@ -342,32 +360,100 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
             if let Ok(ref fund) = fundamentals_result {
                 let mut v_score: f64 = 50.0;
                 if let Some(pe) = fund.pe_ratio {
-                    v_score += if pe < 15.0 { 20.0 } else if pe < 25.0 { 10.0 } else if pe > 40.0 { -15.0 } else { 0.0 };
+                    v_score += if pe < 15.0 {
+                        20.0
+                    } else if pe < 25.0 {
+                        10.0
+                    } else if pe > 40.0 {
+                        -15.0
+                    } else {
+                        0.0
+                    };
                 }
                 if let Some(pb) = fund.price_to_book {
-                    v_score += if pb < 1.5 { 10.0 } else if pb < 3.0 { 5.0 } else if pb > 5.0 { -10.0 } else { 0.0 };
+                    v_score += if pb < 1.5 {
+                        10.0
+                    } else if pb < 3.0 {
+                        5.0
+                    } else if pb > 5.0 {
+                        -10.0
+                    } else {
+                        0.0
+                    };
                 }
                 if let Some(ps) = fund.price_to_sales {
-                    v_score += if ps < 2.0 { 10.0 } else if ps < 5.0 { 5.0 } else if ps > 10.0 { -10.0 } else { 0.0 };
+                    v_score += if ps < 2.0 {
+                        10.0
+                    } else if ps < 5.0 {
+                        5.0
+                    } else if ps > 10.0 {
+                        -10.0
+                    } else {
+                        0.0
+                    };
                 }
 
                 let mut q_score: f64 = 50.0;
                 if let Some(roe) = fund.return_on_equity {
-                    q_score += if roe > 0.20 { 20.0 } else if roe > 0.15 { 15.0 } else if roe > 0.10 { 10.0 } else if roe < 0.0 { -15.0 } else { 0.0 };
+                    q_score += if roe > 0.20 {
+                        20.0
+                    } else if roe > 0.15 {
+                        15.0
+                    } else if roe > 0.10 {
+                        10.0
+                    } else if roe < 0.0 {
+                        -15.0
+                    } else {
+                        0.0
+                    };
                 }
                 if let Some(margin) = fund.profit_margin {
-                    q_score += if margin > 0.20 { 15.0 } else if margin > 0.10 { 10.0 } else if margin < 0.0 { -15.0 } else { 0.0 };
+                    q_score += if margin > 0.20 {
+                        15.0
+                    } else if margin > 0.10 {
+                        10.0
+                    } else if margin < 0.0 {
+                        -15.0
+                    } else {
+                        0.0
+                    };
                 }
                 if let Some(de) = fund.debt_to_equity {
-                    q_score += if de < 0.5 { 10.0 } else if de < 1.0 { 5.0 } else if de > 2.0 { -15.0 } else { 0.0 };
+                    q_score += if de < 0.5 {
+                        10.0
+                    } else if de < 1.0 {
+                        5.0
+                    } else if de > 2.0 {
+                        -15.0
+                    } else {
+                        0.0
+                    };
                 }
 
                 let mut g_score: f64 = 50.0;
                 if let Some(rev_growth) = fund.revenue_growth_yoy {
-                    g_score += if rev_growth > 0.20 { 25.0 } else if rev_growth > 0.10 { 15.0 } else if rev_growth > 0.05 { 10.0 } else if rev_growth < 0.0 { -15.0 } else { 0.0 };
+                    g_score += if rev_growth > 0.20 {
+                        25.0
+                    } else if rev_growth > 0.10 {
+                        15.0
+                    } else if rev_growth > 0.05 {
+                        10.0
+                    } else if rev_growth < 0.0 {
+                        -15.0
+                    } else {
+                        0.0
+                    };
                 }
                 if let Some(earn_growth) = fund.earnings_growth_yoy {
-                    g_score += if earn_growth > 0.20 { 20.0 } else if earn_growth > 0.10 { 10.0 } else if earn_growth < 0.0 { -10.0 } else { 0.0 };
+                    g_score += if earn_growth > 0.20 {
+                        20.0
+                    } else if earn_growth > 0.10 {
+                        10.0
+                    } else if earn_growth < 0.0 {
+                        -10.0
+                    } else {
+                        0.0
+                    };
                 }
 
                 let altman_z = calculate_altman_z_estimate(fund);
@@ -376,8 +462,14 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
                 let price = price_result.clone().unwrap_or(100.0);
                 let graham_number = calculate_graham_number(fund);
                 let margin_of_safety = if let Some(gn) = graham_number {
-                    if gn > 0.0 { Some(((gn - price) / gn) * 100.0) } else { None }
-                } else { None };
+                    if gn > 0.0 {
+                        Some(((gn - price) / gn) * 100.0)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let dividend_safety = assess_dividend_safety(fund);
 
@@ -420,7 +512,12 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
                     "lastUpdated": fund.last_updated,
                 });
 
-                (v_score.clamp(0.0, 100.0), q_score.clamp(0.0, 100.0), g_score.clamp(0.0, 100.0), fundamentals)
+                (
+                    v_score.clamp(0.0, 100.0),
+                    q_score.clamp(0.0, 100.0),
+                    g_score.clamp(0.0, 100.0),
+                    fundamentals,
+                )
             } else {
                 let v_score = 50.0 + (sharpe * 10.0).clamp(-30.0, 30.0);
                 let q_score = 50.0 + (annualized_return / 2.0).clamp(-30.0, 30.0);
@@ -465,7 +562,12 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
                     "lastUpdated": chrono::Utc::now().to_rfc3339(),
                 });
 
-                (v_score.clamp(0.0, 100.0), q_score.clamp(0.0, 100.0), g_score.clamp(0.0, 100.0), fundamentals)
+                (
+                    v_score.clamp(0.0, 100.0),
+                    q_score.clamp(0.0, 100.0),
+                    g_score.clamp(0.0, 100.0),
+                    fundamentals,
+                )
             };
 
         result["fundamentals"] = fundamentals_json;
@@ -496,9 +598,13 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
         }
 
         let sentiment_score: f64 = (rsi - 50.0) / 50.0;
-        let overall_sentiment = if sentiment_score > 0.3 { "bullish" }
-                               else if sentiment_score < -0.3 { "bearish" }
-                               else { "neutral" };
+        let overall_sentiment = if sentiment_score > 0.3 {
+            "bullish"
+        } else if sentiment_score < -0.3 {
+            "bearish"
+        } else {
+            "neutral"
+        };
 
         result["sentiment"] = serde_json::json!({
             "overallSentiment": overall_sentiment,
@@ -508,9 +614,13 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
             "sentimentTrend": if rsi > 50.0 { "improving" } else { "declining" },
         });
 
-        let consensus = if sharpe > 1.0 && annualized_return > 10.0 { "Buy" }
-                       else if sharpe < 0.0 || annualized_return < -5.0 { "Sell" }
-                       else { "Hold" };
+        let consensus = if sharpe > 1.0 && annualized_return > 10.0 {
+            "Buy"
+        } else if sharpe < 0.0 || annualized_return < -5.0 {
+            "Sell"
+        } else {
+            "Hold"
+        };
 
         result["analystData"] = serde_json::json!({
             "consensusRating": consensus,
@@ -528,10 +638,9 @@ pub async fn get_detailed_ticker_analysis(symbol: String) -> Result<serde_json::
 // ==================== HELPER FUNCTIONS ====================
 
 const BOND_ETFS: &[&str] = &[
-    "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
-    "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
-    "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
-    "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
+    "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH", "BNDX", "VGIT", "VGLT",
+    "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX", "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB",
+    "CMF", "PZA", "HYMB", "GOVT", "SPTL", "SPTS", "SPAB", "SPLB", "SPIB", "BIV", "BSV", "BLV",
 ];
 
 /// Check if a symbol is an ETF
@@ -539,31 +648,29 @@ pub(crate) fn is_etf_symbol(symbol: &str) -> bool {
     let symbol_upper = symbol.to_uppercase();
 
     let etf_patterns = [
-        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH",
-        "BNDX", "VGIT", "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX",
-        "TIP", "STIP", "SCHP", "VTIP", "MUB", "SUB", "CMF", "PZA", "HYMB",
-        "SPY", "IVV", "VOO", "VTI", "QQQ", "DIA", "IWM", "VGT", "XLK", "XLF",
-        "XLE", "XLV", "XLP", "XLY", "XLI", "XLB", "XLU", "XLRE", "VNQ", "IYR",
-        "VEA", "VWO", "EFA", "EEM", "IEFA", "IEMG", "SCHF", "SCHB", "SCHA",
-        "VIG", "VYM", "SCHD", "DVY", "HDV", "SDY", "VTV", "VUG", "IJH", "IJR",
-        "IWF", "IWD", "IWN", "IWO", "IWP", "IWS", "MDY", "RSP", "MTUM", "QUAL",
-        "USMV", "EFAV", "EEMV", "NOBL", "ARKK", "ARKW", "ARKG", "ARKF", "ARKQ",
+        "BND", "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "JNK", "VCIT", "VCSH", "BNDX", "VGIT",
+        "VGLT", "SCHO", "SCHZ", "IGSB", "IGLB", "EMB", "BWX", "TIP", "STIP", "SCHP", "VTIP", "MUB",
+        "SUB", "CMF", "PZA", "HYMB", "SPY", "IVV", "VOO", "VTI", "QQQ", "DIA", "IWM", "VGT", "XLK",
+        "XLF", "XLE", "XLV", "XLP", "XLY", "XLI", "XLB", "XLU", "XLRE", "VNQ", "IYR", "VEA", "VWO",
+        "EFA", "EEM", "IEFA", "IEMG", "SCHF", "SCHB", "SCHA", "VIG", "VYM", "SCHD", "DVY", "HDV",
+        "SDY", "VTV", "VUG", "IJH", "IJR", "IWF", "IWD", "IWN", "IWO", "IWP", "IWS", "MDY", "RSP",
+        "MTUM", "QUAL", "USMV", "EFAV", "EEMV", "NOBL", "ARKK", "ARKW", "ARKG", "ARKF", "ARKQ",
         "GLD", "IAU", "SLV", "USO", "DBC", "PDBC", "GSG", "GLDM",
     ];
 
-    etf_patterns.iter().any(|p| symbol_upper == *p) ||
-    symbol_upper.ends_with("ETF") ||
-    symbol_upper.contains("BOND") ||
-    symbol_upper.contains("TREASURY")
+    etf_patterns.iter().any(|p| symbol_upper == *p)
+        || symbol_upper.ends_with("ETF")
+        || symbol_upper.contains("BOND")
+        || symbol_upper.contains("TREASURY")
 }
 
 /// Check if a symbol is a bond ETF
 pub(crate) fn is_bond_etf_symbol(symbol: &str) -> bool {
     let symbol_upper = symbol.to_uppercase();
 
-    BOND_ETFS.iter().any(|p| symbol_upper == *p) ||
-    symbol_upper.contains("BOND") ||
-    symbol_upper.contains("TREASURY")
+    BOND_ETFS.iter().any(|p| symbol_upper == *p)
+        || symbol_upper.contains("BOND")
+        || symbol_upper.contains("TREASURY")
 }
 
 /// Get ETF category, strategy, and index tracked
@@ -571,73 +678,92 @@ pub(crate) fn get_etf_info(symbol: &str, is_bond: bool) -> (String, String, Opti
     let symbol_upper = symbol.to_uppercase();
 
     if is_bond {
-        let category = if symbol_upper.contains("TIP") || symbol_upper == "SCHP" || symbol_upper == "VTIP" {
-            "Inflation-Protected Bonds"
-        } else if symbol_upper == "TLT" || symbol_upper == "VGLT" || symbol_upper == "SPTL" {
-            "Long-Term Treasury"
-        } else if symbol_upper == "IEF" || symbol_upper == "VGIT" {
-            "Intermediate-Term Treasury"
-        } else if symbol_upper == "SHY" || symbol_upper == "SCHO" || symbol_upper == "SPTS" {
-            "Short-Term Treasury"
-        } else if symbol_upper == "LQD" || symbol_upper == "VCIT" || symbol_upper == "IGLB" {
-            "Investment Grade Corporate"
-        } else if symbol_upper == "HYG" || symbol_upper == "JNK" || symbol_upper == "HYMB" {
-            "High Yield"
-        } else if symbol_upper == "BNDX" || symbol_upper == "BWX" || symbol_upper == "EMB" {
-            "International Bond"
-        } else if symbol_upper == "MUB" || symbol_upper == "SUB" || symbol_upper == "CMF" {
-            "Municipal Bond"
-        } else {
-            "Total Bond Market"
-        };
+        let category =
+            if symbol_upper.contains("TIP") || symbol_upper == "SCHP" || symbol_upper == "VTIP" {
+                "Inflation-Protected Bonds"
+            } else if symbol_upper == "TLT" || symbol_upper == "VGLT" || symbol_upper == "SPTL" {
+                "Long-Term Treasury"
+            } else if symbol_upper == "IEF" || symbol_upper == "VGIT" {
+                "Intermediate-Term Treasury"
+            } else if symbol_upper == "SHY" || symbol_upper == "SCHO" || symbol_upper == "SPTS" {
+                "Short-Term Treasury"
+            } else if symbol_upper == "LQD" || symbol_upper == "VCIT" || symbol_upper == "IGLB" {
+                "Investment Grade Corporate"
+            } else if symbol_upper == "HYG" || symbol_upper == "JNK" || symbol_upper == "HYMB" {
+                "High Yield"
+            } else if symbol_upper == "BNDX" || symbol_upper == "BWX" || symbol_upper == "EMB" {
+                "International Bond"
+            } else if symbol_upper == "MUB" || symbol_upper == "SUB" || symbol_upper == "CMF" {
+                "Municipal Bond"
+            } else {
+                "Total Bond Market"
+            };
 
-        return (category.to_string(), "Passive Index".to_string(), Some("Bond Aggregate Index".to_string()));
+        return (
+            category.to_string(),
+            "Passive Index".to_string(),
+            Some("Bond Aggregate Index".to_string()),
+        );
     }
 
-    let (category, index) = if symbol_upper == "SPY" || symbol_upper == "IVV" || symbol_upper == "VOO" {
-        ("U.S. Large Cap", Some("S&P 500"))
-    } else if symbol_upper == "QQQ" {
-        ("U.S. Large Cap Growth", Some("NASDAQ-100"))
-    } else if symbol_upper == "VTI" || symbol_upper == "SCHB" || symbol_upper == "ITOT" {
-        ("U.S. Total Market", Some("CRSP US Total Market Index"))
-    } else if symbol_upper == "IWM" || symbol_upper == "IJR" || symbol_upper == "SCHA" {
-        ("U.S. Small Cap", Some("Russell 2000"))
-    } else if symbol_upper == "VEA" || symbol_upper == "EFA" || symbol_upper == "SCHF" || symbol_upper == "IEFA" {
-        ("International Developed", Some("MSCI EAFE"))
-    } else if symbol_upper == "VWO" || symbol_upper == "EEM" || symbol_upper == "IEMG" {
-        ("Emerging Markets", Some("MSCI Emerging Markets"))
-    } else if symbol_upper.starts_with("XL") {
-        ("U.S. Sector", None)
-    } else if symbol_upper.starts_with("ARK") {
-        ("Thematic Growth", None)
-    } else if symbol_upper == "GLD" || symbol_upper == "IAU" || symbol_upper == "SLV" {
-        ("Precious Metals", None)
-    } else {
-        ("Diversified", None)
-    };
+    let (category, index) =
+        if symbol_upper == "SPY" || symbol_upper == "IVV" || symbol_upper == "VOO" {
+            ("U.S. Large Cap", Some("S&P 500"))
+        } else if symbol_upper == "QQQ" {
+            ("U.S. Large Cap Growth", Some("NASDAQ-100"))
+        } else if symbol_upper == "VTI" || symbol_upper == "SCHB" || symbol_upper == "ITOT" {
+            ("U.S. Total Market", Some("CRSP US Total Market Index"))
+        } else if symbol_upper == "IWM" || symbol_upper == "IJR" || symbol_upper == "SCHA" {
+            ("U.S. Small Cap", Some("Russell 2000"))
+        } else if symbol_upper == "VEA"
+            || symbol_upper == "EFA"
+            || symbol_upper == "SCHF"
+            || symbol_upper == "IEFA"
+        {
+            ("International Developed", Some("MSCI EAFE"))
+        } else if symbol_upper == "VWO" || symbol_upper == "EEM" || symbol_upper == "IEMG" {
+            ("Emerging Markets", Some("MSCI Emerging Markets"))
+        } else if symbol_upper.starts_with("XL") {
+            ("U.S. Sector", None)
+        } else if symbol_upper.starts_with("ARK") {
+            ("Thematic Growth", None)
+        } else if symbol_upper == "GLD" || symbol_upper == "IAU" || symbol_upper == "SLV" {
+            ("Precious Metals", None)
+        } else {
+            ("Diversified", None)
+        };
 
-    (category.to_string(), "Passive Index".to_string(), index.map(|s| s.to_string()))
+    (
+        category.to_string(),
+        "Passive Index".to_string(),
+        index.map(|s| s.to_string()),
+    )
 }
 
 /// Get estimated expense ratio for an ETF
 pub(crate) fn get_estimated_expense_ratio(symbol: &str) -> Option<f64> {
     let symbol_upper = symbol.to_uppercase();
 
-    if symbol_upper.starts_with("V") || symbol_upper.starts_with("SCH") || symbol_upper.starts_with("FI")
-        || symbol_upper == "IVV" || symbol_upper == "IEFA" || symbol_upper == "IEMG" || symbol_upper == "AGG"
+    if symbol_upper.starts_with("V")
+        || symbol_upper.starts_with("SCH")
+        || symbol_upper.starts_with("FI")
+        || symbol_upper == "IVV"
+        || symbol_upper == "IEFA"
+        || symbol_upper == "IEMG"
+        || symbol_upper == "AGG"
     {
         Some(0.03)
-    }
-    else if symbol_upper == "SPY" || symbol_upper == "QQQ" || symbol_upper == "DIA" || symbol_upper.starts_with("XL") {
+    } else if symbol_upper == "SPY"
+        || symbol_upper == "QQQ"
+        || symbol_upper == "DIA"
+        || symbol_upper.starts_with("XL")
+    {
         Some(0.09)
-    }
-    else if symbol_upper.starts_with("ARK") {
+    } else if symbol_upper.starts_with("ARK") {
         Some(0.75)
-    }
-    else if symbol_upper == "BND" || symbol_upper == "AGG" || symbol_upper == "BNDX" {
+    } else if symbol_upper == "BND" || symbol_upper == "AGG" || symbol_upper == "BNDX" {
         Some(0.03)
-    }
-    else {
+    } else {
         Some(0.20)
     }
 }
@@ -702,32 +828,44 @@ pub(crate) fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<
 
     if let Some(margin) = fund.profit_margin {
         criteria_checked += 1;
-        if margin > 0.0 { score += 1; }
+        if margin > 0.0 {
+            score += 1;
+        }
     }
 
     if let Some(roa) = fund.return_on_assets {
         criteria_checked += 1;
-        if roa > 0.0 { score += 1; }
+        if roa > 0.0 {
+            score += 1;
+        }
     }
 
     if let Some(fcf) = fund.free_cash_flow {
         criteria_checked += 1;
-        if fcf > 0.0 { score += 1; }
+        if fcf > 0.0 {
+            score += 1;
+        }
     }
 
     if fund.free_cash_flow.is_some() && fund.profit_margin.is_some_and(|m| m > 0.0) {
         criteria_checked += 1;
-        if fund.free_cash_flow.unwrap_or(0.0) > 0.0 { score += 1; }
+        if fund.free_cash_flow.unwrap_or(0.0) > 0.0 {
+            score += 1;
+        }
     }
 
     if let Some(de) = fund.debt_to_equity {
         criteria_checked += 1;
-        if de < 1.0 { score += 1; }
+        if de < 1.0 {
+            score += 1;
+        }
     }
 
     if let Some(cr) = fund.current_ratio {
         criteria_checked += 1;
-        if cr > 1.5 { score += 1; }
+        if cr > 1.5 {
+            score += 1;
+        }
     }
 
     if fund.profit_margin.is_some_and(|m| m > 0.05) {
@@ -737,12 +875,16 @@ pub(crate) fn calculate_piotroski_estimate(fund: &FundamentalMetrics) -> Option<
 
     if let Some(op_margin) = fund.operating_margin {
         criteria_checked += 1;
-        if op_margin > 0.10 { score += 1; }
+        if op_margin > 0.10 {
+            score += 1;
+        }
     }
 
     if let Some(rev_growth) = fund.revenue_growth_yoy {
         criteria_checked += 1;
-        if rev_growth > 0.0 { score += 1; }
+        if rev_growth > 0.0 {
+            score += 1;
+        }
     }
 
     if criteria_checked >= 5 {

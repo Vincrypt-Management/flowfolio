@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use crate::modules::plan_compiler::VibePlanScript;
 use crate::modules::journal::JournalEntry;
+use crate::modules::plan_compiler::VibePlanScript;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

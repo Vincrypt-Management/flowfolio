@@ -18,7 +18,7 @@ pub enum ProgressEvent {
         total_steps: Option<usize>,
         message: String,
     },
-    
+
     /// Progress update during operation
     Progress {
         operation_id: String,
@@ -28,7 +28,7 @@ pub enum ProgressEvent {
         message: String,
         detail: Option<ProgressDetail>,
     },
-    
+
     /// Retry attempt
     Retry {
         operation_id: String,
@@ -37,14 +37,14 @@ pub enum ProgressEvent {
         error: String,
         next_retry_ms: u64,
     },
-    
+
     /// Partial result available
     PartialResult {
         operation_id: String,
         result_type: String,
         data: serde_json::Value,
     },
-    
+
     /// Operation completed
     Completed {
         operation_id: String,
@@ -52,7 +52,7 @@ pub enum ProgressEvent {
         message: String,
         duration_ms: u64,
     },
-    
+
     /// Error occurred
     Error {
         operation_id: String,
@@ -85,7 +85,7 @@ impl ProgressReporter {
             start_time: std::time::Instant::now(),
         }
     }
-    
+
     pub fn start(&self, operation_type: &str, total_steps: Option<usize>, message: &str) {
         let _ = self.sender.send(ProgressEvent::Started {
             operation_id: self.operation_id.clone(),
@@ -94,8 +94,14 @@ impl ProgressReporter {
             message: message.to_string(),
         });
     }
-    
-    pub fn progress(&self, current_step: usize, total_steps: Option<usize>, message: &str, detail: Option<ProgressDetail>) {
+
+    pub fn progress(
+        &self,
+        current_step: usize,
+        total_steps: Option<usize>,
+        message: &str,
+        detail: Option<ProgressDetail>,
+    ) {
         let percentage = if let Some(total) = total_steps {
             if total > 0 {
                 (current_step as f64 / total as f64) * 100.0
@@ -105,7 +111,7 @@ impl ProgressReporter {
         } else {
             0.0
         };
-        
+
         let _ = self.sender.send(ProgressEvent::Progress {
             operation_id: self.operation_id.clone(),
             current_step,
@@ -115,7 +121,7 @@ impl ProgressReporter {
             detail,
         });
     }
-    
+
     pub fn retry(&self, attempt: u32, max_attempts: u32, error: &str, next_retry_ms: u64) {
         let _ = self.sender.send(ProgressEvent::Retry {
             operation_id: self.operation_id.clone(),
@@ -125,7 +131,7 @@ impl ProgressReporter {
             next_retry_ms,
         });
     }
-    
+
     pub fn partial_result(&self, result_type: &str, data: serde_json::Value) {
         let _ = self.sender.send(ProgressEvent::PartialResult {
             operation_id: self.operation_id.clone(),
@@ -133,7 +139,7 @@ impl ProgressReporter {
             data,
         });
     }
-    
+
     pub fn complete(&self, success: bool, message: &str) {
         let duration_ms = self.start_time.elapsed().as_millis() as u64;
         let _ = self.sender.send(ProgressEvent::Completed {
@@ -143,7 +149,7 @@ impl ProgressReporter {
             duration_ms,
         });
     }
-    
+
     pub fn error(&self, error: &str, recoverable: bool) {
         let _ = self.sender.send(ProgressEvent::Error {
             operation_id: self.operation_id.clone(),
@@ -165,18 +171,15 @@ impl ProgressManager {
             sender: Arc::new(sender),
         }
     }
-    
+
     pub fn create_reporter(&self, operation_id: &str) -> ProgressReporter {
-        ProgressReporter::new(
-            operation_id.to_string(),
-            self.sender.clone(),
-        )
+        ProgressReporter::new(operation_id.to_string(), self.sender.clone())
     }
-    
+
     pub fn subscribe(&self) -> broadcast::Receiver<ProgressEvent> {
         self.sender.subscribe()
     }
-    
+
     pub fn sender(&self) -> Arc<broadcast::Sender<ProgressEvent>> {
         self.sender.clone()
     }
@@ -276,7 +279,12 @@ mod tests {
         reporter.progress(5, Some(10), "halfway", None);
 
         match rx.try_recv().unwrap() {
-            ProgressEvent::Progress { percentage, current_step, total_steps, .. } => {
+            ProgressEvent::Progress {
+                percentage,
+                current_step,
+                total_steps,
+                ..
+            } => {
                 assert!((percentage - 50.0).abs() < 0.01);
                 assert_eq!(current_step, 5);
                 assert_eq!(total_steps, Some(10));
@@ -310,7 +318,11 @@ mod tests {
         reporter.progress(3, None, "unknown total", None);
 
         match rx.try_recv().unwrap() {
-            ProgressEvent::Progress { percentage, total_steps, .. } => {
+            ProgressEvent::Progress {
+                percentage,
+                total_steps,
+                ..
+            } => {
                 assert_eq!(percentage, 0.0);
                 assert_eq!(total_steps, None);
             }
@@ -327,7 +339,12 @@ mod tests {
         reporter.complete(true, "All done");
 
         match rx.try_recv().unwrap() {
-            ProgressEvent::Completed { operation_id, success, message, .. } => {
+            ProgressEvent::Completed {
+                operation_id,
+                success,
+                message,
+                ..
+            } => {
                 assert_eq!(operation_id, "op");
                 assert!(success);
                 assert_eq!(message, "All done");
@@ -345,7 +362,11 @@ mod tests {
         reporter.error("something broke", true);
 
         match rx.try_recv().unwrap() {
-            ProgressEvent::Error { operation_id, error, recoverable } => {
+            ProgressEvent::Error {
+                operation_id,
+                error,
+                recoverable,
+            } => {
                 assert_eq!(operation_id, "op");
                 assert_eq!(error, "something broke");
                 assert!(recoverable);
@@ -363,7 +384,13 @@ mod tests {
         reporter.retry(2, 5, "timeout", 1000);
 
         match rx.try_recv().unwrap() {
-            ProgressEvent::Retry { operation_id, attempt, max_attempts, error, next_retry_ms } => {
+            ProgressEvent::Retry {
+                operation_id,
+                attempt,
+                max_attempts,
+                error,
+                next_retry_ms,
+            } => {
                 assert_eq!(operation_id, "op");
                 assert_eq!(attempt, 2);
                 assert_eq!(max_attempts, 5);
@@ -383,7 +410,11 @@ mod tests {
         reporter.partial_result("prices", serde_json::json!({"AAPL": 150.0}));
 
         match rx.try_recv().unwrap() {
-            ProgressEvent::PartialResult { operation_id, result_type, data } => {
+            ProgressEvent::PartialResult {
+                operation_id,
+                result_type,
+                data,
+            } => {
                 assert_eq!(operation_id, "op");
                 assert_eq!(result_type, "prices");
                 assert!(data.is_object());

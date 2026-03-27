@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use governor::{Quota, RateLimiter as GovernorLimiter, DefaultDirectRateLimiter};
 use anyhow::Result;
+use governor::{DefaultDirectRateLimiter, Quota, RateLimiter as GovernorLimiter};
 use std::num::NonZeroU32;
 use std::time::Duration;
 

@@ -3,12 +3,12 @@
 
 #![allow(dead_code)]
 
+use dashmap::DashMap;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use dashmap::DashMap;
-use parking_lot::RwLock;
 
 /// Overall application health status
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -132,8 +132,10 @@ impl HealthMonitor {
     /// Record a successful request
     pub fn record_request_success(&self, duration_us: u64) {
         self.request_metrics.total.fetch_add(1, Ordering::SeqCst);
-        self.request_metrics.successful.fetch_add(1, Ordering::SeqCst);
-        
+        self.request_metrics
+            .successful
+            .fetch_add(1, Ordering::SeqCst);
+
         let mut times = self.request_metrics.response_times.write();
         if times.len() >= 10000 {
             // Keep last 5000 entries for percentile calculation
@@ -146,7 +148,7 @@ impl HealthMonitor {
     pub fn record_request_failure(&self, duration_us: u64) {
         self.request_metrics.total.fetch_add(1, Ordering::SeqCst);
         self.request_metrics.failed.fetch_add(1, Ordering::SeqCst);
-        
+
         let mut times = self.request_metrics.response_times.write();
         if times.len() >= 10000 {
             times.drain(0..5000);
@@ -156,13 +158,16 @@ impl HealthMonitor {
 
     /// Record provider-specific metrics
     pub fn record_provider_request(&self, provider: &str, success: bool, latency_us: u64) {
-        let metrics = self.provider_metrics
+        let metrics = self
+            .provider_metrics
             .entry(provider.to_string())
             .or_default();
-        
+
         metrics.total.fetch_add(1, Ordering::SeqCst);
-        metrics.total_latency_us.fetch_add(latency_us, Ordering::SeqCst);
-        
+        metrics
+            .total_latency_us
+            .fetch_add(latency_us, Ordering::SeqCst);
+
         if success {
             metrics.successful.fetch_add(1, Ordering::SeqCst);
             *metrics.last_success.write() = Some(Instant::now());
@@ -197,7 +202,8 @@ impl HealthMonitor {
         let uptime = self.start_time.elapsed().as_secs();
 
         // Run all health checks
-        let mut components: Vec<ComponentHealth> = self.health_checks
+        let mut components: Vec<ComponentHealth> = self
+            .health_checks
             .iter()
             .map(|entry| entry.value().check())
             .collect();
@@ -208,7 +214,7 @@ impl HealthMonitor {
             let metrics = entry.value();
             let total = metrics.total.load(Ordering::SeqCst);
             let successful = metrics.successful.load(Ordering::SeqCst);
-            
+
             let success_rate = if total > 0 {
                 successful as f64 / total as f64
             } else {
@@ -239,7 +245,10 @@ impl HealthMonitor {
         // Calculate overall status
         let overall_status = if components.iter().all(|c| c.status == HealthStatus::Healthy) {
             HealthStatus::Healthy
-        } else if components.iter().any(|c| c.status == HealthStatus::Unhealthy) {
+        } else if components
+            .iter()
+            .any(|c| c.status == HealthStatus::Unhealthy)
+        {
             HealthStatus::Unhealthy
         } else {
             HealthStatus::Degraded
@@ -261,53 +270,66 @@ impl HealthMonitor {
     /// Get provider-specific metrics
     pub fn get_provider_metrics(&self) -> Vec<ProviderMetrics> {
         let now = Instant::now();
-        
-        self.provider_metrics.iter().map(|entry| {
-            let name = entry.key().clone();
-            let m = entry.value();
-            let total = m.total.load(Ordering::SeqCst);
-            let successful = m.successful.load(Ordering::SeqCst);
-            let failed = m.failed.load(Ordering::SeqCst);
-            
-            ProviderMetrics {
-                name,
-                total_requests: total,
-                successful_requests: successful,
-                failed_requests: failed,
-                avg_latency_ms: if total > 0 {
-                    m.total_latency_us.load(Ordering::SeqCst) as f64 / total as f64 / 1000.0
-                } else {
-                    0.0
-                },
-                success_rate: if total > 0 {
-                    successful as f64 / total as f64
-                } else {
-                    1.0
-                },
-                last_success: m.last_success.read().map(|t| {
-                    now.duration_since(t).as_secs()
-                }),
-                last_failure: m.last_failure.read().map(|t| {
-                    now.duration_since(t).as_secs()
-                }),
-            }
-        }).collect()
+
+        self.provider_metrics
+            .iter()
+            .map(|entry| {
+                let name = entry.key().clone();
+                let m = entry.value();
+                let total = m.total.load(Ordering::SeqCst);
+                let successful = m.successful.load(Ordering::SeqCst);
+                let failed = m.failed.load(Ordering::SeqCst);
+
+                ProviderMetrics {
+                    name,
+                    total_requests: total,
+                    successful_requests: successful,
+                    failed_requests: failed,
+                    avg_latency_ms: if total > 0 {
+                        m.total_latency_us.load(Ordering::SeqCst) as f64 / total as f64 / 1000.0
+                    } else {
+                        0.0
+                    },
+                    success_rate: if total > 0 {
+                        successful as f64 / total as f64
+                    } else {
+                        1.0
+                    },
+                    last_success: m
+                        .last_success
+                        .read()
+                        .map(|t| now.duration_since(t).as_secs()),
+                    last_failure: m
+                        .last_failure
+                        .read()
+                        .map(|t| now.duration_since(t).as_secs()),
+                }
+            })
+            .collect()
     }
 
     fn calculate_metrics(&self) -> SystemMetrics {
         let times = self.request_metrics.response_times.read();
-        
+
         let (avg, p95, p99) = if !times.is_empty() {
             let mut sorted: Vec<u64> = times.clone();
             sorted.sort_unstable();
-            
+
             let avg = sorted.iter().sum::<u64>() as f64 / sorted.len() as f64 / 1000.0;
             let p95_idx = (sorted.len() as f64 * 0.95) as usize;
             let p99_idx = (sorted.len() as f64 * 0.99) as usize;
-            
-            let p95 = sorted.get(p95_idx.min(sorted.len() - 1)).copied().unwrap_or(0) as f64 / 1000.0;
-            let p99 = sorted.get(p99_idx.min(sorted.len() - 1)).copied().unwrap_or(0) as f64 / 1000.0;
-            
+
+            let p95 = sorted
+                .get(p95_idx.min(sorted.len() - 1))
+                .copied()
+                .unwrap_or(0) as f64
+                / 1000.0;
+            let p99 = sorted
+                .get(p99_idx.min(sorted.len() - 1))
+                .copied()
+                .unwrap_or(0) as f64
+                / 1000.0;
+
             (avg, p95, p99)
         } else {
             (0.0, 0.0, 0.0)
@@ -349,13 +371,13 @@ macro_rules! timed {
         let start = std::time::Instant::now();
         let result = $expr;
         let duration = start.elapsed().as_micros() as u64;
-        
+
         if result.is_ok() {
             $monitor.record_request_success(duration);
         } else {
             $monitor.record_request_failure(duration);
         }
-        
+
         result
     }};
 }
@@ -610,7 +632,9 @@ mod tests {
     fn test_register_health_check() {
         struct AlwaysHealthy;
         impl HealthCheck for AlwaysHealthy {
-            fn name(&self) -> &str { "always_healthy" }
+            fn name(&self) -> &str {
+                "always_healthy"
+            }
             fn check(&self) -> ComponentHealth {
                 ComponentHealth {
                     name: "always_healthy".to_string(),
@@ -634,7 +658,9 @@ mod tests {
     fn test_register_unhealthy_check_makes_overall_unhealthy() {
         struct AlwaysUnhealthy;
         impl HealthCheck for AlwaysUnhealthy {
-            fn name(&self) -> &str { "always_unhealthy" }
+            fn name(&self) -> &str {
+                "always_unhealthy"
+            }
             fn check(&self) -> ComponentHealth {
                 ComponentHealth {
                     name: "always_unhealthy".to_string(),

@@ -2,7 +2,7 @@
 // Extracted from lib.rs
 
 use crate::services::openrouter_service::OpenRouterMessage;
-use crate::{OPENROUTER_SERVICE, LOCAL_AI_SERVICE, get_user_tier};
+use crate::{get_user_tier, LOCAL_AI_SERVICE, OPENROUTER_SERVICE};
 use tauri::{AppHandle, Emitter};
 
 /// Check if AI service is configured (OpenRouter or local model)
@@ -29,7 +29,10 @@ pub async fn ai_chat(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    match OPENROUTER_SERVICE.chat(messages.clone(), model, temperature, max_tokens).await {
+    match OPENROUTER_SERVICE
+        .chat(messages.clone(), model, temperature, max_tokens)
+        .await
+    {
         Ok(r) => Ok(r),
         Err(e) => {
             tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
@@ -40,18 +43,26 @@ pub async fn ai_chat(
 
 /// Generate portfolio insight using AI
 #[tauri::command]
-pub async fn ai_generate_portfolio_insight(portfolio_data: serde_json::Value) -> Result<String, String> {
+pub async fn ai_generate_portfolio_insight(
+    portfolio_data: serde_json::Value,
+) -> Result<String, String> {
     let tier = get_user_tier().await;
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    match OPENROUTER_SERVICE.generate_portfolio_insight(portfolio_data.clone()).await {
+    match OPENROUTER_SERVICE
+        .generate_portfolio_insight(portfolio_data.clone())
+        .await
+    {
         Ok(r) => Ok(r),
         Err(e) => {
             tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
             let msg = crate::services::openrouter_service::OpenRouterMessage {
                 role: "user".to_string(),
-                content: format!("Analyze this portfolio and provide insights:\n{}", serde_json::to_string_pretty(&portfolio_data).unwrap_or_default()),
+                content: format!(
+                    "Analyze this portfolio and provide insights:\n{}",
+                    serde_json::to_string_pretty(&portfolio_data).unwrap_or_default()
+                ),
             };
             LOCAL_AI_SERVICE.chat(vec![msg]).await
         }
@@ -68,7 +79,10 @@ pub async fn ai_chat_assistant(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    match OPENROUTER_SERVICE.chat_with_assistant(message.clone(), history.clone()).await {
+    match OPENROUTER_SERVICE
+        .chat_with_assistant(message.clone(), history.clone())
+        .await
+    {
         Ok(r) => Ok(r),
         Err(e) => {
             tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
@@ -135,7 +149,9 @@ pub async fn ai_chat_stream(
         let text = String::from_utf8_lossy(&chunk);
         for line in text.lines() {
             if let Some(data) = line.strip_prefix("data: ") {
-                if data.trim() == "[DONE]" { continue; }
+                if data.trim() == "[DONE]" {
+                    continue;
+                }
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
                     if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str() {
                         full_response.push_str(content);

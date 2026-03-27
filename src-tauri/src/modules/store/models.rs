@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, NaiveDate};
 
 /// Symbol metadata
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

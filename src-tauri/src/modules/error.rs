@@ -33,10 +33,7 @@ pub enum AppError {
     },
 
     #[error("Database error: {message}")]
-    Database {
-        message: String,
-        operation: String,
-    },
+    Database { message: String, operation: String },
 
     #[error("Network error: {message}")]
     Network {
@@ -52,16 +49,10 @@ pub enum AppError {
     },
 
     #[error("Validation error: {message}")]
-    Validation {
-        message: String,
-        field: String,
-    },
+    Validation { message: String, field: String },
 
     #[error("Configuration error: {message}")]
-    Configuration {
-        message: String,
-        key: String,
-    },
+    Configuration { message: String, key: String },
 
     #[error("Not found: {message}")]
     NotFound {
@@ -102,7 +93,10 @@ impl AppError {
             AppError::DataProvider { recoverable, .. } => *recoverable,
             AppError::RateLimitExceeded { .. } => true,
             AppError::Network { status_code, .. } => {
-                matches!(status_code, Some(429) | Some(500) | Some(502) | Some(503) | Some(504))
+                matches!(
+                    status_code,
+                    Some(429) | Some(500) | Some(502) | Some(503) | Some(504)
+                )
             }
             AppError::Cache { .. } => true,
             _ => false,
@@ -171,7 +165,7 @@ impl From<reqwest::Error> for AppError {
     fn from(err: reqwest::Error) -> Self {
         let url = err.url().map(|u| u.to_string()).unwrap_or_default();
         let status_code = err.status().map(|s| s.as_u16());
-        
+
         AppError::Network {
             message: err.to_string(),
             url,
@@ -425,7 +419,12 @@ mod tests {
     fn test_factory_provider() {
         let err = AppError::provider("finnhub", "connection failed");
         match err {
-            AppError::DataProvider { message, provider, recoverable, retry_after_ms } => {
+            AppError::DataProvider {
+                message,
+                provider,
+                recoverable,
+                retry_after_ms,
+            } => {
                 assert_eq!(message, "connection failed");
                 assert_eq!(provider, "finnhub");
                 assert!(recoverable);
@@ -439,7 +438,11 @@ mod tests {
     fn test_factory_rate_limit() {
         let err = AppError::rate_limit("alpaca", 5000);
         match err {
-            AppError::RateLimitExceeded { message, provider, retry_after_ms } => {
+            AppError::RateLimitExceeded {
+                message,
+                provider,
+                retry_after_ms,
+            } => {
                 assert!(message.contains("alpaca"));
                 assert_eq!(provider, "alpaca");
                 assert_eq!(retry_after_ms, 5000);
@@ -452,7 +455,11 @@ mod tests {
     fn test_factory_network() {
         let err = AppError::network("http://api.example.com", "timeout", Some(504));
         match err {
-            AppError::Network { message, url, status_code } => {
+            AppError::Network {
+                message,
+                url,
+                status_code,
+            } => {
                 assert_eq!(message, "timeout");
                 assert_eq!(url, "http://api.example.com");
                 assert_eq!(status_code, Some(504));
@@ -465,7 +472,11 @@ mod tests {
     fn test_factory_not_found() {
         let err = AppError::not_found("Portfolio", "my-portfolio");
         match err {
-            AppError::NotFound { message, resource_type, resource_id } => {
+            AppError::NotFound {
+                message,
+                resource_type,
+                resource_id,
+            } => {
                 assert!(message.contains("Portfolio"));
                 assert!(message.contains("my-portfolio"));
                 assert_eq!(resource_type, "Portfolio");

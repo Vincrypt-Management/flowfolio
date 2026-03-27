@@ -3,18 +3,17 @@
 
 use crate::modules::{
     portfolio::{
-        PortfolioManager, Portfolio, AllocationPlan, AllocationConstraints,
-        BuyList, RebalanceReport,
-        review::{ReviewGenerator, YearlyReview},
-        PortfolioOptimizer, PortfolioOptimizationReport,
         optimizer::OptimizationThresholds,
+        review::{ReviewGenerator, YearlyReview},
+        AllocationConstraints, AllocationPlan, BuyList, Portfolio, PortfolioManager,
+        PortfolioOptimizationReport, PortfolioOptimizer, RebalanceReport,
     },
-    scoring::SymbolScore,
+    progress::{generate_operation_id, ProgressDetail, ProgressEvent},
     quant_analysis::QuantMetrics,
-    progress::{ProgressEvent, generate_operation_id, ProgressDetail},
+    scoring::SymbolScore,
 };
-use crate::{ENHANCED_MARKET_SERVICE, get_pool, Universe};
-use serde::{Serialize, Deserialize};
+use crate::{get_pool, Universe, ENHANCED_MARKET_SERVICE};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, Emitter};
 
@@ -32,7 +31,10 @@ pub fn create_equal_weight_allocation(
         cash_buffer_pct,
     };
 
-    Ok(PortfolioManager::equal_weight_allocation(symbols, constraints))
+    Ok(PortfolioManager::equal_weight_allocation(
+        symbols,
+        constraints,
+    ))
 }
 
 /// Create score-weighted allocation plan
@@ -87,11 +89,11 @@ pub fn check_portfolio_rebalance(
 
 /// Generate yearly review checklist
 #[tauri::command]
-pub fn generate_yearly_review(
-    portfolio_name: String,
-    year: i32,
-) -> Result<YearlyReview, String> {
-    Ok(ReviewGenerator::generate_yearly_review(&portfolio_name, year))
+pub fn generate_yearly_review(portfolio_name: String, year: i32) -> Result<YearlyReview, String> {
+    Ok(ReviewGenerator::generate_yearly_review(
+        &portfolio_name,
+        year,
+    ))
 }
 
 /// Generate portfolio optimization report with drop/replace recommendations
@@ -146,12 +148,15 @@ pub async fn generate_optimization_report_live(
     let holding_symbols: Vec<String> = holdings.iter().map(|(s, _, _, _)| s.clone()).collect();
     let total_symbols = holding_symbols.len() + candidate_symbols.len();
 
-    let _ = app.emit("optimization_progress", ProgressEvent::Started {
-        operation_id: operation_id.clone(),
-        operation_type: "portfolio_optimization".to_string(),
-        total_steps: Some(total_symbols),
-        message: format!("Starting portfolio optimization for {}", portfolio_name),
-    });
+    let _ = app.emit(
+        "optimization_progress",
+        ProgressEvent::Started {
+            operation_id: operation_id.clone(),
+            operation_type: "portfolio_optimization".to_string(),
+            total_steps: Some(total_symbols),
+            message: format!("Starting portfolio optimization for {}", portfolio_name),
+        },
+    );
 
     let mut holding_metrics: HashMap<String, QuantMetrics> = HashMap::new();
     let mut current_step = 0;
@@ -159,19 +164,22 @@ pub async fn generate_optimization_report_live(
     for (idx, symbol) in holding_symbols.iter().enumerate() {
         current_step = idx + 1;
 
-        let _ = app.emit("optimization_progress", ProgressEvent::Progress {
-            operation_id: operation_id.clone(),
-            current_step,
-            total_steps: Some(total_symbols),
-            percentage: (current_step as f64 / total_symbols as f64) * 100.0,
-            message: format!("Analyzing holding: {}", symbol),
-            detail: Some(ProgressDetail {
-                symbol: Some(symbol.clone()),
-                provider: None,
-                metric: Some("quant_metrics".to_string()),
-                value: None,
-            }),
-        });
+        let _ = app.emit(
+            "optimization_progress",
+            ProgressEvent::Progress {
+                operation_id: operation_id.clone(),
+                current_step,
+                total_steps: Some(total_symbols),
+                percentage: (current_step as f64 / total_symbols as f64) * 100.0,
+                message: format!("Analyzing holding: {}", symbol),
+                detail: Some(ProgressDetail {
+                    symbol: Some(symbol.clone()),
+                    provider: None,
+                    metric: Some("quant_metrics".to_string()),
+                    value: None,
+                }),
+            },
+        );
 
         let mut attempts = 0;
         let max_attempts = 3;
@@ -180,38 +188,50 @@ pub async fn generate_optimization_report_live(
             attempts += 1;
             match ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
                 Ok(metrics) => {
-                    let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
-                        operation_id: operation_id.clone(),
-                        result_type: "holding_metrics".to_string(),
-                        data: serde_json::json!({
-                            "symbol": symbol,
-                            "sharpe_ratio": metrics.sharpe_ratio,
-                            "annualized_return": metrics.annualized_return,
-                            "volatility": metrics.volatility,
-                            "signal": metrics.signal,
-                        }),
-                    });
+                    let _ = app.emit(
+                        "optimization_progress",
+                        ProgressEvent::PartialResult {
+                            operation_id: operation_id.clone(),
+                            result_type: "holding_metrics".to_string(),
+                            data: serde_json::json!({
+                                "symbol": symbol,
+                                "sharpe_ratio": metrics.sharpe_ratio,
+                                "annualized_return": metrics.annualized_return,
+                                "volatility": metrics.volatility,
+                                "signal": metrics.signal,
+                            }),
+                        },
+                    );
 
                     holding_metrics.insert(symbol.clone(), metrics);
                     break;
                 }
                 Err(e) => {
                     if attempts < max_attempts {
-                        let _ = app.emit("optimization_progress", ProgressEvent::Retry {
-                            operation_id: operation_id.clone(),
-                            attempt: attempts,
-                            max_attempts,
-                            error: e.clone(),
-                            next_retry_ms: (attempts as u64) * 500,
-                        });
+                        let _ = app.emit(
+                            "optimization_progress",
+                            ProgressEvent::Retry {
+                                operation_id: operation_id.clone(),
+                                attempt: attempts,
+                                max_attempts,
+                                error: e.clone(),
+                                next_retry_ms: (attempts as u64) * 500,
+                            },
+                        );
 
-                        tokio::time::sleep(tokio::time::Duration::from_millis((attempts as u64) * 500)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(
+                            (attempts as u64) * 500,
+                        ))
+                        .await;
                     } else {
-                        let _ = app.emit("optimization_progress", ProgressEvent::Error {
-                            operation_id: operation_id.clone(),
-                            error: format!("Failed to get metrics for {}: {}", symbol, e),
-                            recoverable: true,
-                        });
+                        let _ = app.emit(
+                            "optimization_progress",
+                            ProgressEvent::Error {
+                                operation_id: operation_id.clone(),
+                                error: format!("Failed to get metrics for {}: {}", symbol, e),
+                                recoverable: true,
+                            },
+                        );
                         break;
                     }
                 }
@@ -228,19 +248,22 @@ pub async fn generate_optimization_report_live(
 
         current_step += 1;
 
-        let _ = app.emit("optimization_progress", ProgressEvent::Progress {
-            operation_id: operation_id.clone(),
-            current_step,
-            total_steps: Some(total_symbols),
-            percentage: (current_step as f64 / total_symbols as f64) * 100.0,
-            message: format!("Evaluating replacement candidate: {}", symbol),
-            detail: Some(ProgressDetail {
-                symbol: Some(symbol.clone()),
-                provider: None,
-                metric: Some("candidate_analysis".to_string()),
-                value: None,
-            }),
-        });
+        let _ = app.emit(
+            "optimization_progress",
+            ProgressEvent::Progress {
+                operation_id: operation_id.clone(),
+                current_step,
+                total_steps: Some(total_symbols),
+                percentage: (current_step as f64 / total_symbols as f64) * 100.0,
+                message: format!("Evaluating replacement candidate: {}", symbol),
+                detail: Some(ProgressDetail {
+                    symbol: Some(symbol.clone()),
+                    provider: None,
+                    metric: Some("candidate_analysis".to_string()),
+                    value: None,
+                }),
+            },
+        );
 
         let mut attempts = 0;
         let max_attempts = 3;
@@ -249,39 +272,51 @@ pub async fn generate_optimization_report_live(
             attempts += 1;
             match ENHANCED_MARKET_SERVICE.get_quant_metrics(symbol).await {
                 Ok(metrics) => {
-                    let _ = app.emit("optimization_progress", ProgressEvent::PartialResult {
-                        operation_id: operation_id.clone(),
-                        result_type: "candidate_metrics".to_string(),
-                        data: serde_json::json!({
-                            "symbol": symbol,
-                            "sharpe_ratio": metrics.sharpe_ratio,
-                            "annualized_return": metrics.annualized_return,
-                            "volatility": metrics.volatility,
-                            "signal": metrics.signal,
-                            "score": calculate_quick_score(&metrics),
-                        }),
-                    });
+                    let _ = app.emit(
+                        "optimization_progress",
+                        ProgressEvent::PartialResult {
+                            operation_id: operation_id.clone(),
+                            result_type: "candidate_metrics".to_string(),
+                            data: serde_json::json!({
+                                "symbol": symbol,
+                                "sharpe_ratio": metrics.sharpe_ratio,
+                                "annualized_return": metrics.annualized_return,
+                                "volatility": metrics.volatility,
+                                "signal": metrics.signal,
+                                "score": calculate_quick_score(&metrics),
+                            }),
+                        },
+                    );
 
                     candidate_metrics.insert(symbol.clone(), metrics);
                     break;
                 }
                 Err(e) => {
                     if attempts < max_attempts {
-                        let _ = app.emit("optimization_progress", ProgressEvent::Retry {
-                            operation_id: operation_id.clone(),
-                            attempt: attempts,
-                            max_attempts,
-                            error: e.clone(),
-                            next_retry_ms: (attempts as u64) * 500,
-                        });
+                        let _ = app.emit(
+                            "optimization_progress",
+                            ProgressEvent::Retry {
+                                operation_id: operation_id.clone(),
+                                attempt: attempts,
+                                max_attempts,
+                                error: e.clone(),
+                                next_retry_ms: (attempts as u64) * 500,
+                            },
+                        );
 
-                        tokio::time::sleep(tokio::time::Duration::from_millis((attempts as u64) * 500)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(
+                            (attempts as u64) * 500,
+                        ))
+                        .await;
                     } else {
-                        let _ = app.emit("optimization_progress", ProgressEvent::Error {
-                            operation_id: operation_id.clone(),
-                            error: format!("Failed to analyze candidate {}: {}", symbol, e),
-                            recoverable: true,
-                        });
+                        let _ = app.emit(
+                            "optimization_progress",
+                            ProgressEvent::Error {
+                                operation_id: operation_id.clone(),
+                                error: format!("Failed to analyze candidate {}: {}", symbol, e),
+                                recoverable: true,
+                            },
+                        );
                         break;
                     }
                 }
@@ -289,14 +324,17 @@ pub async fn generate_optimization_report_live(
         }
     }
 
-    let _ = app.emit("optimization_progress", ProgressEvent::Progress {
-        operation_id: operation_id.clone(),
-        current_step: total_symbols,
-        total_steps: Some(total_symbols),
-        percentage: 100.0,
-        message: "Generating optimization recommendations...".to_string(),
-        detail: None,
-    });
+    let _ = app.emit(
+        "optimization_progress",
+        ProgressEvent::Progress {
+            operation_id: operation_id.clone(),
+            current_step: total_symbols,
+            total_steps: Some(total_symbols),
+            percentage: 100.0,
+            message: "Generating optimization recommendations...".to_string(),
+            detail: None,
+        },
+    );
 
     let thresholds = thresholds.unwrap_or_default();
     let report = PortfolioOptimizer::generate_optimization_report(
@@ -307,16 +345,19 @@ pub async fn generate_optimization_report_live(
         thresholds,
     );
 
-    let _ = app.emit("optimization_progress", ProgressEvent::Completed {
-        operation_id: operation_id.clone(),
-        success: true,
-        message: format!(
-            "Optimization complete: {} drops recommended, {} replacements found",
-            report.drop_recommendations.len(),
-            report.replacement_options.len()
-        ),
-        duration_ms: 0,
-    });
+    let _ = app.emit(
+        "optimization_progress",
+        ProgressEvent::Completed {
+            operation_id: operation_id.clone(),
+            success: true,
+            message: format!(
+                "Optimization complete: {} drops recommended, {} replacements found",
+                report.drop_recommendations.len(),
+                report.replacement_options.len()
+            ),
+            duration_ms: 0,
+        },
+    );
 
     Ok(report)
 }
@@ -350,16 +391,22 @@ pub(crate) struct SavedPortfolioInfo {
 
 /// Save a generated portfolio to the database
 #[tauri::command]
-pub async fn save_generated_portfolio(id: String, name: String, data: serde_json::Value) -> Result<String, String> {
+pub async fn save_generated_portfolio(
+    id: String,
+    name: String,
+    data: serde_json::Value,
+) -> Result<String, String> {
     if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
         let now = chrono::Utc::now().to_rfc3339();
         let data_str = serde_json::to_string(&data)
             .map_err(|e| format!("Failed to serialize portfolio: {}", e))?;
 
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             INSERT OR REPLACE INTO saved_portfolios (id, name, data, created_at, updated_at)
             VALUES (?, ?, ?, COALESCE((SELECT created_at FROM saved_portfolios WHERE id = ?), ?), ?)
-        "#)
+        "#,
+        )
         .bind(&id)
         .bind(&name)
         .bind(&data_str)
@@ -381,9 +428,11 @@ pub async fn save_generated_portfolio(id: String, name: String, data: serde_json
 #[tauri::command]
 pub async fn load_generated_portfolio(id: String) -> Result<serde_json::Value, String> {
     if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
-        let row: Option<(String,)> = sqlx::query_as(r#"
+        let row: Option<(String,)> = sqlx::query_as(
+            r#"
             SELECT data FROM saved_portfolios WHERE id = ?
-        "#)
+        "#,
+        )
         .bind(&id)
         .fetch_optional(&pool)
         .await
@@ -404,16 +453,24 @@ pub async fn load_generated_portfolio(id: String) -> Result<serde_json::Value, S
 #[tauri::command]
 pub async fn list_saved_portfolios() -> Result<Vec<SavedPortfolioInfo>, String> {
     if let Some(pool) = ENHANCED_MARKET_SERVICE.get_db_pool().await {
-        let rows: Vec<(String, String, String, String)> = sqlx::query_as(r#"
+        let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+            r#"
             SELECT id, name, created_at, updated_at FROM saved_portfolios ORDER BY updated_at DESC
-        "#)
+        "#,
+        )
         .fetch_all(&pool)
         .await
         .map_err(|e| format!("Failed to list portfolios: {}", e))?;
 
-        Ok(rows.into_iter().map(|(id, name, created_at, updated_at)| {
-            SavedPortfolioInfo { id, name, created_at, updated_at }
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, created_at, updated_at)| SavedPortfolioInfo {
+                id,
+                name,
+                created_at,
+                updated_at,
+            })
+            .collect())
     } else {
         Err("Database not initialized".to_string())
     }
@@ -440,7 +497,10 @@ pub async fn delete_saved_portfolio(id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn save_portfolio_snapshot(
-    portfolio_name: String, total_value: f64, cash: f64, holdings_json: String,
+    portfolio_name: String,
+    total_value: f64,
+    cash: f64,
+    holdings_json: String,
 ) -> Result<(), String> {
     let pool = get_pool().await?;
     let id = uuid::Uuid::new_v4().to_string();
@@ -456,7 +516,8 @@ pub async fn save_portfolio_snapshot(
 
 #[tauri::command]
 pub async fn get_portfolio_snapshots(
-    portfolio_name: String, days: Option<i32>,
+    portfolio_name: String,
+    days: Option<i32>,
 ) -> Result<Vec<serde_json::Value>, String> {
     let pool = get_pool().await?;
     let days = days.unwrap_or(365);
@@ -466,17 +527,26 @@ pub async fn get_portfolio_snapshots(
     .bind(&portfolio_name).bind(days)
     .fetch_all(&pool).await.map_err(|e| e.to_string())?;
 
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "portfolio_name": r.0, "total_value": r.1, "cash": r.2,
-        "holdings_json": r.3, "snapshot_date": r.4
-    })).collect())
+    Ok(rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "portfolio_name": r.0, "total_value": r.1, "cash": r.2,
+                "holdings_json": r.3, "snapshot_date": r.4
+            })
+        })
+        .collect())
 }
 
 // ==================== UNIVERSE & WATCHLIST ====================
 
 /// Create a new universe/watchlist
 #[tauri::command]
-pub async fn create_universe(name: String, description: String, symbols: Vec<String>) -> Result<Universe, String> {
+pub async fn create_universe(
+    name: String,
+    description: String,
+    symbols: Vec<String>,
+) -> Result<Universe, String> {
     let pool = get_pool().await?;
     let now = chrono::Utc::now().to_rfc3339();
     let id = uuid::Uuid::new_v4().to_string();
@@ -514,33 +584,35 @@ pub async fn list_universes() -> Result<Vec<Universe>, String> {
     let pool = get_pool().await?;
     let rows = sqlx::query(
         "SELECT id, name, description, symbols, tags, exclude_list, created_at, updated_at
-         FROM universes ORDER BY created_at DESC"
+         FROM universes ORDER BY created_at DESC",
     )
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("Failed to list universes: {}", e))?;
 
-    let universes = rows.iter().map(|row| {
-        use sqlx::Row;
-        let symbols_json: String = row.get("symbols");
-        let tags_json: String = row.get("tags");
-        let exclude_json: String = row.get("exclude_list");
-        let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
-        let tags: HashMap<String, Vec<String>> =
-            serde_json::from_str(&tags_json).unwrap_or_default();
-        let exclude_list: Vec<String> =
-            serde_json::from_str(&exclude_json).unwrap_or_default();
-        Universe {
-            id: row.get("id"),
-            name: row.get("name"),
-            description: row.get("description"),
-            symbols,
-            tags,
-            exclude_list,
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        }
-    }).collect();
+    let universes = rows
+        .iter()
+        .map(|row| {
+            use sqlx::Row;
+            let symbols_json: String = row.get("symbols");
+            let tags_json: String = row.get("tags");
+            let exclude_json: String = row.get("exclude_list");
+            let symbols: Vec<String> = serde_json::from_str(&symbols_json).unwrap_or_default();
+            let tags: HashMap<String, Vec<String>> =
+                serde_json::from_str(&tags_json).unwrap_or_default();
+            let exclude_list: Vec<String> = serde_json::from_str(&exclude_json).unwrap_or_default();
+            Universe {
+                id: row.get("id"),
+                name: row.get("name"),
+                description: row.get("description"),
+                symbols,
+                tags,
+                exclude_list,
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            }
+        })
+        .collect();
     Ok(universes)
 }
 
@@ -550,7 +622,7 @@ pub async fn get_universe(id: String) -> Result<Option<Universe>, String> {
     let pool = get_pool().await?;
     let row = sqlx::query(
         "SELECT id, name, description, symbols, tags, exclude_list, created_at, updated_at
-         FROM universes WHERE id = ?"
+         FROM universes WHERE id = ?",
     )
     .bind(&id)
     .fetch_optional(&pool)
@@ -559,7 +631,8 @@ pub async fn get_universe(id: String) -> Result<Option<Universe>, String> {
 
     Ok(row.map(|row| {
         use sqlx::Row;
-        let symbols: Vec<String> = serde_json::from_str(row.get::<&str, _>("symbols")).unwrap_or_default();
+        let symbols: Vec<String> =
+            serde_json::from_str(row.get::<&str, _>("symbols")).unwrap_or_default();
         let tags: HashMap<String, Vec<String>> =
             serde_json::from_str(row.get::<&str, _>("tags")).unwrap_or_default();
         let exclude_list: Vec<String> =
@@ -584,21 +657,21 @@ pub async fn update_universe_symbols(id: String, symbols: Vec<String>) -> Result
     let now = chrono::Utc::now().to_rfc3339();
     let symbols_json = serde_json::to_string(&symbols).map_err(|e| e.to_string())?;
 
-    let result = sqlx::query(
-        "UPDATE universes SET symbols = ?, updated_at = ? WHERE id = ?"
-    )
-    .bind(&symbols_json)
-    .bind(&now)
-    .bind(&id)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to update universe symbols: {}", e))?;
+    let result = sqlx::query("UPDATE universes SET symbols = ?, updated_at = ? WHERE id = ?")
+        .bind(&symbols_json)
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to update universe symbols: {}", e))?;
 
     if result.rows_affected() == 0 {
         return Err(format!("Universe '{}' not found", id));
     }
 
-    get_universe(id).await?.ok_or_else(|| "Universe disappeared after update".to_string())
+    get_universe(id)
+        .await?
+        .ok_or_else(|| "Universe disappeared after update".to_string())
 }
 
 /// Add symbols to universe exclude list
@@ -607,14 +680,12 @@ pub async fn add_to_exclude_list(id: String, symbols: Vec<String>) -> Result<Uni
     let pool = get_pool().await?;
     let now = chrono::Utc::now().to_rfc3339();
 
-    let row = sqlx::query(
-        "SELECT exclude_list FROM universes WHERE id = ?"
-    )
-    .bind(&id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| format!("Failed to fetch universe: {}", e))?
-    .ok_or_else(|| format!("Universe '{}' not found", id))?;
+    let row = sqlx::query("SELECT exclude_list FROM universes WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| format!("Failed to fetch universe: {}", e))?
+        .ok_or_else(|| format!("Universe '{}' not found", id))?;
 
     use sqlx::Row;
     let exclude_json: String = row.get("exclude_list");
@@ -628,17 +699,17 @@ pub async fn add_to_exclude_list(id: String, symbols: Vec<String>) -> Result<Uni
 
     let new_exclude_json = serde_json::to_string(&exclude_list).map_err(|e| e.to_string())?;
 
-    sqlx::query(
-        "UPDATE universes SET exclude_list = ?, updated_at = ? WHERE id = ?"
-    )
-    .bind(&new_exclude_json)
-    .bind(&now)
-    .bind(&id)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to update exclude list: {}", e))?;
+    sqlx::query("UPDATE universes SET exclude_list = ?, updated_at = ? WHERE id = ?")
+        .bind(&new_exclude_json)
+        .bind(&now)
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to update exclude list: {}", e))?;
 
-    get_universe(id).await?.ok_or_else(|| "Universe disappeared after update".to_string())
+    get_universe(id)
+        .await?
+        .ok_or_else(|| "Universe disappeared after update".to_string())
 }
 
 /// Delete a universe
@@ -658,9 +729,16 @@ pub async fn delete_universe(id: String) -> Result<(), String> {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn record_transaction(
-    id: String, portfolio_name: String, symbol: String,
-    action: String, shares: f64, price: f64, total: f64,
-    fees: f64, notes: Option<String>, executed_at: String,
+    id: String,
+    portfolio_name: String,
+    symbol: String,
+    action: String,
+    shares: f64,
+    price: f64,
+    total: f64,
+    fees: f64,
+    notes: Option<String>,
+    executed_at: String,
 ) -> Result<(), String> {
     let pool = get_pool().await?;
     sqlx::query(
@@ -682,25 +760,36 @@ pub async fn list_transactions(portfolio_name: String) -> Result<Vec<serde_json:
     .bind(&portfolio_name)
     .fetch_all(&pool).await.map_err(|e| e.to_string())?;
 
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "id": r.0, "portfolio_name": r.1, "symbol": r.2, "action": r.3,
-        "shares": r.4, "price": r.5, "total": r.6, "fees": r.7,
-        "notes": r.8, "executed_at": r.9, "created_at": r.10
-    })).collect())
+    Ok(rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.0, "portfolio_name": r.1, "symbol": r.2, "action": r.3,
+                "shares": r.4, "price": r.5, "total": r.6, "fees": r.7,
+                "notes": r.8, "executed_at": r.9, "created_at": r.10
+            })
+        })
+        .collect())
 }
 
 #[tauri::command]
 pub async fn delete_transaction(id: String) -> Result<(), String> {
     let pool = get_pool().await?;
     sqlx::query("DELETE FROM transactions WHERE id = ?")
-        .bind(&id).execute(&pool).await.map_err(|e| e.to_string())?;
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 // ==================== REBALANCE TRANSACTIONS ====================
 
 #[tauri::command]
-pub async fn record_rebalance(portfolio_name: String, report_json: String) -> Result<String, String> {
+pub async fn record_rebalance(
+    portfolio_name: String,
+    report_json: String,
+) -> Result<String, String> {
     let pool = get_pool().await?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -720,7 +809,9 @@ pub async fn record_rebalance(portfolio_name: String, report_json: String) -> Re
 }
 
 #[tauri::command]
-pub async fn list_rebalance_history(portfolio_name: String) -> Result<Vec<serde_json::Value>, String> {
+pub async fn list_rebalance_history(
+    portfolio_name: String,
+) -> Result<Vec<serde_json::Value>, String> {
     let pool = get_pool().await?;
     let rows = sqlx::query(
         "SELECT id, executed_at, allocations FROM rebalance_transactions WHERE plan_name = ? ORDER BY executed_at DESC LIMIT 20"

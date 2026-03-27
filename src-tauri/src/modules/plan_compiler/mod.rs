@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 /// VibePlan structure - the core investing plan
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,7 +164,11 @@ impl PlanCompiler {
             universe: UniverseDefinition {
                 exchanges: vec!["NYSE".to_string(), "TSX".to_string()],
                 regions: vec!["US".to_string(), "CA".to_string()],
-                sectors: vec!["Utilities".to_string(), "Consumer Staples".to_string(), "Financials".to_string()],
+                sectors: vec![
+                    "Utilities".to_string(),
+                    "Consumer Staples".to_string(),
+                    "Financials".to_string(),
+                ],
                 exclude_list: vec![],
             },
             filters: vec![
@@ -223,7 +227,10 @@ impl PlanCompiler {
             universe: UniverseDefinition {
                 exchanges: vec!["NYSE".to_string(), "NASDAQ".to_string()],
                 regions: vec!["US".to_string()],
-                sectors: vec!["Technology".to_string(), "Communication Services".to_string()],
+                sectors: vec![
+                    "Technology".to_string(),
+                    "Communication Services".to_string(),
+                ],
                 exclude_list: vec![],
             },
             filters: vec![
@@ -341,7 +348,11 @@ impl PlanCompiler {
             universe: UniverseDefinition {
                 exchanges: vec!["NYSE".to_string(), "NASDAQ".to_string()],
                 regions: vec!["US".to_string()],
-                sectors: vec!["Technology".to_string(), "Healthcare".to_string(), "Consumer Discretionary".to_string()],
+                sectors: vec![
+                    "Technology".to_string(),
+                    "Healthcare".to_string(),
+                    "Consumer Discretionary".to_string(),
+                ],
                 exclude_list: vec![],
             },
             filters: vec![
@@ -398,8 +409,18 @@ impl PlanCompiler {
         VibePlanScript {
             name: "Global Diversified".to_string(),
             universe: UniverseDefinition {
-                exchanges: vec!["NYSE".to_string(), "NASDAQ".to_string(), "LSE".to_string(), "TSX".to_string()],
-                regions: vec!["US".to_string(), "UK".to_string(), "CA".to_string(), "EU".to_string()],
+                exchanges: vec![
+                    "NYSE".to_string(),
+                    "NASDAQ".to_string(),
+                    "LSE".to_string(),
+                    "TSX".to_string(),
+                ],
+                regions: vec![
+                    "US".to_string(),
+                    "UK".to_string(),
+                    "CA".to_string(),
+                    "EU".to_string(),
+                ],
                 sectors: vec![],
                 exclude_list: vec![],
             },
@@ -436,7 +457,9 @@ impl PlanCompiler {
             portfolio: PortfolioConfig {
                 allocation_method: "equal_weight".to_string(),
                 max_position_pct: 5.0,
-                sector_caps: Some(serde_json::json!({"max_sector_pct": 25.0, "max_region_pct": 50.0})),
+                sector_caps: Some(
+                    serde_json::json!({"max_sector_pct": 25.0, "max_region_pct": 50.0}),
+                ),
                 cash_buffer_pct: 10.0,
             },
             cadence: CadencePolicy {
@@ -463,7 +486,7 @@ impl PlanCompiler {
         if plan.portfolio.max_position_pct <= 0.0 || plan.portfolio.max_position_pct > 100.0 {
             anyhow::bail!("Invalid max_position_pct: must be between 0 and 100");
         }
-        
+
         let total_weight: f64 = plan.ranking.factors.iter().map(|f| f.weight).sum();
         if (total_weight - 1.0).abs() > 0.01 {
             anyhow::bail!("Factor weights must sum to 1.0");
@@ -497,7 +520,11 @@ mod tests {
             "Global Diversified",
         ];
         for name in &expected {
-            assert!(templates.contains(&name.to_string()), "Missing template: {}", name);
+            assert!(
+                templates.contains(&name.to_string()),
+                "Missing template: {}",
+                name
+            );
         }
     }
 
@@ -611,8 +638,14 @@ mod tests {
         let mut plan = PlanCompiler::default_template();
         // Overwrite factors to exactly 3 items summing to 1.0
         plan.ranking.factors = vec![
-            FactorWeight { name: "quality".to_string(), weight: 0.5 },
-            FactorWeight { name: "value".to_string(), weight: 0.5 },
+            FactorWeight {
+                name: "quality".to_string(),
+                weight: 0.5,
+            },
+            FactorWeight {
+                name: "value".to_string(),
+                weight: 0.5,
+            },
         ];
         assert!(PlanCompiler::validate(&plan).is_ok());
     }

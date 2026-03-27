@@ -1,13 +1,13 @@
 // API Commands - Settings, Vault, Alerts, Schedules, Export/Import
 // Extracted from lib.rs
 
-use crate::{
-    VAULT_UNLOCKED, STRONGHOLD_VAULT, API_KEYS_STORE, API_KEY_NAMES,
-    get_pool, PriceAlert, RebalanceSchedule, ExportBundle,
-};
-use crate::modules::plan_compiler::VibePlanScript;
-use crate::modules::journal::JournalEntry;
 use crate::api::commands::portfolio::{create_universe, list_universes};
+use crate::modules::journal::JournalEntry;
+use crate::modules::plan_compiler::VibePlanScript;
+use crate::{
+    get_pool, ExportBundle, PriceAlert, RebalanceSchedule, API_KEYS_STORE, API_KEY_NAMES,
+    STRONGHOLD_VAULT, VAULT_UNLOCKED,
+};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use tauri::Manager;
@@ -19,15 +19,15 @@ use tauri_plugin_store::StoreExt;
 /// that data providers use when calling get_api_key(). These must stay in sync
 /// with API_KEY_NAMES in lib.rs and the key objects in SettingsPage.tsx.
 const STORE_TO_ENV_KEY: &[(&str, &str)] = &[
-    ("alpaca_key",        "ALPACA_API_KEY"),
-    ("alpaca_secret",     "ALPACA_SECRET_KEY"),
-    ("finnhub_key",       "FINNHUB_API_KEY"),
-    ("fmp_key",           "FMP_API_KEY"),
-    ("tiingo_key",        "TIINGO_API_KEY"),
-    ("twelve_data_key",   "TWELVE_DATA_API_KEY"),
-    ("polygon_key",       "POLYGON_API_KEY"),
+    ("alpaca_key", "ALPACA_API_KEY"),
+    ("alpaca_secret", "ALPACA_SECRET_KEY"),
+    ("finnhub_key", "FINNHUB_API_KEY"),
+    ("fmp_key", "FMP_API_KEY"),
+    ("tiingo_key", "TIINGO_API_KEY"),
+    ("twelve_data_key", "TWELVE_DATA_API_KEY"),
+    ("polygon_key", "POLYGON_API_KEY"),
     ("alpha_vantage_key", "ALPHA_VANTAGE_API_KEY"),
-    ("openrouter_key",    "OPENROUTER_API_KEY"),
+    ("openrouter_key", "OPENROUTER_API_KEY"),
 ];
 
 /// Write API keys from the store into RUNTIME_KEYS so data providers can use them.
@@ -43,7 +43,10 @@ pub(crate) fn populate_runtime_keys(keys: HashMap<String, String>) {
         if let Some(&(_, env_key)) = STORE_TO_ENV_KEY.iter().find(|&&(sk, _)| sk == store_key) {
             guard.insert(env_key.to_string(), value);
         } else {
-            tracing::warn!("populate_runtime_keys: no env-var mapping for store key '{}'", store_key);
+            tracing::warn!(
+                "populate_runtime_keys: no env-var mapping for store key '{}'",
+                store_key
+            );
         }
     }
 }
@@ -117,7 +120,10 @@ pub async fn vault_is_unlocked() -> bool {
 #[tauri::command]
 pub async fn vault_get_path(app: tauri::AppHandle) -> Result<String, String> {
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(data_dir.join(STRONGHOLD_VAULT).to_string_lossy().into_owned())
+    Ok(data_dir
+        .join(STRONGHOLD_VAULT)
+        .to_string_lossy()
+        .into_owned())
 }
 
 /// Mark vault as unlocked (called from JS after successful Stronghold.load).
@@ -204,21 +210,24 @@ pub async fn list_alerts() -> Result<Vec<PriceAlert>, String> {
     .await
     .map_err(|e| format!("Failed to list alerts: {}", e))?;
 
-    let alerts = rows.iter().map(|row| {
-        use sqlx::Row;
-        PriceAlert {
-            id: row.get("id"),
-            symbol: row.get("symbol"),
-            condition: row.get("condition"),
-            threshold: row.get("threshold"),
-            reference_price: row.get("reference_price"),
-            active: row.get::<i64, _>("active") != 0,
-            triggered: row.get::<i64, _>("triggered") != 0,
-            triggered_at: row.get("triggered_at"),
-            created_at: row.get("created_at"),
-            note: row.get("note"),
-        }
-    }).collect();
+    let alerts = rows
+        .iter()
+        .map(|row| {
+            use sqlx::Row;
+            PriceAlert {
+                id: row.get("id"),
+                symbol: row.get("symbol"),
+                condition: row.get("condition"),
+                threshold: row.get("threshold"),
+                reference_price: row.get("reference_price"),
+                active: row.get::<i64, _>("active") != 0,
+                triggered: row.get::<i64, _>("triggered") != 0,
+                triggered_at: row.get("triggered_at"),
+                created_at: row.get("created_at"),
+                note: row.get("note"),
+            }
+        })
+        .collect();
 
     Ok(alerts)
 }
@@ -228,7 +237,7 @@ pub async fn update_alert(alert: PriceAlert) -> Result<(), String> {
     let pool = get_pool().await?;
     sqlx::query(
         "UPDATE price_alerts SET symbol=?, condition=?, threshold=?, reference_price=?,
-         active=?, triggered=?, triggered_at=?, note=? WHERE id=?"
+         active=?, triggered=?, triggered_at=?, note=? WHERE id=?",
     )
     .bind(&alert.symbol)
     .bind(&alert.condition)
@@ -292,20 +301,23 @@ pub async fn list_schedules() -> Result<Vec<RebalanceSchedule>, String> {
     .await
     .map_err(|e| format!("Failed to list schedules: {}", e))?;
 
-    let schedules = rows.iter().map(|row| {
-        use sqlx::Row;
-        RebalanceSchedule {
-            id: row.get("id"),
-            plan_name: row.get("plan_name"),
-            frequency: row.get("cadence"),
-            day_of_week: row.get("day_of_week"),
-            day_of_month: row.get("day_of_month"),
-            next_run: row.get("next_run"),
-            last_run: row.get("last_run"),
-            enabled: row.get::<i64, _>("enabled") != 0,
-            created_at: row.get("created_at"),
-        }
-    }).collect();
+    let schedules = rows
+        .iter()
+        .map(|row| {
+            use sqlx::Row;
+            RebalanceSchedule {
+                id: row.get("id"),
+                plan_name: row.get("plan_name"),
+                frequency: row.get("cadence"),
+                day_of_week: row.get("day_of_week"),
+                day_of_month: row.get("day_of_month"),
+                next_run: row.get("next_run"),
+                last_run: row.get("last_run"),
+                enabled: row.get::<i64, _>("enabled") != 0,
+                created_at: row.get("created_at"),
+            }
+        })
+        .collect();
 
     Ok(schedules)
 }
@@ -327,15 +339,13 @@ pub async fn delete_schedule(id: String) -> Result<(), String> {
 pub async fn save_setting(key: String, value: String) -> Result<(), String> {
     let pool = get_pool().await?;
     let now = chrono::Utc::now().to_rfc3339();
-    sqlx::query(
-        "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)"
-    )
-    .bind(&key)
-    .bind(&value)
-    .bind(&now)
-    .execute(&pool)
-    .await
-    .map_err(|e| format!("Failed to save setting: {}", e))?;
+    sqlx::query("INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)")
+        .bind(&key)
+        .bind(&value)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to save setting: {}", e))?;
     Ok(())
 }
 
@@ -371,15 +381,14 @@ pub async fn export_data_bundle(
         settings: HashMap::new(),
     };
 
-    serde_json::to_string_pretty(&bundle)
-        .map_err(|e| format!("Failed to serialize bundle: {}", e))
+    serde_json::to_string_pretty(&bundle).map_err(|e| format!("Failed to serialize bundle: {}", e))
 }
 
 /// Import data from JSON bundle
 #[tauri::command]
 pub async fn import_data_bundle(bundle_json: String) -> Result<serde_json::Value, String> {
-    let bundle: ExportBundle = serde_json::from_str(&bundle_json)
-        .map_err(|e| format!("Failed to parse bundle: {}", e))?;
+    let bundle: ExportBundle =
+        serde_json::from_str(&bundle_json).map_err(|e| format!("Failed to parse bundle: {}", e))?;
 
     let universe_count = bundle.universes.len();
     let journal_count = bundle.journal_entries.len();
@@ -412,7 +421,10 @@ mod populate_keys_tests {
         keys.insert("finnhub_key".to_string(), "test_key_abc".to_string());
         populate_runtime_keys(keys);
         let guard = RUNTIME_KEYS.read();
-        assert_eq!(guard.get("FINNHUB_API_KEY"), Some(&"test_key_abc".to_string()));
+        assert_eq!(
+            guard.get("FINNHUB_API_KEY"),
+            Some(&"test_key_abc".to_string())
+        );
         // Cleanup
         drop(guard);
         RUNTIME_KEYS.write().remove("FINNHUB_API_KEY");

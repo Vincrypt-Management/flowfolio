@@ -2,7 +2,7 @@
 
 use super::models::*;
 use anyhow::Result;
-use sqlx::{SqlitePool, Row};
+use sqlx::{Row, SqlitePool};
 
 /// Repository for database operations
 pub struct Repository {
@@ -15,9 +15,14 @@ impl Repository {
     }
 
     // Symbol operations
-    pub async fn create_symbol(&self, symbol: &str, exchange: Option<&str>, name: Option<&str>) -> Result<i64> {
+    pub async fn create_symbol(
+        &self,
+        symbol: &str,
+        exchange: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<i64> {
         let result = sqlx::query(
-            "INSERT INTO symbols (ticker, exchange, name, currency, status) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO symbols (ticker, exchange, name, currency, status) VALUES (?, ?, ?, ?, ?)",
         )
         .bind(symbol)
         .bind(exchange)
@@ -31,19 +36,17 @@ impl Repository {
     }
 
     pub async fn get_symbol_by_ticker(&self, ticker: &str) -> Result<Option<Symbol>> {
-        let symbol = sqlx::query_as::<_, Symbol>(
-            "SELECT * FROM symbols WHERE ticker = ?"
-        )
-        .bind(ticker)
-        .fetch_optional(&self.pool)
-        .await?;
+        let symbol = sqlx::query_as::<_, Symbol>("SELECT * FROM symbols WHERE ticker = ?")
+            .bind(ticker)
+            .fetch_optional(&self.pool)
+            .await?;
 
         Ok(symbol)
     }
 
     pub async fn list_symbols(&self, limit: i64) -> Result<Vec<Symbol>> {
         let symbols = sqlx::query_as::<_, Symbol>(
-            "SELECT * FROM symbols WHERE status = 'active' ORDER BY ticker LIMIT ?"
+            "SELECT * FROM symbols WHERE status = 'active' ORDER BY ticker LIMIT ?",
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -54,7 +57,16 @@ impl Repository {
 
     // Price operations
     #[allow(clippy::too_many_arguments)]
-    pub async fn insert_price(&self, symbol_id: i64, date: &str, open: f64, high: f64, low: f64, close: f64, volume: i64) -> Result<i64> {
+    pub async fn insert_price(
+        &self,
+        symbol_id: i64,
+        date: &str,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: i64,
+    ) -> Result<i64> {
         let result = sqlx::query(
             "INSERT OR REPLACE INTO prices_daily (symbol_id, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
@@ -71,9 +83,13 @@ impl Repository {
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn get_prices_for_symbol(&self, symbol_id: i64, limit: i64) -> Result<Vec<PriceDaily>> {
+    pub async fn get_prices_for_symbol(
+        &self,
+        symbol_id: i64,
+        limit: i64,
+    ) -> Result<Vec<PriceDaily>> {
         let prices = sqlx::query_as::<_, PriceDaily>(
-            "SELECT * FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT ?"
+            "SELECT * FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT ?",
         )
         .bind(symbol_id)
         .bind(limit)
@@ -85,7 +101,7 @@ impl Repository {
 
     pub async fn get_latest_price_date(&self, symbol_id: i64) -> Result<Option<String>> {
         let row = sqlx::query(
-            "SELECT date FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT 1"
+            "SELECT date FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT 1",
         )
         .bind(symbol_id)
         .fetch_optional(&self.pool)
@@ -96,19 +112,23 @@ impl Repository {
 
     // VibePlan operations
     pub async fn create_plan(&self, name: &str, script_json: &str) -> Result<i64> {
-        let result = sqlx::query(
-            "INSERT INTO vibe_plans (name, version, script_json) VALUES (?, ?, ?)"
-        )
-        .bind(name)
-        .bind(1)
-        .bind(script_json)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("INSERT INTO vibe_plans (name, version, script_json) VALUES (?, ?, ?)")
+                .bind(name)
+                .bind(1)
+                .bind(script_json)
+                .execute(&self.pool)
+                .await?;
 
         Ok(result.last_insert_rowid())
     }
 
-    pub async fn update_plan(&self, plan_id: i64, script_json: &str, compiled_json: Option<&str>) -> Result<()> {
+    pub async fn update_plan(
+        &self,
+        plan_id: i64,
+        script_json: &str,
+        compiled_json: Option<&str>,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE vibe_plans SET script_json = ?, compiled_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         )
@@ -122,28 +142,31 @@ impl Repository {
     }
 
     pub async fn get_plan(&self, plan_id: i64) -> Result<Option<VibePlan>> {
-        let plan = sqlx::query_as::<_, VibePlan>(
-            "SELECT * FROM vibe_plans WHERE id = ?"
-        )
-        .bind(plan_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let plan = sqlx::query_as::<_, VibePlan>("SELECT * FROM vibe_plans WHERE id = ?")
+            .bind(plan_id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         Ok(plan)
     }
 
     pub async fn list_plans(&self) -> Result<Vec<VibePlan>> {
-        let plans = sqlx::query_as::<_, VibePlan>(
-            "SELECT * FROM vibe_plans ORDER BY updated_at DESC"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let plans =
+            sqlx::query_as::<_, VibePlan>("SELECT * FROM vibe_plans ORDER BY updated_at DESC")
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(plans)
     }
 
     // Journal operations
-    pub async fn create_journal_entry(&self, plan_id: i64, event_type: &str, payload_json: &str, plan_version_hash: &str) -> Result<i64> {
+    pub async fn create_journal_entry(
+        &self,
+        plan_id: i64,
+        event_type: &str,
+        payload_json: &str,
+        plan_version_hash: &str,
+    ) -> Result<i64> {
         let result = sqlx::query(
             "INSERT INTO journal_events (plan_id, event_type, payload_json, plan_version_hash) VALUES (?, ?, ?, ?)"
         )
@@ -159,7 +182,7 @@ impl Repository {
 
     pub async fn get_journal_entries(&self, plan_id: i64, limit: i64) -> Result<Vec<JournalEvent>> {
         let entries = sqlx::query_as::<_, JournalEvent>(
-            "SELECT * FROM journal_events WHERE plan_id = ? ORDER BY timestamp DESC LIMIT ?"
+            "SELECT * FROM journal_events WHERE plan_id = ? ORDER BY timestamp DESC LIMIT ?",
         )
         .bind(plan_id)
         .bind(limit)
@@ -178,20 +201,19 @@ impl Repository {
             .await?;
 
         // Insert new
-        let result = sqlx::query(
-            "INSERT INTO fundamentals_overview (symbol_id, raw_json) VALUES (?, ?)"
-        )
-        .bind(symbol_id)
-        .bind(raw_json)
-        .execute(&self.pool)
-        .await?;
+        let result =
+            sqlx::query("INSERT INTO fundamentals_overview (symbol_id, raw_json) VALUES (?, ?)")
+                .bind(symbol_id)
+                .bind(raw_json)
+                .execute(&self.pool)
+                .await?;
 
         Ok(result.last_insert_rowid())
     }
 
     pub async fn get_fundamental(&self, symbol_id: i64) -> Result<Option<FundamentalOverview>> {
         let fundamental = sqlx::query_as::<_, FundamentalOverview>(
-            "SELECT * FROM fundamentals_overview WHERE symbol_id = ?"
+            "SELECT * FROM fundamentals_overview WHERE symbol_id = ?",
         )
         .bind(symbol_id)
         .fetch_optional(&self.pool)
@@ -201,9 +223,14 @@ impl Repository {
     }
 
     // Refresh job operations
-    pub async fn create_refresh_job(&self, provider: &str, endpoint: &str, symbol: Option<&str>) -> Result<i64> {
+    pub async fn create_refresh_job(
+        &self,
+        provider: &str,
+        endpoint: &str,
+        symbol: Option<&str>,
+    ) -> Result<i64> {
         let result = sqlx::query(
-            "INSERT INTO refresh_jobs (provider, endpoint, symbol, status) VALUES (?, ?, ?, ?)"
+            "INSERT INTO refresh_jobs (provider, endpoint, symbol, status) VALUES (?, ?, ?, ?)",
         )
         .bind(provider)
         .bind(endpoint)
@@ -217,7 +244,7 @@ impl Repository {
 
     pub async fn get_pending_jobs(&self, limit: i64) -> Result<Vec<RefreshJob>> {
         let jobs = sqlx::query_as::<_, RefreshJob>(
-            "SELECT * FROM refresh_jobs WHERE status = 'pending' ORDER BY scheduled_at ASC LIMIT ?"
+            "SELECT * FROM refresh_jobs WHERE status = 'pending' ORDER BY scheduled_at ASC LIMIT ?",
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -226,7 +253,12 @@ impl Repository {
         Ok(jobs)
     }
 
-    pub async fn update_job_status(&self, job_id: i64, status: &str, error: Option<&str>) -> Result<()> {
+    pub async fn update_job_status(
+        &self,
+        job_id: i64,
+        status: &str,
+        error: Option<&str>,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE refresh_jobs SET status = ?, completed_at = CURRENT_TIMESTAMP, last_error = ? WHERE id = ?"
         )
@@ -261,8 +293,11 @@ mod tests {
                 currency TEXT,
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS prices_daily (
@@ -276,8 +311,11 @@ mod tests {
                 adj_close REAL,
                 volume INTEGER NOT NULL,
                 UNIQUE(symbol_id, date)
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS fundamentals_overview (
@@ -292,8 +330,11 @@ mod tests {
                 roic REAL,
                 raw_json TEXT NOT NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS vibe_plans (
@@ -304,8 +345,11 @@ mod tests {
                 compiled_json TEXT,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS journal_events (
@@ -315,8 +359,11 @@ mod tests {
                 event_type TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
                 plan_version_hash TEXT NOT NULL
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS refresh_jobs (
@@ -328,8 +375,11 @@ mod tests {
                 scheduled_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP,
                 last_error TEXT
-            )"
-        ).execute(&pool).await.unwrap();
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
 
         pool
     }
@@ -339,7 +389,10 @@ mod tests {
         let pool = setup_db().await;
         let repo = Repository::new(pool);
 
-        let id = repo.create_symbol("AAPL", Some("NASDAQ"), Some("Apple Inc")).await.unwrap();
+        let id = repo
+            .create_symbol("AAPL", Some("NASDAQ"), Some("Apple Inc"))
+            .await
+            .unwrap();
         assert!(id > 0);
 
         let sym = repo.get_symbol_by_ticker("AAPL").await.unwrap();
@@ -375,7 +428,10 @@ mod tests {
         let repo = Repository::new(pool);
 
         let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
-        let price_id = repo.insert_price(sym_id, "2024-01-15", 150.0, 155.0, 148.0, 152.0, 1000000).await.unwrap();
+        let price_id = repo
+            .insert_price(sym_id, "2024-01-15", 150.0, 155.0, 148.0, 152.0, 1000000)
+            .await
+            .unwrap();
         assert!(price_id > 0);
 
         let prices = repo.get_prices_for_symbol(sym_id, 10).await.unwrap();
@@ -389,8 +445,12 @@ mod tests {
         let repo = Repository::new(pool);
 
         let sym_id = repo.create_symbol("AAPL", None, None).await.unwrap();
-        repo.insert_price(sym_id, "2024-01-10", 148.0, 150.0, 147.0, 149.0, 500000).await.unwrap();
-        repo.insert_price(sym_id, "2024-01-15", 150.0, 155.0, 148.0, 152.0, 1000000).await.unwrap();
+        repo.insert_price(sym_id, "2024-01-10", 148.0, 150.0, 147.0, 149.0, 500000)
+            .await
+            .unwrap();
+        repo.insert_price(sym_id, "2024-01-15", 150.0, 155.0, 148.0, 152.0, 1000000)
+            .await
+            .unwrap();
 
         let date = repo.get_latest_price_date(sym_id).await.unwrap();
         assert!(date.is_some());
@@ -428,7 +488,9 @@ mod tests {
         let repo = Repository::new(pool);
 
         let plan_id = repo.create_plan("Plan A", r#"{"v":1}"#).await.unwrap();
-        repo.update_plan(plan_id, r#"{"v":2}"#, Some(r#"{"compiled":true}"#)).await.unwrap();
+        repo.update_plan(plan_id, r#"{"v":2}"#, Some(r#"{"compiled":true}"#))
+            .await
+            .unwrap();
 
         let plan = repo.get_plan(plan_id).await.unwrap().unwrap();
         assert_eq!(plan.script_json, r#"{"v":2}"#);
@@ -453,7 +515,10 @@ mod tests {
         let repo = Repository::new(pool);
 
         let plan_id = repo.create_plan("Plan", "{}").await.unwrap();
-        let entry_id = repo.create_journal_entry(plan_id, "TRADE", r#"{"symbol":"AAPL"}"#, "hash123").await.unwrap();
+        let entry_id = repo
+            .create_journal_entry(plan_id, "TRADE", r#"{"symbol":"AAPL"}"#, "hash123")
+            .await
+            .unwrap();
         assert!(entry_id > 0);
 
         let entries = repo.get_journal_entries(plan_id, 10).await.unwrap();
@@ -494,7 +559,10 @@ mod tests {
         let pool = setup_db().await;
         let repo = Repository::new(pool);
 
-        let job_id = repo.create_refresh_job("alphavantage", "/quote", Some("AAPL")).await.unwrap();
+        let job_id = repo
+            .create_refresh_job("alphavantage", "/quote", Some("AAPL"))
+            .await
+            .unwrap();
         assert!(job_id > 0);
 
         let jobs = repo.get_pending_jobs(10).await.unwrap();
@@ -507,8 +575,13 @@ mod tests {
         let pool = setup_db().await;
         let repo = Repository::new(pool);
 
-        let job_id = repo.create_refresh_job("finnhub", "/quote", None).await.unwrap();
-        repo.update_job_status(job_id, "completed", None).await.unwrap();
+        let job_id = repo
+            .create_refresh_job("finnhub", "/quote", None)
+            .await
+            .unwrap();
+        repo.update_job_status(job_id, "completed", None)
+            .await
+            .unwrap();
 
         let pending = repo.get_pending_jobs(10).await.unwrap();
         assert!(pending.is_empty(), "Completed job should not be in pending");
@@ -519,8 +592,13 @@ mod tests {
         let pool = setup_db().await;
         let repo = Repository::new(pool);
 
-        let job_id = repo.create_refresh_job("polygon", "/aggs", Some("SPY")).await.unwrap();
-        repo.update_job_status(job_id, "failed", Some("Rate limit exceeded")).await.unwrap();
+        let job_id = repo
+            .create_refresh_job("polygon", "/aggs", Some("SPY"))
+            .await
+            .unwrap();
+        repo.update_job_status(job_id, "failed", Some("Rate limit exceeded"))
+            .await
+            .unwrap();
 
         let pending = repo.get_pending_jobs(10).await.unwrap();
         assert!(pending.is_empty());

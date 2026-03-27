@@ -22,10 +22,10 @@ pub struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            quote_ttl: Duration::from_secs(120),         // 2 minutes
-            historical_ttl: Duration::from_secs(7200),   // 2 hours
+            quote_ttl: Duration::from_secs(120),          // 2 minutes
+            historical_ttl: Duration::from_secs(7200),    // 2 hours
             fundamental_ttl: Duration::from_secs(172800), // 48 hours
-            quant_ttl: Duration::from_secs(14400),       // 4 hours
+            quant_ttl: Duration::from_secs(14400),        // 4 hours
             quote_max_entries: 1000,
             historical_max_entries: 500,
         }
@@ -49,11 +49,11 @@ pub struct RateLimitConfig {
 impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
-            finnhub: 50,      // 60/min limit, 17% buffer
-            tiingo: 7,        // 500/hour ≈ 8/min, 12% buffer
-            polygon: 4,       // 5/min limit, 20% buffer
-            alphavantage: 4,  // 5/min limit, 20% buffer
-            fmp: 4,           // Conservative
+            finnhub: 50,     // 60/min limit, 17% buffer
+            tiingo: 7,       // 500/hour ≈ 8/min, 12% buffer
+            polygon: 4,      // 5/min limit, 20% buffer
+            alphavantage: 4, // 5/min limit, 20% buffer
+            fmp: 4,          // Conservative
         }
     }
 }
@@ -115,7 +115,6 @@ pub struct AppConfig {
     pub circuit_breaker: CircuitBreakerConfig,
     pub retry: RetryConfig,
 }
-
 
 impl AppConfig {
     /// Create configuration from environment variables

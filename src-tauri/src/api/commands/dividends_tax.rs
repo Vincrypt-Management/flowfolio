@@ -9,9 +9,15 @@ use std::collections::HashMap;
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn record_dividend(
-    id: String, portfolio_name: String, symbol: String,
-    amount_per_share: f64, total_amount: f64, shares_held: f64,
-    ex_date: String, pay_date: Option<String>, reinvested: bool,
+    id: String,
+    portfolio_name: String,
+    symbol: String,
+    amount_per_share: f64,
+    total_amount: f64,
+    shares_held: f64,
+    ex_date: String,
+    pay_date: Option<String>,
+    reinvested: bool,
 ) -> Result<(), String> {
     let pool = get_pool().await?;
     sqlx::query(
@@ -33,11 +39,16 @@ pub async fn list_dividends(portfolio_name: String) -> Result<Vec<serde_json::Va
     .bind(&portfolio_name)
     .fetch_all(&pool).await.map_err(|e| e.to_string())?;
 
-    Ok(rows.iter().map(|r| serde_json::json!({
-        "id": r.0, "portfolio_name": r.1, "symbol": r.2,
-        "amount_per_share": r.3, "total_amount": r.4, "shares_held": r.5,
-        "ex_date": r.6, "pay_date": r.7, "reinvested": r.8 != 0, "created_at": r.9
-    })).collect())
+    Ok(rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.0, "portfolio_name": r.1, "symbol": r.2,
+                "amount_per_share": r.3, "total_amount": r.4, "shares_held": r.5,
+                "ex_date": r.6, "pay_date": r.7, "reinvested": r.8 != 0, "created_at": r.9
+            })
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -46,8 +57,12 @@ pub async fn get_dividend_summary(portfolio_name: String) -> Result<serde_json::
     let year = chrono::Utc::now().format("%Y").to_string();
 
     let total_all: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ?"
-    ).bind(&portfolio_name).fetch_one(&pool).await.map_err(|e| e.to_string())?;
+        "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ?",
+    )
+    .bind(&portfolio_name)
+    .fetch_one(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
     let total_ytd: f64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(total_amount), 0) FROM dividends WHERE portfolio_name = ? AND ex_date >= (? || '-01-01')"
@@ -63,8 +78,12 @@ pub async fn get_dividend_summary(portfolio_name: String) -> Result<serde_json::
 
 #[tauri::command]
 pub async fn create_tax_lot(
-    id: String, portfolio_name: String, symbol: String,
-    shares: f64, cost_basis_per_share: f64, purchase_date: String,
+    id: String,
+    portfolio_name: String,
+    symbol: String,
+    shares: f64,
+    cost_basis_per_share: f64,
+    purchase_date: String,
 ) -> Result<(), String> {
     let pool = get_pool().await?;
     sqlx::query("INSERT INTO tax_lots (id, portfolio_name, symbol, shares, cost_basis_per_share, purchase_date) VALUES (?, ?, ?, ?, ?, ?)")
@@ -75,7 +94,10 @@ pub async fn create_tax_lot(
 }
 
 #[tauri::command]
-pub async fn list_tax_lots(portfolio_name: String, symbol: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn list_tax_lots(
+    portfolio_name: String,
+    symbol: Option<String>,
+) -> Result<Vec<serde_json::Value>, String> {
     let pool = get_pool().await?;
     let rows = if let Some(sym) = &symbol {
         sqlx::query_as::<_, (String, String, String, f64, f64, String, i32, Option<String>, Option<f64>, String)>(
@@ -87,23 +109,27 @@ pub async fn list_tax_lots(portfolio_name: String, symbol: Option<String>) -> Re
         ).bind(&portfolio_name).fetch_all(&pool).await
     }.map_err(|e| e.to_string())?;
 
-    Ok(rows.iter().map(|r| {
-        let days_held = chrono::NaiveDate::parse_from_str(&r.5, "%Y-%m-%d")
-            .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
-            .unwrap_or(0);
-        serde_json::json!({
-            "id": r.0, "portfolio_name": r.1, "symbol": r.2,
-            "shares": r.3, "cost_basis_per_share": r.4, "purchase_date": r.5,
-            "is_closed": r.6 != 0, "close_date": r.7, "close_price": r.8,
-            "created_at": r.9, "days_held": days_held,
-            "is_long_term": days_held > 365
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let days_held = chrono::NaiveDate::parse_from_str(&r.5, "%Y-%m-%d")
+                .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
+                .unwrap_or(0);
+            serde_json::json!({
+                "id": r.0, "portfolio_name": r.1, "symbol": r.2,
+                "shares": r.3, "cost_basis_per_share": r.4, "purchase_date": r.5,
+                "is_closed": r.6 != 0, "close_date": r.7, "close_price": r.8,
+                "created_at": r.9, "days_held": days_held,
+                "is_long_term": days_held > 365
+            })
         })
-    }).collect())
+        .collect())
 }
 
 #[tauri::command]
 pub async fn get_tax_loss_harvest_opportunities(
-    portfolio_name: String, current_prices: HashMap<String, f64>,
+    portfolio_name: String,
+    current_prices: HashMap<String, f64>,
 ) -> Result<Vec<serde_json::Value>, String> {
     let pool = get_pool().await?;
     let rows = sqlx::query_as::<_, (String, String, f64, f64, String)>(
@@ -132,7 +158,9 @@ pub async fn get_tax_loss_harvest_opportunities(
     opportunities.sort_by(|a, b| {
         let a_val = a["unrealized_loss"].as_f64().unwrap_or(0.0);
         let b_val = b["unrealized_loss"].as_f64().unwrap_or(0.0);
-        a_val.partial_cmp(&b_val).unwrap_or(std::cmp::Ordering::Equal)
+        a_val
+            .partial_cmp(&b_val)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     Ok(opportunities)
 }

@@ -1,6 +1,6 @@
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use rayon::prelude::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantMetrics {
@@ -154,7 +154,7 @@ pub struct QuantAnalyzer;
 impl QuantAnalyzer {
     // Pre-computed constants for performance (avoid runtime sqrt calls)
     const SQRT_252: f64 = 15.874507866387544; // sqrt(252)
-    const SQRT_12: f64 = 3.4641016151377544;  // sqrt(12) for monthly
+    const SQRT_12: f64 = 3.4641016151377544; // sqrt(12) for monthly
     const TRADING_DAYS: f64 = 252.0;
     const RISK_FREE_RATE: f64 = 0.045; // 4.5% annual risk-free rate
     const MIN_DATA_POINTS: usize = 14;
@@ -169,20 +169,20 @@ impl QuantAnalyzer {
 
         // Pre-extract closes for cache efficiency (single allocation)
         let closes: Vec<f64> = prices.iter().map(|p| p.close).collect();
-        
+
         // Single-pass return calculation with running statistics (Welford's algorithm)
         let (returns, stats) = Self::calculate_returns_with_welford(&closes);
-        
+
         if returns.is_empty() || stats.count < 2 {
             return Self::insufficient_data(symbol);
         }
 
         let std_dev = stats.std_dev();
         let mean_return = stats.mean;
-        
+
         // Annualized metrics using pre-computed constants
         let daily_rf = Self::RISK_FREE_RATE / Self::TRADING_DAYS;
-        
+
         // Sharpe ratio (annualized, excess return over risk-free rate)
         let sharpe_ratio = if std_dev > 1e-10 {
             let excess_return = mean_return - daily_rf;
@@ -190,39 +190,52 @@ impl QuantAnalyzer {
         } else {
             0.0
         };
-        
+
         // Sortino ratio (downside deviation only)
         let sortino_ratio = Self::calculate_sortino_ratio(&returns, mean_return, daily_rf);
-        
+
         // Annualized return (optimized compound calculation)
         let annualized_return = Self::calculate_annualized_return_fast(&returns, prices.len());
-        
+
         // Volatility (annualized)
         let volatility = std_dev * Self::SQRT_252 * 100.0;
-        
+
         // Max drawdown (single-pass with running peak)
         let max_drawdown = Self::calculate_max_drawdown_fast(&closes);
-        
+
         // Calmar ratio (return / max drawdown)
         let calmar_ratio = if max_drawdown > 0.01 {
             Some(annualized_return / max_drawdown)
         } else {
             None
         };
-        
+
         // Value at Risk (95% confidence)
         let var_95 = Self::calculate_var_95(&returns);
-        
+
         // RSI with Wilder's smoothing (more accurate)
         let rsi = Self::calculate_rsi_wilder(&closes, 14);
-        
+
         // Advanced quant metrics
-        let (omega_ratio, tail_ratio, skewness, kurtosis, ulcer_index, gain_to_loss_ratio, win_rate) = 
-            Self::calculate_advanced_metrics(&returns, &closes);
-        
+        let (
+            omega_ratio,
+            tail_ratio,
+            skewness,
+            kurtosis,
+            ulcer_index,
+            gain_to_loss_ratio,
+            win_rate,
+        ) = Self::calculate_advanced_metrics(&returns, &closes);
+
         // Enhanced signal generation with all metrics
         let (signal, confidence) = Self::generate_signal_enhanced(
-            sharpe_ratio, sortino_ratio, rsi, volatility, mean_return, &returns, max_drawdown
+            sharpe_ratio,
+            sortino_ratio,
+            rsi,
+            volatility,
+            mean_return,
+            &returns,
+            max_drawdown,
         );
 
         // Limit daily returns to last 60 days to reduce payload size
@@ -258,9 +271,7 @@ impl QuantAnalyzer {
     }
 
     /// Batch calculate metrics for multiple symbols (parallel)
-    pub fn calculate_metrics_batch(
-        data: Vec<(String, Vec<HistoricalPrice>)>
-    ) -> Vec<QuantMetrics> {
+    pub fn calculate_metrics_batch(data: Vec<(String, Vec<HistoricalPrice>)>) -> Vec<QuantMetrics> {
         data.into_par_iter()
             .map(|(symbol, prices)| Self::calculate_metrics(&symbol, &prices))
             .collect()
@@ -293,7 +304,10 @@ impl QuantAnalyzer {
     }
 
     /// Calculate advanced quant metrics: Omega ratio, tail ratio, skewness, kurtosis, ulcer index
-    fn calculate_advanced_metrics(returns: &[f64], closes: &[f64]) -> (f64, f64, f64, f64, f64, f64, f64) {
+    fn calculate_advanced_metrics(
+        returns: &[f64],
+        closes: &[f64],
+    ) -> (f64, f64, f64, f64, f64, f64, f64) {
         if returns.len() < 10 {
             return (1.0, 1.0, 0.0, 0.0, 5.0, 1.0, 50.0);
         }
@@ -305,23 +319,46 @@ impl QuantAnalyzer {
 
         // Skewness (third moment)
         let skewness = if std_dev > 1e-10 {
-            returns.iter().map(|&r| ((r - mean) / std_dev).powi(3)).sum::<f64>() / n
+            returns
+                .iter()
+                .map(|&r| ((r - mean) / std_dev).powi(3))
+                .sum::<f64>()
+                / n
         } else {
             0.0
         };
 
         // Excess Kurtosis (fourth moment minus 3)
         let kurtosis = if std_dev > 1e-10 {
-            returns.iter().map(|&r| ((r - mean) / std_dev).powi(4)).sum::<f64>() / n - 3.0
+            returns
+                .iter()
+                .map(|&r| ((r - mean) / std_dev).powi(4))
+                .sum::<f64>()
+                / n
+                - 3.0
         } else {
             0.0
         };
 
         // Omega Ratio (probability-weighted gains over losses)
         let threshold = 0.0;
-        let gains: f64 = returns.iter().filter(|&&r| r > threshold).map(|&r| r - threshold).sum();
-        let losses: f64 = returns.iter().filter(|&&r| r <= threshold).map(|&r| threshold - r).sum();
-        let omega_ratio = if losses > 1e-10 { gains / losses } else if gains > 0.0 { 3.0 } else { 1.0 };
+        let gains: f64 = returns
+            .iter()
+            .filter(|&&r| r > threshold)
+            .map(|&r| r - threshold)
+            .sum();
+        let losses: f64 = returns
+            .iter()
+            .filter(|&&r| r <= threshold)
+            .map(|&r| threshold - r)
+            .sum();
+        let omega_ratio = if losses > 1e-10 {
+            gains / losses
+        } else if gains > 0.0 {
+            3.0
+        } else {
+            1.0
+        };
 
         // Tail Ratio (95th percentile / |5th percentile|)
         let mut sorted = returns.to_vec();
@@ -330,17 +367,29 @@ impl QuantAnalyzer {
         let p95_idx = (returns.len() as f64 * 0.95).floor() as usize;
         let p5 = sorted.get(p5_idx).copied().unwrap_or(0.0);
         let p95 = sorted.get(p95_idx).copied().unwrap_or(0.0);
-        let tail_ratio = if p5.abs() > 1e-10 { (p95 / p5).abs() } else { 1.0 };
+        let tail_ratio = if p5.abs() > 1e-10 {
+            (p95 / p5).abs()
+        } else {
+            1.0
+        };
 
         // Win Rate
         let positive_returns = returns.iter().filter(|&&r| r > 0.0).count() as f64;
         let win_rate = (positive_returns / n) * 100.0;
 
         // Gain to Loss Ratio
-        let avg_gain = returns.iter().filter(|&&r| r > 0.0).sum::<f64>() / positive_returns.max(1.0);
+        let avg_gain =
+            returns.iter().filter(|&&r| r > 0.0).sum::<f64>() / positive_returns.max(1.0);
         let negative_count = returns.iter().filter(|&&r| r < 0.0).count() as f64;
-        let avg_loss = returns.iter().filter(|&&r| r < 0.0).sum::<f64>().abs() / negative_count.max(1.0);
-        let gain_to_loss_ratio = if avg_loss > 1e-10 { avg_gain / avg_loss } else if avg_gain > 0.0 { 2.0 } else { 1.0 };
+        let avg_loss =
+            returns.iter().filter(|&&r| r < 0.0).sum::<f64>().abs() / negative_count.max(1.0);
+        let gain_to_loss_ratio = if avg_loss > 1e-10 {
+            avg_gain / avg_loss
+        } else if avg_gain > 0.0 {
+            2.0
+        } else {
+            1.0
+        };
 
         // Ulcer Index (measures depth and duration of drawdowns)
         let mut peak = closes.first().copied().unwrap_or(100.0);
@@ -349,7 +398,11 @@ impl QuantAnalyzer {
             if price > peak {
                 peak = price;
             }
-            let dd = if peak > 1e-10 { ((peak - price) / peak) * 100.0 } else { 0.0 };
+            let dd = if peak > 1e-10 {
+                ((peak - price) / peak) * 100.0
+            } else {
+                0.0
+            };
             sum_squared_dd += dd * dd;
         }
         let ulcer_index = (sum_squared_dd / closes.len() as f64).sqrt();
@@ -374,7 +427,7 @@ impl QuantAnalyzer {
 
         let mut returns = Vec::with_capacity(closes.len() - 1);
         let mut stats = WelfordStats::default();
-        
+
         // Single pass: calculate returns and update running statistics
         for i in 1..closes.len() {
             if closes[i - 1] > 0.0 {
@@ -412,7 +465,7 @@ impl QuantAnalyzer {
         }
 
         let downside_dev = (downside_sum_sq / downside_count as f64).sqrt();
-        
+
         if downside_dev > 1e-10 {
             let excess_return = mean_return - daily_rf;
             Self::SQRT_252 * (excess_return / downside_dev)
@@ -430,10 +483,10 @@ impl QuantAnalyzer {
         // Use percentile method (more robust than parametric)
         let mut sorted: Vec<f64> = returns.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         let index = (returns.len() as f64 * 0.05).floor() as usize;
         let var_daily = -sorted.get(index).unwrap_or(&0.0);
-        
+
         // Annualize (scale by sqrt of time)
         var_daily * Self::SQRT_252 * 100.0
     }
@@ -445,13 +498,14 @@ impl QuantAnalyzer {
         }
 
         // Use log returns for numerical stability
-        let log_total: f64 = returns.iter()
-            .filter(|&&r| r > -1.0)  // Prevent log of non-positive
+        let log_total: f64 = returns
+            .iter()
+            .filter(|&&r| r > -1.0) // Prevent log of non-positive
             .map(|&r| (1.0 + r).ln())
             .sum();
-        
+
         let years = num_prices as f64 / Self::TRADING_DAYS;
-        
+
         if years <= 0.0 {
             return 0.0;
         }
@@ -561,10 +615,10 @@ impl QuantAnalyzer {
 
         // Factor 3: RSI (weight: 0.20)
         let rsi_score = match rsi {
-            r if r < 25.0 => 0.8,  // Strongly oversold - good buy
-            r if r < 35.0 => 0.5,  // Oversold
-            r if r > 75.0 => -0.8, // Strongly overbought - consider sell
-            r if r > 65.0 => -0.3, // Overbought
+            r if r < 25.0 => 0.8,                 // Strongly oversold - good buy
+            r if r < 35.0 => 0.5,                 // Oversold
+            r if r > 75.0 => -0.8,                // Strongly overbought - consider sell
+            r if r > 65.0 => -0.3,                // Overbought
             _ => (50.0 - rsi).abs() / 50.0 * 0.3, // Neutral zone
         };
         score += rsi_score * 0.20;
@@ -572,10 +626,10 @@ impl QuantAnalyzer {
 
         // Factor 4: Volatility (weight: 0.10)
         let vol_score = match volatility {
-            v if v < 15.0 => 0.4,  // Low vol - stable
-            v if v < 25.0 => 0.3,  // Moderate
-            v if v < 40.0 => 0.0,  // Acceptable
-            _ => -0.3,              // High vol - risky
+            v if v < 15.0 => 0.4, // Low vol - stable
+            v if v < 25.0 => 0.3, // Moderate
+            v if v < 40.0 => 0.0, // Acceptable
+            _ => -0.3,            // High vol - risky
         };
         score += vol_score * 0.10;
         weight_sum += 0.10;
@@ -586,7 +640,7 @@ impl QuantAnalyzer {
             let recent_returns = &returns[returns.len() - recent_period..];
             let recent_sum: f64 = recent_returns.iter().sum();
             let momentum = recent_sum / recent_period as f64;
-            
+
             let momentum_score = match momentum {
                 m if m > 0.01 => 0.6,
                 m if m > 0.005 => 0.3,
@@ -658,9 +712,7 @@ impl QuantAnalyzer {
         // Parallel calculation of individual metrics
         let individual_metrics: Vec<(f64, QuantMetrics)> = holdings
             .par_iter()
-            .map(|(symbol, weight, prices)| {
-                (*weight, Self::calculate_metrics(symbol, prices))
-            })
+            .map(|(symbol, weight, prices)| (*weight, Self::calculate_metrics(symbol, prices)))
             .collect();
 
         let mut portfolio_return = 0.0;
@@ -693,7 +745,11 @@ impl QuantAnalyzer {
 
         let last = closes.last().copied().unwrap_or(0.0);
         let first = closes.first().copied().unwrap_or(1.0);
-        let total_return = if first > 0.0 { (last - first) / first } else { 0.0 };
+        let total_return = if first > 0.0 {
+            (last - first) / first
+        } else {
+            0.0
+        };
 
         let n = closes.len() as f64;
         let mean: f64 = closes.iter().sum::<f64>() / n;
@@ -750,7 +806,8 @@ impl QuantAnalyzer {
 
         // Calculate correlation matrix
         let returns_matrix: Vec<&Vec<f64>> = asset_metrics.iter().map(|(_, r)| r).collect();
-        let (correlation_matrix, correlation_symbols) = Self::compute_correlation_matrix(&assets_data, &returns_matrix);
+        let (correlation_matrix, correlation_symbols) =
+            Self::compute_correlation_matrix(&assets_data, &returns_matrix);
 
         // Calculate returns distribution
         let all_returns: Vec<f64> = asset_metrics.iter().flat_map(|(_, r)| r.clone()).collect();
@@ -796,7 +853,8 @@ impl QuantAnalyzer {
         if closes.len() < 2 {
             return vec![];
         }
-        closes.windows(2)
+        closes
+            .windows(2)
             .map(|w| (w[1] - w[0]) / w[0])
             .filter(|r| r.is_finite())
             .collect()
@@ -857,47 +915,58 @@ impl QuantAnalyzer {
             let bins = ["-4%", "-3%", "-2%", "-1%", "0%", "1%", "2%", "3%", "4%"];
             let frequencies = [2.0, 5.0, 15.0, 25.0, 30.0, 25.0, 15.0, 5.0, 2.0];
             let normal_curve = [3.0, 8.0, 18.0, 28.0, 30.0, 28.0, 18.0, 8.0, 3.0];
-            
-            return bins.iter().enumerate().map(|(i, b)| DistributionBin {
-                bin: b.to_string(),
-                frequency: frequencies[i],
-                normal_curve: normal_curve[i],
-            }).collect();
+
+            return bins
+                .iter()
+                .enumerate()
+                .map(|(i, b)| DistributionBin {
+                    bin: b.to_string(),
+                    frequency: frequencies[i],
+                    normal_curve: normal_curve[i],
+                })
+                .collect();
         }
 
         let min = returns.iter().cloned().fold(f64::INFINITY, f64::min);
         let max = returns.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        
+
         if (max - min).abs() < 1e-10 {
             return vec![];
         }
 
         let bin_count = 15;
         let bin_size = (max - min) / bin_count as f64;
-        
+
         let mean: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
-        let variance: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
+        let variance: f64 =
+            returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
         let std_dev = variance.sqrt();
 
-        (0..bin_count).map(|i| {
-            let bin_start = min + i as f64 * bin_size;
-            let bin_end = bin_start + bin_size;
-            let bin_mid = (bin_start + bin_end) / 2.0;
-            
-            let frequency = returns.iter().filter(|&&r| r >= bin_start && r < bin_end).count() as f64;
-            let normal_curve = if std_dev > 1e-10 {
-                (returns.len() as f64 * bin_size / (std_dev * (2.0 * std::f64::consts::PI).sqrt()))
-                    * (-((bin_mid - mean).powi(2)) / (2.0 * std_dev * std_dev)).exp()
-            } else {
-                0.0
-            };
-            
-            DistributionBin {
-                bin: format!("{:.1}%", bin_mid * 100.0),
-                frequency,
-                normal_curve,
-            }
-        }).collect()
+        (0..bin_count)
+            .map(|i| {
+                let bin_start = min + i as f64 * bin_size;
+                let bin_end = bin_start + bin_size;
+                let bin_mid = (bin_start + bin_end) / 2.0;
+
+                let frequency = returns
+                    .iter()
+                    .filter(|&&r| r >= bin_start && r < bin_end)
+                    .count() as f64;
+                let normal_curve = if std_dev > 1e-10 {
+                    (returns.len() as f64 * bin_size
+                        / (std_dev * (2.0 * std::f64::consts::PI).sqrt()))
+                        * (-((bin_mid - mean).powi(2)) / (2.0 * std_dev * std_dev)).exp()
+                } else {
+                    0.0
+                };
+
+                DistributionBin {
+                    bin: format!("{:.1}%", bin_mid * 100.0),
+                    frequency,
+                    normal_curve,
+                }
+            })
+            .collect()
     }
 
     fn compute_drawdown_series(prices: &[HistoricalPrice]) -> Vec<DrawdownPoint> {
@@ -906,20 +975,25 @@ impl QuantAnalyzer {
         }
 
         let mut peak = prices[0].close;
-        prices.iter().map(|p| {
-            if p.close > peak {
-                peak = p.close;
-            }
-            let drawdown = ((p.close - peak) / peak) * 100.0;
-            DrawdownPoint {
-                date: p.date.clone(),
-                drawdown,
-                price: p.close,
-            }
-        }).collect()
+        prices
+            .iter()
+            .map(|p| {
+                if p.close > peak {
+                    peak = p.close;
+                }
+                let drawdown = ((p.close - peak) / peak) * 100.0;
+                DrawdownPoint {
+                    date: p.date.clone(),
+                    drawdown,
+                    price: p.close,
+                }
+            })
+            .collect()
     }
 
-    fn compute_portfolio_dashboard_metrics(assets: &[AssetDashboardMetrics]) -> PortfolioDashboardMetrics {
+    fn compute_portfolio_dashboard_metrics(
+        assets: &[AssetDashboardMetrics],
+    ) -> PortfolioDashboardMetrics {
         if assets.is_empty() {
             return PortfolioDashboardMetrics {
                 sharpe_ratio: 0.0,
@@ -937,7 +1011,11 @@ impl QuantAnalyzer {
         let weight = 1.0 / n; // Equal weight
 
         let expected_return: f64 = assets.iter().map(|a| a.expected_return * weight).sum();
-        let volatility: f64 = (assets.iter().map(|a| (a.volatility * weight).powi(2)).sum::<f64>()).sqrt();
+        let volatility: f64 = (assets
+            .iter()
+            .map(|a| (a.volatility * weight).powi(2))
+            .sum::<f64>())
+        .sqrt();
         let sharpe_ratio: f64 = assets.iter().map(|a| a.sharpe_ratio * weight).sum();
         let max_drawdown: f64 = assets.iter().map(|a| a.max_drawdown).fold(0.0, f64::max);
         let var_95: f64 = assets.iter().map(|a| a.var_95 * weight).sum();
@@ -1003,9 +1081,15 @@ mod tests {
     fn test_calculate_metrics_uptrend() {
         let prices = generate_test_prices(100, 100.0, 0.002);
         let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
-        
-        assert!(metrics.sharpe_ratio > 0.0, "Uptrend should have positive Sharpe");
-        assert!(metrics.annualized_return > 0.0, "Uptrend should have positive return");
+
+        assert!(
+            metrics.sharpe_ratio > 0.0,
+            "Uptrend should have positive Sharpe"
+        );
+        assert!(
+            metrics.annualized_return > 0.0,
+            "Uptrend should have positive return"
+        );
         assert!(metrics.rsi > 50.0, "Uptrend should have RSI > 50");
     }
 
@@ -1013,18 +1097,22 @@ mod tests {
     fn test_calculate_metrics_downtrend() {
         let prices = generate_test_prices(100, 100.0, -0.002);
         let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
-        
-        assert!(metrics.annualized_return < 0.0, "Downtrend should have negative return");
+
+        assert!(
+            metrics.annualized_return < 0.0,
+            "Downtrend should have negative return"
+        );
         assert!(metrics.max_drawdown > 0.0, "Downtrend should have drawdown");
     }
 
     #[test]
     fn test_insufficient_data() {
-        let prices = vec![
-            HistoricalPrice { date: "2024-01-01".to_string(), close: 100.0 },
-        ];
+        let prices = vec![HistoricalPrice {
+            date: "2024-01-01".to_string(),
+            close: 100.0,
+        }];
         let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
-        
+
         assert_eq!(metrics.signal, "INSUFFICIENT DATA");
         assert_eq!(metrics.confidence, 0.0);
     }
@@ -1140,7 +1228,10 @@ mod tests {
         let mean = returns.iter().sum::<f64>() / returns.len() as f64;
         let daily_rf = 0.0;
         let result = QuantAnalyzer::calculate_sortino_ratio(&returns, mean, daily_rf);
-        assert!(result < 0.0, "All negative returns should give negative sortino");
+        assert!(
+            result < 0.0,
+            "All negative returns should give negative sortino"
+        );
     }
 
     #[test]
@@ -1149,7 +1240,10 @@ mod tests {
         let mean = returns.iter().sum::<f64>() / returns.len() as f64;
         let daily_rf = 0.0;
         let result = QuantAnalyzer::calculate_sortino_ratio(&returns, mean, daily_rf);
-        assert!(result > 0.0, "Positive mean with mixed returns should be positive");
+        assert!(
+            result > 0.0,
+            "Positive mean with mixed returns should be positive"
+        );
     }
 
     // ===== calculate_var_95 tests =====
@@ -1196,7 +1290,11 @@ mod tests {
         // Monotonically increasing prices -> RSI should be 100
         let closes: Vec<f64> = (0..30).map(|i| 100.0 + i as f64).collect();
         let result = QuantAnalyzer::calculate_rsi_wilder(&closes, 14);
-        assert!((result - 100.0).abs() < 1e-6, "All gains should give RSI ~100, got {}", result);
+        assert!(
+            (result - 100.0).abs() < 1e-6,
+            "All gains should give RSI ~100, got {}",
+            result
+        );
     }
 
     #[test]
@@ -1204,7 +1302,11 @@ mod tests {
         // Monotonically decreasing prices -> RSI should be ~0
         let closes: Vec<f64> = (0..30).map(|i| 200.0 - i as f64).collect();
         let result = QuantAnalyzer::calculate_rsi_wilder(&closes, 14);
-        assert!(result < 1.0, "All losses should give RSI near 0, got {}", result);
+        assert!(
+            result < 1.0,
+            "All losses should give RSI near 0, got {}",
+            result
+        );
     }
 
     #[test]
@@ -1214,8 +1316,11 @@ mod tests {
         // No gains and no losses -> avg_loss < 1e-10 -> returns 100.0
         // Actually avg_gain is also 0, so rs = 0/tiny -> depends on implementation
         // With flat, avg_loss < 1e-10 -> returns 100.0
-        assert!((result - 100.0).abs() < 1e-6 || result == 50.0,
-            "Flat prices RSI should be 100 or 50, got {}", result);
+        assert!(
+            (result - 100.0).abs() < 1e-6 || result == 50.0,
+            "Flat prices RSI should be 100 or 50, got {}",
+            result
+        );
     }
 
     // ===== calculate_advanced_metrics tests =====
@@ -1242,7 +1347,10 @@ mod tests {
         let (omega, _tail, _skew, _kurt, _ulcer, _gtl, win_rate) =
             QuantAnalyzer::calculate_advanced_metrics(&returns, &closes);
         assert!(omega > 1.0, "All positive returns should have omega > 1");
-        assert!((win_rate - 100.0).abs() < f64::EPSILON, "All positive should be 100% win rate");
+        assert!(
+            (win_rate - 100.0).abs() < f64::EPSILON,
+            "All positive should be 100% win rate"
+        );
     }
 
     #[test]
@@ -1252,7 +1360,11 @@ mod tests {
         let closes: Vec<f64> = (0..21).map(|i| 100.0 + (i as f64 - 10.0).abs()).collect();
         let (_omega, _tail, skew, _kurt, _ulcer, _gtl, _wr) =
             QuantAnalyzer::calculate_advanced_metrics(&returns, &closes);
-        assert!(skew.abs() < 0.5, "Symmetric returns should have low skewness, got {}", skew);
+        assert!(
+            skew.abs() < 0.5,
+            "Symmetric returns should have low skewness, got {}",
+            skew
+        );
     }
 
     #[test]
@@ -1262,7 +1374,11 @@ mod tests {
         let returns: Vec<f64> = closes.windows(2).map(|w| (w[1] - w[0]) / w[0]).collect();
         let (_omega, _tail, _skew, _kurt, ulcer, _gtl, _wr) =
             QuantAnalyzer::calculate_advanced_metrics(&returns, &closes);
-        assert!((ulcer - 0.0).abs() < 1e-6, "No drawdown should give ulcer ~0, got {}", ulcer);
+        assert!(
+            (ulcer - 0.0).abs() < 1e-6,
+            "No drawdown should give ulcer ~0, got {}",
+            ulcer
+        );
     }
 
     // ===== compute_correlation tests =====
@@ -1272,7 +1388,11 @@ mod tests {
         let x: Vec<f64> = (0..20).map(|i| i as f64 * 0.01).collect();
         let y = x.clone();
         let result = QuantAnalyzer::compute_correlation(&x, &y);
-        assert!((result - 1.0).abs() < 1e-6, "Identical series should have corr=1, got {}", result);
+        assert!(
+            (result - 1.0).abs() < 1e-6,
+            "Identical series should have corr=1, got {}",
+            result
+        );
     }
 
     #[test]
@@ -1280,7 +1400,11 @@ mod tests {
         let x: Vec<f64> = (0..20).map(|i| i as f64 * 0.01).collect();
         let y: Vec<f64> = x.iter().map(|v| -v).collect();
         let result = QuantAnalyzer::compute_correlation(&x, &y);
-        assert!((result - (-1.0)).abs() < 1e-6, "Opposite series should have corr=-1, got {}", result);
+        assert!(
+            (result - (-1.0)).abs() < 1e-6,
+            "Opposite series should have corr=-1, got {}",
+            result
+        );
     }
 
     #[test]
@@ -1288,7 +1412,10 @@ mod tests {
         let x = vec![1.0, 2.0, 3.0];
         let y = vec![4.0, 5.0, 6.0];
         let result = QuantAnalyzer::compute_correlation(&x, &y);
-        assert!((result - 0.5).abs() < f64::EPSILON, "Short data should return default 0.5");
+        assert!(
+            (result - 0.5).abs() < f64::EPSILON,
+            "Short data should return default 0.5"
+        );
     }
 
     #[test]
@@ -1296,7 +1423,10 @@ mod tests {
         let x: Vec<f64> = vec![5.0; 20];
         let y: Vec<f64> = (0..20).map(|i| i as f64).collect();
         let result = QuantAnalyzer::compute_correlation(&x, &y);
-        assert!((result - 0.0).abs() < 1e-6, "Constant vs varying should give corr=0");
+        assert!(
+            (result - 0.0).abs() < 1e-6,
+            "Constant vs varying should give corr=0"
+        );
     }
 
     // ===== compute_diversification_score tests =====
@@ -1310,22 +1440,22 @@ mod tests {
 
     #[test]
     fn test_diversification_score_perfect_correlation() {
-        let matrix = vec![
-            vec![1.0, 1.0],
-            vec![1.0, 1.0],
-        ];
+        let matrix = vec![vec![1.0, 1.0], vec![1.0, 1.0]];
         let result = QuantAnalyzer::compute_diversification_score(&matrix);
-        assert!((result - 0.0).abs() < f64::EPSILON, "Perfect correlation -> 0 diversification");
+        assert!(
+            (result - 0.0).abs() < f64::EPSILON,
+            "Perfect correlation -> 0 diversification"
+        );
     }
 
     #[test]
     fn test_diversification_score_zero_correlation() {
-        let matrix = vec![
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-        ];
+        let matrix = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
         let result = QuantAnalyzer::compute_diversification_score(&matrix);
-        assert!((result - 100.0).abs() < f64::EPSILON, "Zero correlation -> 100 diversification");
+        assert!(
+            (result - 100.0).abs() < f64::EPSILON,
+            "Zero correlation -> 100 diversification"
+        );
     }
 
     #[test]
@@ -1393,7 +1523,11 @@ mod tests {
     fn test_max_drawdown_known() {
         let closes = vec![100.0, 120.0, 90.0, 110.0]; // peak=120, trough=90, dd=25%
         let dd = QuantAnalyzer::calculate_max_drawdown_fast(&closes);
-        assert!((dd - 25.0).abs() < 1e-6, "Expected 25% drawdown, got {}", dd);
+        assert!(
+            (dd - 25.0).abs() < 1e-6,
+            "Expected 25% drawdown, got {}",
+            dd
+        );
     }
 
     #[test]
@@ -1441,9 +1575,8 @@ mod tests {
     #[test]
     fn test_signal_strong_buy() {
         let returns: Vec<f64> = (0..30).map(|_| 0.02).collect(); // Strong positive momentum
-        let (signal, confidence) = QuantAnalyzer::generate_signal_enhanced(
-            3.0, 3.0, 30.0, 15.0, 0.02, &returns, 5.0,
-        );
+        let (signal, confidence) =
+            QuantAnalyzer::generate_signal_enhanced(3.0, 3.0, 30.0, 15.0, 0.02, &returns, 5.0);
         assert_eq!(signal, "STRONG BUY");
         assert!(confidence > 0.0);
     }
@@ -1451,20 +1584,28 @@ mod tests {
     #[test]
     fn test_signal_strong_sell() {
         let returns: Vec<f64> = (0..30).map(|_| -0.02).collect(); // Strong negative
-        let (signal, _confidence) = QuantAnalyzer::generate_signal_enhanced(
-            -2.0, -1.0, 80.0, 50.0, -0.02, &returns, 40.0,
+        let (signal, _confidence) =
+            QuantAnalyzer::generate_signal_enhanced(-2.0, -1.0, 80.0, 50.0, -0.02, &returns, 40.0);
+        assert!(
+            signal == "SELL" || signal == "STRONG SELL",
+            "Expected sell signal, got {}",
+            signal
         );
-        assert!(signal == "SELL" || signal == "STRONG SELL", "Expected sell signal, got {}", signal);
     }
 
     #[test]
     fn test_signal_hold_neutral() {
-        let returns: Vec<f64> = (0..30).map(|i| if i % 2 == 0 { 0.001 } else { -0.001 }).collect();
-        let (signal, _confidence) = QuantAnalyzer::generate_signal_enhanced(
-            0.5, 0.5, 50.0, 20.0, 0.0, &returns, 15.0,
-        );
+        let returns: Vec<f64> = (0..30)
+            .map(|i| if i % 2 == 0 { 0.001 } else { -0.001 })
+            .collect();
+        let (signal, _confidence) =
+            QuantAnalyzer::generate_signal_enhanced(0.5, 0.5, 50.0, 20.0, 0.0, &returns, 15.0);
         // Neutral conditions
-        assert!(signal == "HOLD" || signal == "BUY", "Expected neutral signal, got {}", signal);
+        assert!(
+            signal == "HOLD" || signal == "BUY",
+            "Expected neutral signal, got {}",
+            signal
+        );
     }
 
     // ===== compute_drawdown_series tests =====
@@ -1478,9 +1619,18 @@ mod tests {
     #[test]
     fn test_drawdown_series_increasing() {
         let prices = vec![
-            HistoricalPrice { date: "2024-01-01".to_string(), close: 100.0 },
-            HistoricalPrice { date: "2024-01-02".to_string(), close: 110.0 },
-            HistoricalPrice { date: "2024-01-03".to_string(), close: 120.0 },
+            HistoricalPrice {
+                date: "2024-01-01".to_string(),
+                close: 100.0,
+            },
+            HistoricalPrice {
+                date: "2024-01-02".to_string(),
+                close: 110.0,
+            },
+            HistoricalPrice {
+                date: "2024-01-03".to_string(),
+                close: 120.0,
+            },
         ];
         let series = QuantAnalyzer::compute_drawdown_series(&prices);
         assert_eq!(series.len(), 3);
@@ -1516,8 +1666,16 @@ mod tests {
     #[test]
     fn test_portfolio_metrics_with_holdings() {
         let holdings = vec![
-            ("AAPL".to_string(), 0.5, generate_test_prices(50, 150.0, 0.001)),
-            ("MSFT".to_string(), 0.5, generate_test_prices(50, 300.0, 0.002)),
+            (
+                "AAPL".to_string(),
+                0.5,
+                generate_test_prices(50, 150.0, 0.001),
+            ),
+            (
+                "MSFT".to_string(),
+                0.5,
+                generate_test_prices(50, 300.0, 0.002),
+            ),
         ];
         let result = QuantAnalyzer::calculate_portfolio_metrics(&holdings);
         assert!(result.contains_key("portfolio_return"));
@@ -1585,10 +1743,7 @@ mod tests {
         // generate_dashboard_data with 2 assets exercises compute_portfolio_dashboard_metrics
         let prices_a = generate_test_prices(60, 100.0, 0.002);
         let prices_b = generate_test_prices(60, 200.0, 0.001);
-        let assets_data = vec![
-            ("A".to_string(), prices_a),
-            ("B".to_string(), prices_b),
-        ];
+        let assets_data = vec![("A".to_string(), prices_a), ("B".to_string(), prices_b)];
         let dashboard = QuantAnalyzer::generate_dashboard_data(assets_data);
         let pm = &dashboard.portfolio_metrics;
         assert!(pm.volatility >= 0.0);
@@ -1611,11 +1766,26 @@ mod tests {
     fn test_metrics_few_prices_no_daily_returns() {
         // Covers line 231: returns.len() < 10 → daily_returns = None
         let prices = vec![
-            HistoricalPrice { date: "2024-01-01".to_string(), close: 100.0 },
-            HistoricalPrice { date: "2024-01-02".to_string(), close: 101.0 },
-            HistoricalPrice { date: "2024-01-03".to_string(), close: 102.0 },
-            HistoricalPrice { date: "2024-01-04".to_string(), close: 103.0 },
-            HistoricalPrice { date: "2024-01-05".to_string(), close: 104.0 },
+            HistoricalPrice {
+                date: "2024-01-01".to_string(),
+                close: 100.0,
+            },
+            HistoricalPrice {
+                date: "2024-01-02".to_string(),
+                close: 101.0,
+            },
+            HistoricalPrice {
+                date: "2024-01-03".to_string(),
+                close: 102.0,
+            },
+            HistoricalPrice {
+                date: "2024-01-04".to_string(),
+                close: 103.0,
+            },
+            HistoricalPrice {
+                date: "2024-01-05".to_string(),
+                close: 104.0,
+            },
         ];
         let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
         // With 5 prices we get 4 returns which is < 10 → daily_returns should be None
@@ -1651,9 +1821,11 @@ mod tests {
     #[test]
     fn test_portfolio_metrics_zero_weight() {
         // Covers line 654: total_weight <= 0.0 → return empty metrics
-        let holdings = vec![
-            ("AAPL".to_string(), 0.0, generate_test_prices(50, 100.0, 0.001)),
-        ];
+        let holdings = vec![(
+            "AAPL".to_string(),
+            0.0,
+            generate_test_prices(50, 100.0, 0.001),
+        )];
         let result = QuantAnalyzer::calculate_portfolio_metrics(&holdings);
         assert!(result.is_empty());
     }
@@ -1661,10 +1833,12 @@ mod tests {
     #[test]
     fn test_calculate_metrics_flat_prices_zero_sharpe() {
         // Covers line 190: sharpe_ratio = 0.0 when std_dev <= 1e-10 (all prices identical)
-        let prices: Vec<HistoricalPrice> = (0..15).map(|i| HistoricalPrice {
-            date: format!("2024-01-{:02}", i + 1),
-            close: 100.0, // All same → returns = 0 → std_dev = 0
-        }).collect();
+        let prices: Vec<HistoricalPrice> = (0..15)
+            .map(|i| HistoricalPrice {
+                date: format!("2024-01-{:02}", i + 1),
+                close: 100.0, // All same → returns = 0 → std_dev = 0
+            })
+            .collect();
         let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
         assert!((metrics.sharpe_ratio - 0.0).abs() < f64::EPSILON);
     }
@@ -1672,10 +1846,12 @@ mod tests {
     #[test]
     fn test_calculate_metrics_few_prices_no_daily_returns() {
         // Covers line 231: daily_returns = None when returns.len() < 10 (3-10 prices)
-        let prices: Vec<HistoricalPrice> = (0..5).map(|i| HistoricalPrice {
-            date: format!("2024-01-{:02}", i + 1),
-            close: 100.0 + i as f64,
-        }).collect();
+        let prices: Vec<HistoricalPrice> = (0..5)
+            .map(|i| HistoricalPrice {
+                date: format!("2024-01-{:02}", i + 1),
+                close: 100.0 + i as f64,
+            })
+            .collect();
         let metrics = QuantAnalyzer::calculate_metrics("TEST", &prices);
         // 4 returns < 10 → daily_returns = None
         assert!(metrics.daily_returns.is_none());
@@ -1690,8 +1866,11 @@ mod tests {
         let bins = QuantAnalyzer::compute_returns_distribution(&returns);
         // All bins should have normal_curve = 0.0 since std_dev ≈ 2e-11 < 1e-10
         for bin in &bins {
-            assert!((bin.normal_curve - 0.0).abs() < f64::EPSILON,
-                "Expected normal_curve = 0.0, got {}", bin.normal_curve);
+            assert!(
+                (bin.normal_curve - 0.0).abs() < f64::EPSILON,
+                "Expected normal_curve = 0.0, got {}",
+                bin.normal_curve
+            );
         }
     }
 }

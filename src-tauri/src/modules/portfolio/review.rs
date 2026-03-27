@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 /// Yearly review checklist
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,10 +33,7 @@ pub struct ReviewGenerator;
 
 impl ReviewGenerator {
     /// Generate a comprehensive yearly review checklist
-    pub fn generate_yearly_review(
-        portfolio_name: &str,
-        year: i32,
-    ) -> YearlyReview {
+    pub fn generate_yearly_review(portfolio_name: &str, year: i32) -> YearlyReview {
         let checklist = Self::create_checklist();
         let summary = Self::calculate_summary(&checklist);
         let recommendations = Self::generate_recommendations(&checklist);
@@ -64,7 +61,8 @@ impl ReviewGenerator {
                 category: "Strategy".to_string(),
                 question: "Are factor weights still appropriate?".to_string(),
                 status: "REVIEW".to_string(),
-                notes: "Consider if emphasis on quality/value/momentum needs adjustment".to_string(),
+                notes: "Consider if emphasis on quality/value/momentum needs adjustment"
+                    .to_string(),
             },
             ReviewItem {
                 category: "Strategy".to_string(),
@@ -72,7 +70,6 @@ impl ReviewGenerator {
                 status: "REVIEW".to_string(),
                 notes: "Review exchanges, sectors, and exclusions".to_string(),
             },
-
             // Performance
             ReviewItem {
                 category: "Performance".to_string(),
@@ -92,7 +89,6 @@ impl ReviewGenerator {
                 status: "REVIEW".to_string(),
                 notes: "Identify holdings that consistently lag targets".to_string(),
             },
-
             // Portfolio Construction
             ReviewItem {
                 category: "Portfolio".to_string(),
@@ -112,7 +108,6 @@ impl ReviewGenerator {
                 status: "REVIEW".to_string(),
                 notes: "Too frequent (high turnover) or too infrequent (large drift)?".to_string(),
             },
-
             // Data Quality
             ReviewItem {
                 category: "Data".to_string(),
@@ -126,7 +121,6 @@ impl ReviewGenerator {
                 status: "REVIEW".to_string(),
                 notes: "Check for missing fields or stale fundamental data".to_string(),
             },
-
             // Process
             ReviewItem {
                 category: "Process".to_string(),
@@ -140,7 +134,6 @@ impl ReviewGenerator {
                 status: "REVIEW".to_string(),
                 notes: "Review decision log for learning opportunities".to_string(),
             },
-
             // Risk Management
             ReviewItem {
                 category: "Risk".to_string(),
@@ -154,7 +147,6 @@ impl ReviewGenerator {
                 status: "REVIEW".to_string(),
                 notes: "Correlation analysis, number of holdings appropriate".to_string(),
             },
-
             // Tax & Compliance
             ReviewItem {
                 category: "Tax".to_string(),
@@ -173,9 +165,18 @@ impl ReviewGenerator {
 
     fn calculate_summary(checklist: &[ReviewItem]) -> ReviewSummary {
         let total_items = checklist.len();
-        let passed = checklist.iter().filter(|item| item.status == "PASS").count();
-        let needs_review = checklist.iter().filter(|item| item.status == "REVIEW").count();
-        let needs_action = checklist.iter().filter(|item| item.status == "ACTION_NEEDED").count();
+        let passed = checklist
+            .iter()
+            .filter(|item| item.status == "PASS")
+            .count();
+        let needs_review = checklist
+            .iter()
+            .filter(|item| item.status == "REVIEW")
+            .count();
+        let needs_action = checklist
+            .iter()
+            .filter(|item| item.status == "ACTION_NEEDED")
+            .count();
 
         let pass_rate = (passed as f64 / total_items as f64) * 100.0;
         let overall_health = if pass_rate > 80.0 {
@@ -200,11 +201,13 @@ impl ReviewGenerator {
     fn generate_recommendations(checklist: &[ReviewItem]) -> Vec<String> {
         let mut recommendations = Vec::new();
 
-        let needs_action_count = checklist.iter()
+        let needs_action_count = checklist
+            .iter()
             .filter(|item| item.status == "ACTION_NEEDED")
             .count();
 
-        let needs_review_count = checklist.iter()
+        let needs_review_count = checklist
+            .iter()
             .filter(|item| item.status == "REVIEW")
             .count();
 
@@ -216,24 +219,25 @@ impl ReviewGenerator {
         }
 
         if needs_review_count > 5 {
-            recommendations.push(
-                "Schedule dedicated review session for pending items".to_string()
-            );
+            recommendations.push("Schedule dedicated review session for pending items".to_string());
         }
 
         // Strategy-specific recommendations
-        let strategy_reviews = checklist.iter()
+        let strategy_reviews = checklist
+            .iter()
             .filter(|item| item.category == "Strategy" && item.status == "REVIEW")
             .count();
 
         if strategy_reviews >= 2 {
             recommendations.push(
-                "Consider running backtest with updated parameters before making strategy changes".to_string()
+                "Consider running backtest with updated parameters before making strategy changes"
+                    .to_string(),
             );
         }
 
         // Performance recommendations
-        let performance_issues = checklist.iter()
+        let performance_issues = checklist
+            .iter()
             .filter(|item| item.category == "Performance" && item.status != "PASS")
             .count();
 
@@ -244,24 +248,20 @@ impl ReviewGenerator {
         }
 
         // Data quality recommendations
-        let data_issues = checklist.iter()
+        let data_issues = checklist
+            .iter()
             .filter(|item| item.category == "Data" && item.status != "PASS")
             .count();
 
         if data_issues > 0 {
-            recommendations.push(
-                "🔄 Schedule data refresh and validation cycle".to_string()
-            );
+            recommendations.push("🔄 Schedule data refresh and validation cycle".to_string());
         }
 
         // General recommendations
-        recommendations.push(
-            "📝 Update plan versioning with any changes made during review".to_string()
-        );
+        recommendations
+            .push("📝 Update plan versioning with any changes made during review".to_string());
 
-        recommendations.push(
-            "💾 Export portfolio snapshot for historical records".to_string()
-        );
+        recommendations.push("💾 Export portfolio snapshot for historical records".to_string());
 
         recommendations
     }
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_generate_yearly_review() {
         let review = ReviewGenerator::generate_yearly_review("Test Portfolio", 2024);
-        
+
         assert_eq!(review.year, 2024);
         assert!(!review.checklist.is_empty());
         assert!(review.summary.total_items > 0);
@@ -308,13 +308,28 @@ mod tests {
     fn make_items(pass: usize, review: usize, action: usize) -> Vec<ReviewItem> {
         let mut items = Vec::new();
         for _ in 0..pass {
-            items.push(ReviewItem { category: "T".into(), question: "Q".into(), status: "PASS".into(), notes: "".into() });
+            items.push(ReviewItem {
+                category: "T".into(),
+                question: "Q".into(),
+                status: "PASS".into(),
+                notes: "".into(),
+            });
         }
         for _ in 0..review {
-            items.push(ReviewItem { category: "T".into(), question: "Q".into(), status: "REVIEW".into(), notes: "".into() });
+            items.push(ReviewItem {
+                category: "T".into(),
+                question: "Q".into(),
+                status: "REVIEW".into(),
+                notes: "".into(),
+            });
         }
         for _ in 0..action {
-            items.push(ReviewItem { category: "T".into(), question: "Q".into(), status: "ACTION_NEEDED".into(), notes: "".into() });
+            items.push(ReviewItem {
+                category: "T".into(),
+                question: "Q".into(),
+                status: "ACTION_NEEDED".into(),
+                notes: "".into(),
+            });
         }
         items
     }

@@ -35,8 +35,7 @@ fn derive_machine_key() -> [u8; 32] {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
-    let hostname = whoami::fallible::hostname()
-        .unwrap_or_else(|_| "flowfolio-default".to_string());
+    let hostname = whoami::fallible::hostname().unwrap_or_else(|_| "flowfolio-default".to_string());
     let username = whoami::username();
 
     let mut hasher = DefaultHasher::new();
@@ -58,8 +57,8 @@ fn derive_machine_key() -> [u8; 32] {
 /// Output format: base64( nonce[12] || ciphertext )
 pub fn encrypt_string(plaintext: &str) -> Result<String, String> {
     let key = derive_machine_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let ciphertext = cipher
         .encrypt(&nonce, plaintext.as_bytes())
@@ -82,8 +81,8 @@ pub fn decrypt_string(encrypted: &str) -> Result<String, String> {
     let (nonce_bytes, ciphertext) = combined.split_at(12);
     let nonce = Nonce::from_slice(nonce_bytes);
     let key = derive_machine_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
     let plaintext = cipher
         .decrypt(nonce, ciphertext)
         .map_err(|e| format!("Decryption failed: {}", e))?;

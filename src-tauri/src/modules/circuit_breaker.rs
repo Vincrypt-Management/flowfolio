@@ -3,11 +3,11 @@
 
 #![allow(dead_code)]
 
+use dashmap::DashMap;
+use parking_lot::RwLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use parking_lot::RwLock;
-use dashmap::DashMap;
 
 /// Circuit breaker states
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -75,7 +75,7 @@ impl CircuitBreaker {
     /// Check if request should be allowed
     pub fn can_execute(&self) -> bool {
         let state = *self.state.read();
-        
+
         match state {
             CircuitState::Closed => true,
             CircuitState::Open => {
@@ -97,9 +97,9 @@ impl CircuitBreaker {
     /// Record a successful request
     pub fn record_success(&self) {
         self.total_requests.fetch_add(1, Ordering::SeqCst);
-        
+
         let mut state = self.state.write();
-        
+
         match *state {
             CircuitState::Closed => {
                 // Reset failure count on success
@@ -123,10 +123,10 @@ impl CircuitBreaker {
     pub fn record_failure(&self) {
         self.total_requests.fetch_add(1, Ordering::SeqCst);
         self.total_failures.fetch_add(1, Ordering::SeqCst);
-        
+
         let mut state = self.state.write();
         *self.last_failure_time.write() = Some(Instant::now());
-        
+
         match *state {
             CircuitState::Closed => {
                 let failures = self.failure_count.fetch_add(1, Ordering::SeqCst) + 1;
@@ -231,7 +231,7 @@ impl CircuitBreakerManager {
         F: std::future::Future<Output = Result<T, E>>,
     {
         let breaker = self.get_or_create(name);
-        
+
         if !breaker.can_execute() {
             return Err(CircuitBreakerError::Open {
                 name: name.to_string(),
@@ -561,7 +561,8 @@ mod tests {
 
     #[test]
     fn test_circuit_breaker_error_display_service_error() {
-        let err: CircuitBreakerError<String> = CircuitBreakerError::ServiceError("timeout".to_string());
+        let err: CircuitBreakerError<String> =
+            CircuitBreakerError::ServiceError("timeout".to_string());
         let msg = format!("{}", err);
         assert!(msg.contains("timeout"));
     }
@@ -611,7 +612,9 @@ mod tests {
     async fn test_circuit_breaker_manager_execute_service_error() {
         // Covers manager execute() error path (lines 244-246)
         let manager = CircuitBreakerManager::new();
-        let result = manager.execute("svc", async { Err::<i32, &str>("fail") }).await;
+        let result = manager
+            .execute("svc", async { Err::<i32, &str>("fail") })
+            .await;
         assert!(result.is_err());
         match result {
             Err(CircuitBreakerError::ServiceError(e)) => assert_eq!(e, "fail"),
@@ -629,7 +632,9 @@ mod tests {
         };
         let manager = CircuitBreakerManager::with_config(config);
         // Open the circuit
-        let _ = manager.execute("svc", async { Err::<i32, &str>("fail") }).await;
+        let _ = manager
+            .execute("svc", async { Err::<i32, &str>("fail") })
+            .await;
         // Now it should be rejected
         let result = manager.execute("svc", async { Ok::<i32, &str>(1) }).await;
         assert!(result.is_err());
@@ -695,7 +700,9 @@ mod tests {
     fn test_circuit_breaker_error_source_open() {
         // Covers std::error::Error source() for Open variant (line 298 - returns None)
         use std::error::Error;
-        let err: CircuitBreakerError<std::io::Error> = CircuitBreakerError::Open { name: "x".to_string() };
+        let err: CircuitBreakerError<std::io::Error> = CircuitBreakerError::Open {
+            name: "x".to_string(),
+        };
         assert!(err.source().is_none());
     }
 
