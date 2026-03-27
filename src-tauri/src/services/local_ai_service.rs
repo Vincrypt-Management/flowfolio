@@ -3,14 +3,16 @@
 // No Ollama, no external process. On first use:
 //   1. Downloads `Qwen2.5-1.5B-Instruct-Q4_K_M.gguf` (~1 GB) from HuggingFace.
 //      Model is Apache 2.0 — no login or token required.
-//   2. Loads the GGUF into llama.cpp (Metal-accelerated on macOS).
+//   2. Loads the GGUF into llama.cpp (Metal-accelerated on macOS and iOS).
 //   3. Runs inference in a dedicated blocking thread (actor pattern).
 //
 // Used as a fallback when OpenRouter is unavailable, keeping the app fully
 // functional offline after the initial download.
 
 use futures::StreamExt;
+#[cfg(not(target_os = "android"))]
 use llama_cpp::{LlamaModel, LlamaParams, SessionParams};
+#[cfg(not(target_os = "android"))]
 use llama_cpp::standard_sampler::StandardSampler;
 use reqwest::Client;
 use std::path::PathBuf;
@@ -93,6 +95,8 @@ impl LocalAiService {
         let tx_cell = self.tx.clone();
 
         tokio::spawn(async move {
+            #[cfg(not(target_os = "android"))]
+            {
             // 1. Resolve which model file to use — bundled copy first, download fallback.
             let model_path = if let Some(ref bp) = bundled_model {
                 if let Ok(meta) = tokio::fs::metadata(bp).await {
@@ -167,6 +171,7 @@ impl LocalAiService {
             })
             .await
             .ok();
+            } // end #[cfg(not(target_os = "android"))]
         });
     }
 
@@ -208,6 +213,7 @@ impl Default for LocalAiService {
 
 // ─── Inference ────────────────────────────────────────────────────────────────
 
+#[cfg(not(target_os = "android"))]
 fn run_inference(model: &LlamaModel, prompt: &str) -> Result<String, String> {
     let mut session = model
         .create_session(SessionParams::default())

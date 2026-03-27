@@ -30,6 +30,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+tauri-plugin-os = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-stronghold = "2"
 tauri-plugin-store = "2"
@@ -74,8 +75,8 @@ whoami = "1.5"                                           # Machine identity for 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 llama_cpp = { version = "0.3", features = ["metal"] }
 
-# All other platforms (Linux, Windows, Android): CPU-only inference
-[target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
+# Other desktop platforms (Linux, Windows): CPU-only inference (Android excluded)
+[target.'cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))'.dependencies]
 llama_cpp = { version = "0.3" }
 
 [target.'cfg(target_os = "android")'.dependencies]
