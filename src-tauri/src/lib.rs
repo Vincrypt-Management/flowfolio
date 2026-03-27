@@ -280,6 +280,7 @@ pub fn run() {
 
             get_api_key_statuses,
             save_api_keys,
+            load_keys_from_store,
             // Stronghold Vault
             vault_exists,
             vault_is_unlocked,
@@ -365,6 +366,14 @@ pub fn run() {
                 let bundled_model = app_handle.path().resource_dir().ok()
                     .map(|r| r.join("models").join("Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"));
                 LOCAL_AI_SERVICE.init_in_background(bundled_model, download_dir);
+            });
+
+            // Load user-configured API keys from store into runtime so data providers can use them
+            let app_handle_for_keys = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::api::commands::settings::load_keys_from_store(app_handle_for_keys).await {
+                    tracing::warn!("Failed to load API keys from store at startup: {}", e);
+                }
             });
 
             Ok(())
