@@ -15,6 +15,17 @@ use tauri_plugin_store::StoreExt;
 
 // ==================== API KEY MANAGEMENT ====================
 
+/// Write API keys from the store into RUNTIME_KEYS so data providers can use them.
+/// Only non-empty values are written.
+pub(crate) fn populate_runtime_keys(keys: HashMap<String, String>) {
+    let mut guard = crate::RUNTIME_KEYS.write();
+    for (k, v) in keys {
+        if !v.is_empty() {
+            guard.insert(k, v);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn get_api_key_statuses(app: tauri::AppHandle) -> Result<HashMap<String, bool>, String> {
     let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
@@ -43,6 +54,25 @@ pub async fn save_api_keys(
         }
     }
     store.save().map_err(|e| e.to_string())?;
+    // Also update in-memory runtime keys so data providers use them immediately
+    populate_runtime_keys(keys);
+    Ok(())
+}
+
+/// Load all API keys from the JSON store into RUNTIME_KEYS.
+/// Called once at app startup so data providers can use store-saved keys immediately.
+#[tauri::command]
+pub async fn load_keys_from_store(app: tauri::AppHandle) -> Result<(), String> {
+    let store = app.store(API_KEYS_STORE).map_err(|e| e.to_string())?;
+    let mut keys = HashMap::new();
+    for &key_name in API_KEY_NAMES {
+        if let Some(serde_json::Value::String(val)) = store.get(key_name) {
+            if !val.is_empty() {
+                keys.insert(key_name.to_string(), val);
+            }
+        }
+    }
+    populate_runtime_keys(keys);
     Ok(())
 }
 
@@ -345,4 +375,32 @@ pub async fn import_data_bundle(bundle_json: String) -> Result<serde_json::Value
             "has_plan": has_plan,
         }
     }))
+}
+
+#[cfg(test)]
+mod populate_keys_tests {
+    use super::*;
+
+    #[test]
+    fn test_populate_runtime_keys_from_map() {
+        use crate::RUNTIME_KEYS;
+        let mut keys = std::collections::HashMap::new();
+        keys.insert("FINNHUB_API_KEY".to_string(), "test_key_abc".to_string());
+        populate_runtime_keys(keys);
+        let guard = RUNTIME_KEYS.read();
+        assert_eq!(guard.get("FINNHUB_API_KEY"), Some(&"test_key_abc".to_string()));
+        // Cleanup
+        drop(guard);
+        RUNTIME_KEYS.write().remove("FINNHUB_API_KEY");
+    }
+
+    #[test]
+    fn test_populate_runtime_keys_skips_empty_values() {
+        use crate::RUNTIME_KEYS;
+        let mut keys = std::collections::HashMap::new();
+        keys.insert("SOME_EMPTY_KEY_XYZ".to_string(), "".to_string());
+        populate_runtime_keys(keys);
+        let guard = RUNTIME_KEYS.read();
+        assert_eq!(guard.get("SOME_EMPTY_KEY_XYZ"), None);
+    }
 }
