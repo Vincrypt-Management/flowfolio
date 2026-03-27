@@ -259,7 +259,7 @@ jobs:
       - name: Build APK
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-        run: npx tauri android build --apk
+        run: npx tauri android build
 
       - name: Rename artifacts
         run: |

@@ -71,12 +71,12 @@ whoami = "1.5"                                           # Machine identity for 
 
 # Mobile platform support
 
-# macOS and iOS: use Metal GPU acceleration for llama.cpp
-[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+# Apple Silicon (ARM64) and iOS: Metal GPU — Metal shaders are arm64-only, x86_64 macOS gets CPU
+[target.'cfg(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios"))'.dependencies]
 llama_cpp = { version = "0.3", features = ["metal"] }
 
-# Other desktop platforms (Linux, Windows): CPU-only inference (Android excluded)
-[target.'cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))'.dependencies]
+# x86_64 macOS, Linux, Windows: CPU-only inference (Android excluded entirely)
+[target.'cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios", target_os = "android")))'.dependencies]
 llama_cpp = { version = "0.3" }
 
 [target.'cfg(target_os = "android")'.dependencies]
