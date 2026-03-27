@@ -16,41 +16,40 @@ pub fn health_check() -> String {
 /// Get API provider status — returns configured/not-configured state for each provider.
 #[tauri::command]
 pub fn get_provider_status() -> String {
-    use crate::core::encrypted_env::get_env_var;
     let providers = serde_json::json!([
         {
             "name": "Alpaca",
-            "status": if get_env_var("ALPACA_API_KEY").is_some() && get_env_var("ALPACA_SECRET_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("ALPACA_API_KEY").is_some() && crate::get_api_key("ALPACA_SECRET_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 1
         },
         {
             "name": "Finnhub",
-            "status": if get_env_var("FINNHUB_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("FINNHUB_API_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 2
         },
         {
             "name": "FMP",
-            "status": if get_env_var("FMP_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("FMP_API_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 2
         },
         {
             "name": "Tiingo",
-            "status": if get_env_var("TIINGO_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("TIINGO_API_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 2
         },
         {
             "name": "Twelve Data",
-            "status": if get_env_var("TWELVE_DATA_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("TWELVE_DATA_API_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 2
         },
         {
             "name": "Polygon",
-            "status": if get_env_var("POLYGON_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("POLYGON_API_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 3
         },
         {
             "name": "Alpha Vantage",
-            "status": if get_env_var("ALPHA_VANTAGE_API_KEY").is_some() { "configured" } else { "not_configured" },
+            "status": if crate::get_api_key("ALPHA_VANTAGE_API_KEY").is_some() { "configured" } else { "not_configured" },
             "tier": 3
         },
         {
@@ -215,12 +214,11 @@ pub async fn test_data_connection() -> Result<serde_json::Value, String> {
 
     let cache_stats = ENHANCED_MARKET_SERVICE.get_cache_stats().await;
 
-    use crate::core::encrypted_env::get_env_var;
-    let alpaca_configured = get_env_var("ALPACA_API_KEY").is_some();
-    let finnhub_configured = get_env_var("FINNHUB_API_KEY").is_some();
-    let fmp_configured = get_env_var("FMP_API_KEY").is_some();
-    let polygon_configured = get_env_var("POLYGON_API_KEY").is_some();
-    let alphavantage_configured = get_env_var("ALPHA_VANTAGE_API_KEY").is_some();
+    let alpaca_configured = crate::get_api_key("ALPACA_API_KEY").is_some();
+    let finnhub_configured = crate::get_api_key("FINNHUB_API_KEY").is_some();
+    let fmp_configured = crate::get_api_key("FMP_API_KEY").is_some();
+    let polygon_configured = crate::get_api_key("POLYGON_API_KEY").is_some();
+    let alphavantage_configured = crate::get_api_key("ALPHA_VANTAGE_API_KEY").is_some();
 
     let result = json!({
         "status": if price > 0.0 { "connected" } else { "failed" },

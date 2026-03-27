@@ -42,6 +42,8 @@ pub(crate) fn populate_runtime_keys(keys: HashMap<String, String>) {
         // Translate store name to env-var name; skip keys without a known mapping
         if let Some(&(_, env_key)) = STORE_TO_ENV_KEY.iter().find(|&&(sk, _)| sk == store_key) {
             guard.insert(env_key.to_string(), value);
+        } else {
+            tracing::warn!("populate_runtime_keys: no env-var mapping for store key '{}'", store_key);
         }
     }
 }
