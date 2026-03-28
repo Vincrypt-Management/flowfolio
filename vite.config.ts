@@ -1,29 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { visualizer } from 'rollup-plugin-visualizer';
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
-export default defineConfig(async () => {
-  let plugins: any[] = [react()];
-
-  try {
-    const { visualizer } = await import("rollup-plugin-visualizer");
-    plugins.push(
-      visualizer({
-        filename: 'dist/bundle-report.html',
-        open: false,
-        gzipSize: true,
-        brotliSize: false,
-      })
-    );
-  } catch (e) {
-    console.log('Info: rollup-plugin-visualizer not installed. Install with: npm install --save-dev rollup-plugin-visualizer');
-  }
-
-  return {
-    plugins,
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      filename: 'dist/bundle-report.html',
+      open: false,
+      gzipSize: true,
+      brotliSize: false,
+    }),
+  ],
 
     test: {
       globals: true,
@@ -77,5 +69,4 @@ export default defineConfig(async () => {
         ignored: ["**/src-tauri/**"],
       },
     },
-  };
 });
