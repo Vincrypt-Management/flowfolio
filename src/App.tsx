@@ -20,6 +20,9 @@ import { UniverseTab } from './features/universe/UniverseTab';
 import { saveFile } from "./shared/utils/fileSystem";
 import { useUserMode } from "./contexts/UserModeContext";
 import { useAppState, actions } from "./hooks/useAppState";
+import { useMediaQuery } from './shared/hooks/index';
+import { useSwipeNav } from './hooks/useSwipeNav';
+import { MobileNav } from './components/MobileNav';
 import type { Universe, SymbolScore, ScoringConfig } from "./hooks/useAppState";
 import {
   LayoutDashboard,
@@ -87,6 +90,14 @@ function App() {
   const { isAdvanced, toggleMode } = useUserMode();
   const { handleOAuthCallback } = useAuth();
   const { state, dispatch } = useAppState();
+  const isMobileView = useMediaQuery('(max-width: 768px)');
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  useSwipeNav(
+    mainContentRef,
+    state.activeTab,
+    (tab) => dispatch(actions.setActiveTab(tab)),
+    isMobileView,
+  );
 
   const { isShown: isTooltipShown, dismiss: dismissTooltip, getContent: getTooltipContent } =
     useSidebarTooltips(!!state.onboardingComplete);
@@ -810,9 +821,21 @@ function App() {
         aria-hidden="true"
       />
 
-      {renderSidebar()}
+      {isMobileView
+        ? <MobileNav
+            activeTab={state.activeTab}
+            onNavigate={(tab) => dispatch(actions.setActiveTab(tab))}
+          />
+        : renderSidebar()
+      }
 
-      <main id="main-content" className="main-content" role="main">
+      <main
+        id="main-content"
+        className="main-content"
+        role="main"
+        ref={mainContentRef}
+        style={isMobileView ? { paddingBottom: '72px' } : undefined}
+      >
         <RateLimitBanner />
         {state.activeTab === "dashboard" && (
           <TabErrorBoundary tabName="Dashboard">

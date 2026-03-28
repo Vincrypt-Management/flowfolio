@@ -3,53 +3,6 @@
  * Goal: Usable on mobile, not beautiful — that's 0.4.1
  */
 
-/* ─── Layout: sidebar becomes bottom nav ─── */
-@media (max-width: 768px) {
-  .app-layout {
-    flex-direction: column;
-  }
-
-  .sidebar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: auto;
-    width: 100%;
-    height: 64px;
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-    z-index: 100;
-    border-top: 1px solid var(--border-color);
-    border-right: none;
-    padding: 0 8px;
-    align-items: center;
-    gap: 0;
-  }
-
-  .sidebar-item {
-    flex: 1;
-    flex-direction: column;
-    min-width: 44px;
-    height: 56px;
-    font-size: 10px;
-    gap: 2px;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .sidebar-item-label {
-    display: block;
-    font-size: 9px;
-  }
-
-  /* Main content area gets bottom padding for the nav bar */
-  .main-content {
-    padding-bottom: 72px;
-  }
-}
-
 /* ─── Cards: stack vertically ─── */
 @media (max-width: 768px) {
   .dashboard-grid,
@@ -69,7 +22,6 @@
   .btn-primary,
   .btn-secondary,
   .btn-icon,
-  .sidebar-item,
   [role="button"],
   .tab-item,
   select,
