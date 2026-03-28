@@ -12,10 +12,10 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   CartesianGrid,
   Legend,
 } from 'recharts';
+import { TouchableChart } from './TouchableChart';
 import { TrendingUp, Loader2 } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
@@ -343,7 +343,7 @@ export function PortfolioPerformanceChart({
                 <span>Loading {benchmark}…</span>
               </div>
             )}
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
@@ -410,7 +410,7 @@ export function PortfolioPerformanceChart({
                   />
                 )}
               </ComposedChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
         )}
       </div>

@@ -12,8 +12,8 @@ import {
   YAxis,
   Tooltip,
   Legend,
-  ResponsiveContainer,
 } from 'recharts';
+import { TouchableChart } from './TouchableChart';
 import {
   ArrowRightLeft,
   Loader2,
@@ -388,7 +388,7 @@ function ComparisonMode({
             )}
           </div>
           <div className="chart-container">
-            <ResponsiveContainer width="100%" height={360}>
+            <TouchableChart height={360}>
               <LineChart data={chartData}>
                 <XAxis
                   dataKey="date"
@@ -458,7 +458,7 @@ function ComparisonMode({
                   name="b"
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
         </div>
       )}

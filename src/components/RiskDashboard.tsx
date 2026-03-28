@@ -28,8 +28,8 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
 } from 'recharts';
+import { TouchableChart } from './TouchableChart';
 import { ExposureChart } from './ExposureChart';
 import { ScenarioAnalysis } from './ScenarioAnalysis';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
@@ -579,7 +579,7 @@ function RiskDashboard({
             Drawdown Timeline
           </h3>
           <div className="risk-drawdown-chart">
-            <ResponsiveContainer width="100%" height={200}>
+            <TouchableChart height={200}>
               <AreaChart data={drawdownData}>
                 <defs>
                   <linearGradient id="drawdownGrad" x1="0" y1="0" x2="0" y2="1">
@@ -619,7 +619,7 @@ function RiskDashboard({
                   fill="url(#drawdownGrad)"
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
         </div>
       )}

@@ -12,10 +12,10 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   Cell,
   ReferenceLine,
 } from 'recharts';
+import { TouchableChart } from './TouchableChart';
 import { FlaskConical, ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
@@ -445,7 +445,7 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
       {/* Per-holding bar chart */}
       {chartData.length > 0 && (
         <div className="scenario-chart-wrap">
-          <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 36)}>
+          <TouchableChart height={Math.max(160, chartData.length * 36)}>
             <BarChart
               data={chartData}
               layout="vertical"
@@ -478,7 +478,7 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
                 ))}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
+          </TouchableChart>
         </div>
       )}
 

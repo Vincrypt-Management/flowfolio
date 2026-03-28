@@ -6,7 +6,6 @@
 
 import { useMemo } from 'react';
 import {
-  ResponsiveContainer,
   ComposedChart,
   AreaChart,
   ScatterChart,
@@ -28,6 +27,7 @@ import {
   PolarRadiusAxis,
   Radar,
 } from 'recharts';
+import { TouchableChart } from '../TouchableChart';
 import {
   Activity,
   TrendingUp,
@@ -460,7 +460,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card distribution-chart">
           <h3><BarChart3 size={18} /> Returns Distribution</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ComposedChart data={returnsDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="bin" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
@@ -482,7 +482,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   name="Normal Distribution"
                 />
               </ComposedChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Skewness:</span>
@@ -496,7 +496,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card drawdown-chart">
           <h3><TrendingDown size={18} /> Underwater (Drawdown) Chart</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <AreaChart data={drawdownData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
@@ -525,7 +525,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   fillOpacity={0.3}
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Max Drawdown:</span>
@@ -541,7 +541,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card scatter-chart">
           <h3><Target size={18} /> Risk-Return Profile</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ScatterChart>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
@@ -582,7 +582,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   ))}
                 </Scatter>
               </ScatterChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="scatter-legend">
             <span className="legend-item">
@@ -604,7 +604,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card radar-chart">
           <h3><Gauge size={18} /> Multi-Factor Comparison</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={400}>
+            <TouchableChart height={400}>
               <RadarChart data={radarData}>
                 <PolarGrid stroke="var(--border)" />
                 <PolarAngleAxis dataKey="metric" stroke="var(--text-muted)" tick={{ fontSize: 12 }} />
@@ -629,7 +629,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   }}
                 />
               </RadarChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
         </div>
 
@@ -745,7 +745,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card rolling-chart">
           <h3><LineChartIcon size={18} /> Rolling 30-Day Sharpe Ratio</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <LineChart data={rollingMetrics}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
@@ -770,7 +770,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   name="Rolling Sharpe"
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Current:</span>
@@ -786,7 +786,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card rolling-chart">
           <h3><Activity size={18} /> Rolling 30-Day Volatility</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <AreaChart data={rollingMetrics}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="date" stroke="var(--text-muted)" tick={{ fontSize: 10 }} />
@@ -810,7 +810,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   name="Volatility"
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Current:</span>
@@ -826,7 +826,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card factor-chart">
           <h3><Layers size={18} /> Factor Exposures (Fama-French + Momentum)</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ComposedChart data={factorExposures} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis type="number" stroke="var(--text-muted)" tick={{ fontSize: 11 }} domain={[-1, 1]} />
@@ -852,7 +852,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   ))}
                 </Bar>
               </ComposedChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Dominant Factor:</span>
@@ -870,7 +870,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card regime-chart">
           <h3><Target size={18} /> Market Regime Performance</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ComposedChart data={regimeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="regime" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
@@ -888,7 +888,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                 <Bar yAxisId="left" dataKey="avgVolatility" fill={COLORS.warning} name="Avg Vol %" />
                 <Line yAxisId="right" type="monotone" dataKey="sharpe" stroke={COLORS.primary} strokeWidth={2} name="Sharpe" />
               </ComposedChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Current Regime:</span>
@@ -904,7 +904,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card frontier-chart">
           <h3><Target size={18} /> Efficient Frontier Analysis</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ScatterChart>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
@@ -947,7 +947,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                   <Cell fill={COLORS.success} />
                 </Scatter>
               </ScatterChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="scatter-legend">
             <span className="legend-item">
@@ -969,7 +969,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
         <div className="chart-card attribution-chart">
           <h3><PieChart size={18} /> Performance Attribution</h3>
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height={320}>
+            <TouchableChart height={320}>
               <ComposedChart data={performanceAttribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="symbol" stroke="var(--text-muted)" tick={{ fontSize: 11 }} />
@@ -993,7 +993,7 @@ export default function QuantDashboard({ assets, portfolioMetrics }: QuantDashbo
                 </Bar>
                 <Bar dataKey="riskContribution" fill={COLORS.warning} name="Risk Contribution" />
               </ComposedChart>
-            </ResponsiveContainer>
+            </TouchableChart>
           </div>
           <div className="chart-insight">
             <span className="insight-label">Top Contributor:</span>

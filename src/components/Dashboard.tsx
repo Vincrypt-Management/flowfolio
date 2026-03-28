@@ -9,9 +9,9 @@ import {
   PieChart as RechartsPieChart,
   Pie,
   Cell,
-  ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { TouchableChart } from './TouchableChart';
 import {
   PieChart,
   Wallet,
@@ -314,7 +314,7 @@ function Dashboard({
             </h3>
             <div className="donut-chart-container">
               {sectorAllocation.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
+                <TouchableChart height={220}>
                   <RechartsPieChart>
                     <Pie
                       data={sectorAllocation as unknown as Array<Record<string, unknown>>}
@@ -336,7 +336,7 @@ function Dashboard({
                     </Pie>
                     <Tooltip content={<DonutTooltip />} />
                   </RechartsPieChart>
-                </ResponsiveContainer>
+                </TouchableChart>
               ) : (
                 <div className="empty-state">No allocation data</div>
               )}
