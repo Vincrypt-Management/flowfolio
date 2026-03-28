@@ -283,7 +283,7 @@ function DataSourcesPage() {
         <div className="card providers-card">
           <h3><Server size={18} /> Market Data Providers</h3>
           <p className="card-description">
-            FlowFolio uses multiple data sources with intelligent failover. Configure API keys in your <code>.env</code> file.
+            FlowFolio uses multiple data sources with intelligent failover. Configure API keys in <strong>Settings → API Keys</strong>.
           </p>
           
           <div className="providers-list">
@@ -330,7 +330,7 @@ function DataSourcesPage() {
               </span>
             </div>
             <p className="integration-desc">
-              Powers AI plan compilation and portfolio insights. Set <code>VITE_OPENROUTER_API_KEY</code> to enable.
+              Powers AI plan compilation and portfolio insights. Add your OpenRouter key in <strong>Settings → API Keys</strong>.
             </p>
           </div>
 
@@ -342,7 +342,7 @@ function DataSourcesPage() {
               </span>
             </div>
             <p className="integration-desc">
-              Paper/live trading integration. Set <code>VITE_ALPACA_API_KEY</code> and <code>VITE_ALPACA_API_SECRET</code>.
+              Paper/live trading integration. Add your Alpaca keys in <strong>Settings → API Keys</strong>.
             </p>
           </div>
         </div>
@@ -388,23 +388,16 @@ function DataSourcesPage() {
         {showAdvanced && (
           <div className="advanced-content">
             <div className="config-instructions">
-              <h4>Environment Variables</h4>
-              <p>Add these to your <code>.env</code> file in the project root:</p>
-              <pre className="env-example">
-{`# Market Data (at least one recommended)
-VITE_ALPACA_API_KEY=your_key
-VITE_ALPACA_API_SECRET=your_secret
-VITE_FINNHUB_API_KEY=your_key
-VITE_FMP_API_KEY=your_key
-VITE_ALPHAVANTAGE_API_KEY=your_key
-VITE_POLYGON_API_KEY=your_key
-
-# AI Features
-VITE_OPENROUTER_API_KEY=your_key
-
-# Trading Mode
-VITE_ALPACA_PAPER_TRADING=true`}
-              </pre>
+              <h4>How to configure API keys</h4>
+              <p>API keys are stored securely on your device. To add or update keys:</p>
+              <ol className="setup-steps">
+                <li>Go to <strong>Settings → API Keys</strong></li>
+                <li>Enter your key for each provider and click <strong>Save API Keys</strong></li>
+                <li>Optionally, set up the <strong>Encrypted Vault</strong> to protect keys with a password</li>
+              </ol>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Keys are stored locally and never sent to any external server. Free-tier keys are sufficient for all features.
+              </p>
             </div>
 
             {healthReport && (

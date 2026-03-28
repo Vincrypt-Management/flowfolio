@@ -10,7 +10,6 @@ import { exportPortfolioToPdf } from "../services/pdfService";
 import { logger } from "../core/logger";
 import { useToast } from "./Toast";
 import { useUserMode } from '../contexts/UserModeContext';
-import { PremiumGate } from './PremiumGate';
 import { 
   Sparkles, 
   RotateCcw, 
@@ -1755,7 +1754,6 @@ Be conversational but professional. Cite specific data points from the portfolio
           </div>
 
           {isAdvanced && chatMode && !isMobileDevice && (
-            <PremiumGate tier="ai">
             <div className="chat-section">
               <div className="chat-header">
                 <h3><MessageSquare size={20} /> Chat with AI about this portfolio</h3>
@@ -1859,7 +1857,6 @@ Be conversational but professional. Cite specific data points from the portfolio
                 </button>
               </div>
             </div>
-            </PremiumGate>
           )}
         </div>
       )}

@@ -5,7 +5,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { UserModeProvider } from "./contexts/UserModeContext";
 import { UserProfileProvider } from "./contexts/UserProfileContext";
 import { AuthProvider } from "./contexts/AuthContext";
-import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import { ToastProvider } from "./components/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CurrencyProvider } from "./contexts/CurrencyContext";
@@ -15,7 +14,6 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ThemeProvider>
       <UserProfileProvider>
       <AuthProvider>
-      <SubscriptionProvider>
       <UserModeProvider>
       <ToastProvider>
       <CurrencyProvider>
@@ -25,7 +23,6 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       </CurrencyProvider>
       </ToastProvider>
       </UserModeProvider>
-      </SubscriptionProvider>
       </AuthProvider>
       </UserProfileProvider>
     </ThemeProvider>
