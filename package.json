@@ -91,6 +91,7 @@
     "playwright": "^1.58.2",
     "prettier": "^3.8.1",
     "remotion": "^4.0.428",
+    "rollup-plugin-visualizer": "^4.2.2",
     "tsx": "^4.21.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.57.1",
