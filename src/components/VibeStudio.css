@@ -2494,13 +2494,21 @@
   color: #ef4444;
 }
 
-/* Mobile: larger range slider thumb and track for touch */
+/* Mobile: native-feel range slider */
 @media (max-width: 768px) {
   input[type="range"] {
     height: 44px;
     -webkit-appearance: none;
     appearance: none;
     padding: 10px 0;
+    touch-action: pan-y;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border-color, #2d3748);
   }
 
   input[type="range"]::-webkit-slider-thumb {
@@ -2509,16 +2517,31 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--primary);
+    background: var(--primary, #6366f1);
+    border: 2px solid var(--primary, #6366f1);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
     cursor: pointer;
+    transition: transform 0.1s ease;
+    margin-top: -11px; /* center on track: (28 - 6) / 2 = 11 */
+  }
+
+  input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.15);
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border-color, #2d3748);
   }
 
   input[type="range"]::-moz-range-thumb {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--primary);
+    background: var(--primary, #6366f1);
+    border: 2px solid var(--primary, #6366f1);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
     cursor: pointer;
-    border: none;
   }
 }

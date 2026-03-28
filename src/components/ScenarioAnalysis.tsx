@@ -565,7 +565,7 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
               <label className="scenario-custom-label">
                 Overall Market
               </label>
-              <div className="scenario-custom-slider-wrap">
+              <div className="scenario-custom-slider-wrap" style={{ touchAction: 'pan-y' }}>
                 <input
                   type="range"
                   min={-50}
@@ -605,7 +605,7 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
                 <label className="scenario-custom-label scenario-custom-label--sector">
                   {sector}
                 </label>
-                <div className="scenario-custom-slider-wrap">
+                <div className="scenario-custom-slider-wrap" style={{ touchAction: 'pan-y' }}>
                   <input
                     type="range"
                     min={-50}
