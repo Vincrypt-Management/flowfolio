@@ -3,7 +3,8 @@
  * Manages watchlists (universes) with symbol tracking, price display, and quick actions
  */
 
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useIsMounted } from '../hooks/useIsMounted';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
@@ -39,6 +40,93 @@ interface WatchlistTabProps {
 interface SymbolPriceData {
   price: number;
   loading: boolean;
+}
+
+interface VirtualSymbolListProps {
+  symbols: string[];
+  prices: Record<string, SymbolPriceData>;
+  onRemove: (symbol: string) => void;
+  onAnalyze: (symbol: string) => void;
+  formatPrice: (price: number) => string;
+}
+
+function VirtualSymbolList({ symbols, prices, onRemove, onAnalyze, formatPrice }: VirtualSymbolListProps) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: symbols.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 44,
+    overscan: 5,
+  });
+
+  if (symbols.length === 0) {
+    return (
+      <div className="watchlist-symbol-list">
+        <div className="watchlist-symbol-empty">No symbols yet. Add some below.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={parentRef}
+      className="watchlist-symbol-list"
+      style={{ height: Math.min(symbols.length * 44, 352), overflowY: 'auto' }}
+    >
+      <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+        {rowVirtualizer.getVirtualItems().map(virtualItem => {
+          const symbol = symbols[virtualItem.index];
+          const priceData = prices[symbol];
+          const isLoadingPrice = priceData?.loading ?? false;
+          const price = priceData?.price ?? 0;
+
+          return (
+            <div
+              key={virtualItem.key}
+              data-index={virtualItem.index}
+              ref={rowVirtualizer.measureElement}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+              className="symbol-row"
+            >
+              <span className="symbol-name">{symbol}</span>
+              <span className="symbol-price">
+                {isLoadingPrice ? (
+                  <Loader2 className="spin" size={14} />
+                ) : (
+                  <span className={`price-badge ${price > 0 ? 'has-price' : ''}`}>
+                    {formatPrice(price)}
+                  </span>
+                )}
+              </span>
+              <div className="symbol-row-actions">
+                <button
+                  className="btn-symbol-action"
+                  onClick={() => onAnalyze(symbol)}
+                  title="Analyze"
+                >
+                  <Search size={14} />
+                </button>
+                <button
+                  className="btn-symbol-action btn-symbol-remove"
+                  onClick={() => onRemove(symbol)}
+                  title="Remove"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function WatchlistTab({ onNavigate }: WatchlistTabProps) {
@@ -544,49 +632,13 @@ function WatchlistTab({ onNavigate }: WatchlistTabProps) {
                       </div>
 
                       {/* Symbol List */}
-                      <div className="watchlist-symbol-list">
-                        {universe.symbols.length === 0 && (
-                          <div className="watchlist-symbol-empty">
-                            No symbols yet. Add some below.
-                          </div>
-                        )}
-                        {universe.symbols.map(symbol => {
-                          const priceData = prices[symbol];
-                          const isLoadingPrice = priceData?.loading ?? false;
-                          const price = priceData?.price ?? 0;
-
-                          return (
-                            <div key={symbol} className="symbol-row">
-                              <span className="symbol-name">{symbol}</span>
-                              <span className="symbol-price">
-                                {isLoadingPrice ? (
-                                  <Loader2 className="spin" size={14} />
-                                ) : (
-                                  <span className={`price-badge ${price > 0 ? 'has-price' : ''}`}>
-                                    {formatPrice(price)}
-                                  </span>
-                                )}
-                              </span>
-                              <div className="symbol-row-actions">
-                                <button
-                                  className="btn-symbol-action"
-                                  onClick={() => handleAnalyzeSymbol(symbol)}
-                                  title="Analyze"
-                                >
-                                  <Search size={14} />
-                                </button>
-                                <button
-                                  className="btn-symbol-action btn-symbol-remove"
-                                  onClick={() => handleRemoveSymbol(universe, symbol)}
-                                  title="Remove"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <VirtualSymbolList
+                        symbols={universe.symbols}
+                        prices={prices}
+                        onRemove={(symbol) => handleRemoveSymbol(universe, symbol)}
+                        onAnalyze={handleAnalyzeSymbol}
+                        formatPrice={formatPrice}
+                      />
 
                       {/* Add Symbols Form */}
                       <div className="add-symbols-form">
