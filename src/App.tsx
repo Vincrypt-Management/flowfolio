@@ -103,6 +103,12 @@ function App() {
     useSidebarTooltips(!!state.onboardingComplete);
 
   useEffect(() => {
+    performance.mark('app-first-render');
+    const measure = performance.measure('startup', 'app-init-start', 'app-first-render');
+    logger.info(`[perf] startup: ${measure.duration.toFixed(0)}ms`);
+  }, []);
+
+  useEffect(() => {
     invokeWithResilience<string | null>('load_setting', { key: 'onboarding_complete' })
       .then(val => dispatch(actions.setOnboardingComplete(val === 'true')))
       .catch(() => dispatch(actions.setOnboardingComplete(true)));
