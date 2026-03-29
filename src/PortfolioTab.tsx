@@ -1,4 +1,5 @@
-import { useState, useReducer, useEffect, useCallback, useMemo } from "react";
+import { useState, useReducer, useEffect, useCallback, useMemo, useRef } from "react";
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from './services/apiClient';
 import { YearlyReviewComponent } from "./components/YearlyReview";
@@ -263,6 +264,14 @@ export function PortfolioTab({
   } = ui;
 
   const isMountedRef = useIsMounted();
+
+  const holdingsScrollRef = useRef<HTMLDivElement>(null);
+  const holdingsVirtualizer = useVirtualizer({
+    count: portfolio.holdings.length,
+    getScrollElement: () => holdingsScrollRef.current,
+    estimateSize: () => 48,
+    overscan: 5,
+  });
 
   // Persist portfolio holdings and name to global state whenever they change
   useEffect(() => {
@@ -798,7 +807,11 @@ export function PortfolioTab({
             {portfolio.holdings.length > 0 ? (
               <>
                 <h4>Holdings</h4>
-                <div className="holdings-table">
+                <div
+                  ref={holdingsScrollRef}
+                  className="holdings-table"
+                  style={{ height: Math.min(portfolio.holdings.length * 48, 384), overflowY: 'auto' }}
+                >
                   <table>
                     <caption className="sr-only">Portfolio Holdings</caption>
                     <thead>
@@ -814,38 +827,55 @@ export function PortfolioTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {portfolio.holdings.map((holding) => (
-                        <tr key={holding.symbol}>
-                          <td><strong>{holding.symbol}</strong></td>
-                          <td>{holding.shares.toFixed(2)}</td>
-                          <td>${holding.current_price.toFixed(2)}</td>
-                          <td>${holding.market_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                          {isAdvanced && <td>{holding.target_pct.toFixed(1)}%</td>}
-                          <td>{holding.current_pct.toFixed(1)}%</td>
-                          {isAdvanced && (
-                            <td className={holding.drift_pct > 0 ? "drift-positive" : "drift-negative"}>
-                              {holding.drift_pct > 0 ? "+" : ""}{holding.drift_pct.toFixed(1)}%
-                            </td>
-                          )}
-                          <td>
-                            {onAnalyze && (
-                              <button
-                                className="btn-small"
-                                onClick={() => onAnalyze(holding.symbol)}
-                                title="Deep analysis"
-                              >
-                                Analyze →
-                              </button>
-                            )}
-                            <button
-                              className="btn-small btn-danger"
-                              onClick={() => removeHolding(holding.symbol)}
-                            >
-                              Remove
-                            </button>
-                          </td>
+                      {holdingsVirtualizer.getVirtualItems().length > 0 && (
+                        <tr style={{ height: holdingsVirtualizer.getVirtualItems()[0].start, padding: 0 }}>
+                          <td colSpan={isAdvanced ? 8 : 6} style={{ padding: 0, border: 0 }} />
                         </tr>
-                      ))}
+                      )}
+                      {holdingsVirtualizer.getVirtualItems().map(virtualRow => {
+                        const holding = portfolio.holdings[virtualRow.index];
+                        return (
+                          <tr key={virtualRow.key} data-index={virtualRow.index} ref={holdingsVirtualizer.measureElement}>
+                            <td><strong>{holding.symbol}</strong></td>
+                            <td>{holding.shares.toFixed(2)}</td>
+                            <td>${holding.current_price.toFixed(2)}</td>
+                            <td>${holding.market_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            {isAdvanced && <td>{holding.target_pct.toFixed(1)}%</td>}
+                            <td>{holding.current_pct.toFixed(1)}%</td>
+                            {isAdvanced && (
+                              <td className={holding.drift_pct > 0 ? "drift-positive" : "drift-negative"}>
+                                {holding.drift_pct > 0 ? "+" : ""}{holding.drift_pct.toFixed(1)}%
+                              </td>
+                            )}
+                            <td>
+                              {onAnalyze && (
+                                <button
+                                  className="btn-small"
+                                  onClick={() => onAnalyze(holding.symbol)}
+                                  title="Deep analysis"
+                                >
+                                  Analyze →
+                                </button>
+                              )}
+                              <button
+                                className="btn-small btn-danger"
+                                onClick={() => removeHolding(holding.symbol)}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {holdingsVirtualizer.getVirtualItems().length > 0 && (() => {
+                        const lastItem = holdingsVirtualizer.getVirtualItems().at(-1)!;
+                        const paddingBottom = holdingsVirtualizer.getTotalSize() - lastItem.end;
+                        return paddingBottom > 0 ? (
+                          <tr style={{ height: paddingBottom, padding: 0 }}>
+                            <td colSpan={isAdvanced ? 8 : 6} style={{ padding: 0, border: 0 }} />
+                          </tr>
+                        ) : null;
+                      })()}
                     </tbody>
                   </table>
                 </div>
