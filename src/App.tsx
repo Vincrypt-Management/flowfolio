@@ -3,7 +3,6 @@ import { useIsMounted } from './hooks/useIsMounted';
 import { isTauriContext } from './services/tauri';
 import { useAuth } from './contexts/AuthContext';
 import { invokeWithResilience } from './services/apiClient';
-import VibeStudio from "./components/VibeStudio";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
@@ -70,8 +69,9 @@ const ComparisonMode = lazy(() => import("./components/ComparisonMode").then(m =
 const RebalanceScheduler = lazy(() => import("./components/RebalanceScheduler").then(m => ({ default: m.RebalanceScheduler })));
 const NewsFeed = lazy(() => import("./components/NewsFeed").then(m => ({ default: m.NewsFeed })));
 const TickerAnalysis = lazy(() => import('./components/TickerAnalysis'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const VibeStudio = lazy(() => import('./components/VibeStudio'));
 
-import Dashboard from "./components/Dashboard";
 import { UserProfileCard } from "./components/UserProfileCard";
 import { RateLimitBanner } from "./components/RateLimitBanner";
 import { TabErrorBoundary } from "./components/TabErrorBoundary";
@@ -839,26 +839,30 @@ function App() {
         <RateLimitBanner />
         {state.activeTab === "dashboard" && (
           <TabErrorBoundary tabName="Dashboard">
-            <div className="animate-fade-in">
-              <Dashboard
-                plan={state.plan}
-                onNavigate={handleNavClick}
-                marketPrices={state.marketPrices}
-                onRefreshMarket={loadMarketOverview}
-                isLoadingMarket={state.isLoadingMarket}
-              />
-            </div>
+            <Suspense fallback={<TabLoading />}>
+              <div className="animate-fade-in">
+                <Dashboard
+                  plan={state.plan}
+                  onNavigate={handleNavClick}
+                  marketPrices={state.marketPrices}
+                  onRefreshMarket={loadMarketOverview}
+                  isLoadingMarket={state.isLoadingMarket}
+                />
+              </div>
+            </Suspense>
           </TabErrorBoundary>
         )}
 
         {state.activeTab === "vibe-studio" && (
           <TabErrorBoundary tabName="Vibe Studio">
-            <div className="animate-fade-in">
-              <VibeStudio
-                initialPortfolio={state.portfolioToLoad}
-                onPortfolioLoaded={() => dispatch(actions.setPortfolioToLoad(null))}
-              />
-            </div>
+            <Suspense fallback={<TabLoading />}>
+              <div className="animate-fade-in">
+                <VibeStudio
+                  initialPortfolio={state.portfolioToLoad}
+                  onPortfolioLoaded={() => dispatch(actions.setPortfolioToLoad(null))}
+                />
+              </div>
+            </Suspense>
           </TabErrorBoundary>
         )}
 
