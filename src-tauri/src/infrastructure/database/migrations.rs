@@ -6,11 +6,18 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    description: "Initial schema",
-    sql: include_str!("sql/001_initial.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "Initial schema",
+        sql: include_str!("sql/001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        description: "Performance indexes",
+        sql: include_str!("sql/002_performance_indexes.sql"),
+    },
+];
 
 pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
     sqlx::query(
