@@ -415,6 +415,8 @@ mod populate_keys_tests {
     #[test]
     fn test_populate_runtime_keys_from_map() {
         use crate::RUNTIME_KEYS;
+        // Pre-cleanup in case a prior run leaked state
+        RUNTIME_KEYS.write().remove("FINNHUB_API_KEY");
         let mut keys = std::collections::HashMap::new();
         // Pass the store key name (lowercase); populate_runtime_keys translates it
         // to the env-var name "FINNHUB_API_KEY" that data providers look up.
@@ -433,6 +435,7 @@ mod populate_keys_tests {
     #[test]
     fn test_populate_runtime_keys_skips_empty_values() {
         use crate::RUNTIME_KEYS;
+        RUNTIME_KEYS.write().remove("SOME_EMPTY_KEY_XYZ");
         let mut keys = std::collections::HashMap::new();
         keys.insert("SOME_EMPTY_KEY_XYZ".to_string(), "".to_string());
         populate_runtime_keys(keys);

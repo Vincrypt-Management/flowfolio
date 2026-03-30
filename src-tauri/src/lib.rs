@@ -50,6 +50,11 @@ pub(crate) static ALPACA_SERVICE: Lazy<Arc<AlpacaService>> =
 pub(crate) static FUNDAMENTAL_SERVICE: Lazy<Arc<FundamentalDataService>> =
     Lazy::new(|| Arc::new(FundamentalDataService::new()));
 
+/// Runtime-mutable API key store. Keys saved via SettingsPage are written here
+/// and take priority over environment variables. Updated at startup and on save.
+pub(crate) static RUNTIME_KEYS: Lazy<Arc<RwLock<HashMap<String, String>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+
 pub(crate) static DB_INITIALIZED: Lazy<Arc<std::sync::atomic::AtomicBool>> =
     Lazy::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
 
@@ -59,11 +64,6 @@ pub(crate) static DB_POOL: Lazy<Arc<Mutex<Option<sqlx::Pool<sqlx::Sqlite>>>>> =
 // In-memory plan storage
 pub(crate) static SAVED_PLANS: Lazy<Arc<Mutex<HashMap<String, VibePlanScript>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-
-/// Runtime-mutable API key store. Keys saved via SettingsPage are written here
-/// and take priority over environment variables. Updated at startup and on save.
-pub(crate) static RUNTIME_KEYS: Lazy<Arc<RwLock<HashMap<String, String>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 /// Shared HTTP client — clone is cheap (shares the connection pool).
 pub(crate) static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
@@ -393,6 +393,35 @@ pub fn run() {
 }
 
 // ==================== TESTS ====================
+
+#[cfg(test)]
+mod runtime_keys_tests {
+    use super::*;
+
+    #[test]
+    fn test_get_api_key_runtime_takes_priority_over_env() {
+        // Pre-cleanup in case a prior run leaked state
+        RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
+        std::env::remove_var("TEST_FLOWFOLIO_PRIO");
+        std::env::set_var("TEST_FLOWFOLIO_PRIO", "from_env");
+        RUNTIME_KEYS.write().insert("TEST_FLOWFOLIO_PRIO".to_string(), "from_runtime".to_string());
+        assert_eq!(get_api_key("TEST_FLOWFOLIO_PRIO"), Some("from_runtime".to_string()));
+        RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
+        std::env::remove_var("TEST_FLOWFOLIO_PRIO");
+    }
+
+    #[test]
+    fn test_get_api_key_falls_back_to_env() {
+        std::env::set_var("TEST_FLOWFOLIO_FALLBACK", "env_value");
+        assert_eq!(get_api_key("TEST_FLOWFOLIO_FALLBACK"), Some("env_value".to_string()));
+        std::env::remove_var("TEST_FLOWFOLIO_FALLBACK");
+    }
+
+    #[test]
+    fn test_get_api_key_returns_none_when_absent() {
+        assert_eq!(get_api_key("TEST_FLOWFOLIO_MISSING_XYZ"), None);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1032,40 +1061,5 @@ mod tests {
         );
         let safety = assess_dividend_safety(&fund);
         assert_eq!(safety.as_deref(), Some("cutting"));
-    }
-}
-
-#[cfg(test)]
-mod runtime_keys_tests {
-    use super::*;
-
-    #[test]
-    fn test_get_api_key_runtime_takes_priority_over_env() {
-        std::env::set_var("TEST_FLOWFOLIO_PRIO", "from_env");
-        RUNTIME_KEYS.write().insert(
-            "TEST_FLOWFOLIO_PRIO".to_string(),
-            "from_runtime".to_string(),
-        );
-        assert_eq!(
-            get_api_key("TEST_FLOWFOLIO_PRIO"),
-            Some("from_runtime".to_string())
-        );
-        RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
-        std::env::remove_var("TEST_FLOWFOLIO_PRIO");
-    }
-
-    #[test]
-    fn test_get_api_key_falls_back_to_env() {
-        std::env::set_var("TEST_FLOWFOLIO_FALLBACK", "env_value");
-        assert_eq!(
-            get_api_key("TEST_FLOWFOLIO_FALLBACK"),
-            Some("env_value".to_string())
-        );
-        std::env::remove_var("TEST_FLOWFOLIO_FALLBACK");
-    }
-
-    #[test]
-    fn test_get_api_key_returns_none_when_absent() {
-        assert_eq!(get_api_key("TEST_FLOWFOLIO_MISSING_XYZ"), None);
     }
 }

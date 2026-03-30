@@ -89,7 +89,7 @@ pub struct MultiSourceProvider {
 
 impl MultiSourceProvider {
     pub fn new() -> Self {
-        // Load API keys from environment
+        // Load API keys from environment (RUNTIME_KEYS first, then encrypted env fallback)
         let alpaca_key = crate::get_api_key("ALPACA_API_KEY");
         let alpaca_secret = crate::get_api_key("ALPACA_SECRET_KEY");
         let polygon_key = crate::get_api_key("POLYGON_API_KEY");

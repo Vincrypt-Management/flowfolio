@@ -60,11 +60,10 @@ pub struct OpenRouterService {
 impl OpenRouterService {
     /// Create new OpenRouter service
     pub fn new() -> Self {
-        use crate::core::encrypted_env::get_env_var;
         let api_key = crate::get_api_key("OPENROUTER_API_KEY");
-        let api_url = get_env_var("OPENROUTER_API_URL")
+        let api_url = crate::core::encrypted_env::get_env_var("OPENROUTER_API_URL")
             .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
-        let default_model = get_env_var("DEFAULT_LLM_MODEL")
+        let default_model = crate::core::encrypted_env::get_env_var("DEFAULT_LLM_MODEL")
             .unwrap_or_else(|| "anthropic/claude-3-sonnet-20240229".to_string());
 
         // Debug: Log API key status
