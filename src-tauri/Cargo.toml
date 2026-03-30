@@ -1,6 +1,6 @@
 [package]
 name = "flowfolio"
-version = "0.4.3"
+version = "0.4.2"
 description = "FlowFolio - AI-Powered Vibe-Based Investing"
 authors = ["evintleovonzko"]
 edition = "2021"
