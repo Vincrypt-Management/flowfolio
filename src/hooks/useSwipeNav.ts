@@ -25,13 +25,13 @@ export function useSwipeNav(
     let startY = 0;
     let startTime = 0;
 
-    const onDown = (e: PointerEvent) => {
+    const onDown = (e: PointerEvent): void => {
       startX = e.clientX;
       startY = e.clientY;
       startTime = e.timeStamp;
     };
 
-    const onUp = (e: PointerEvent) => {
+    const onUp = (e: PointerEvent): void => {
       const deltaX = e.clientX - startX;
       const deltaY = e.clientY - startY;
       const elapsed = e.timeStamp - startTime;
@@ -44,7 +44,7 @@ export function useSwipeNav(
         return;
       }
 
-      const currentIndex = TAB_ORDER.indexOf(activeTab as typeof TAB_ORDER[number]);
+      const currentIndex = (TAB_ORDER as ReadonlyArray<string>).indexOf(activeTab);
       if (currentIndex === -1) return;
 
       if (deltaX < 0) {
