@@ -422,6 +422,15 @@ export function BacktestTab() {
         </button>
       </div>
 
+      {/* Results placeholder before first run */}
+      {!result && !isRunning && (
+        <div className="empty-state">
+          <FlaskConical size={48} className="empty-state-icon" />
+          <h3>No results yet</h3>
+          <p className="text-muted">Configure your strategy above and click Run Backtest to simulate performance.</p>
+        </div>
+      )}
+
       {/* Results */}
       {result && (
         <div className="backtest-results">
