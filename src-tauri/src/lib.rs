@@ -327,6 +327,8 @@ pub fn run() {
             // Tax Lot Tracking
             create_tax_lot,
             list_tax_lots,
+            record_wash_sale_event,
+            check_wash_sale_window,
             get_tax_loss_harvest_opportunities,
         ])
         .setup(|app| {
