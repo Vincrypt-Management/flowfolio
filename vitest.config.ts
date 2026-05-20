@@ -17,6 +17,8 @@ export default defineConfig({
       include: [
         'src/shared/utils/calculations.ts',
         'src/services/agentSurfaces.ts',
+        'src/services/replacementPeers.ts',
+        'src/services/dividendCalendar.ts',
       ],
       thresholds: {
         'src/shared/utils/calculations.ts': {
@@ -26,6 +28,18 @@ export default defineConfig({
           statements: 80,
         },
         'src/services/agentSurfaces.ts': {
+          lines: 80,
+          branches: 80,
+          functions: 80,
+          statements: 80,
+        },
+        'src/services/replacementPeers.ts': {
+          lines: 80,
+          branches: 80,
+          functions: 80,
+          statements: 80,
+        },
+        'src/services/dividendCalendar.ts': {
           lines: 80,
           branches: 80,
           functions: 80,

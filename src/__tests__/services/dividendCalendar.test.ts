@@ -35,6 +35,12 @@ describe('fetchUpcomingDividends', () => {
     await fetchUpcomingDividends(['VTI'], 90);
     expect(invokeMock).toHaveBeenCalledTimes(2);
   });
+
+  it('returns empty array when backend returns null/undefined', async () => {
+    invokeMock.mockResolvedValue(null);
+    const result = await fetchUpcomingDividends(['VTI'], 90);
+    expect(result).toEqual([]);
+  });
 });
 
 describe('fetchProjectedIncome', () => {
