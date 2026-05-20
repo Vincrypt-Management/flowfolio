@@ -63,6 +63,7 @@ out/
 .superpowers/
 dist-landing/
 test-results/
+coverage/
 
 # Release artifacts (hosted on GitHub Releases, not in git)
 release/
