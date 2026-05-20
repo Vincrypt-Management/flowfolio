@@ -7,5 +7,9 @@ async fn db_scaffold_runs_migrations() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert!(count.0 >= 3, "expected ≥3 migrations applied, got {}", count.0);
+    assert!(
+        count.0 >= 3,
+        "expected ≥3 migrations applied, got {}",
+        count.0
+    );
 }

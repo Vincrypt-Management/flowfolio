@@ -39,7 +39,16 @@ async fn insert_option(
 async fn insert_then_list_returns_row() {
     let (_dir, pool) = common::setup_test_db().await;
     insert_option(
-        &pool, "o1", "AAPL", "covered_call", 200.0, "2027-01-15", 1, 1.5, "open", None,
+        &pool,
+        "o1",
+        "AAPL",
+        "covered_call",
+        200.0,
+        "2027-01-15",
+        1,
+        1.5,
+        "open",
+        None,
     )
     .await;
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM option_positions WHERE id = ?")
@@ -54,11 +63,29 @@ async fn insert_then_list_returns_row() {
 async fn list_filters_by_status() {
     let (_dir, pool) = common::setup_test_db().await;
     insert_option(
-        &pool, "a", "AAPL", "covered_call", 200.0, "2027-01-15", 1, 1.5, "open", None,
+        &pool,
+        "a",
+        "AAPL",
+        "covered_call",
+        200.0,
+        "2027-01-15",
+        1,
+        1.5,
+        "open",
+        None,
     )
     .await;
     insert_option(
-        &pool, "b", "MSFT", "covered_call", 300.0, "2027-02-15", 1, 2.0, "expired", None,
+        &pool,
+        "b",
+        "MSFT",
+        "covered_call",
+        300.0,
+        "2027-02-15",
+        1,
+        2.0,
+        "expired",
+        None,
     )
     .await;
     let open_rows: Vec<(String,)> = sqlx::query_as(
@@ -75,7 +102,16 @@ async fn list_filters_by_status() {
 async fn delete_removes_row() {
     let (_dir, pool) = common::setup_test_db().await;
     insert_option(
-        &pool, "d", "AAPL", "covered_call", 200.0, "2027-01-15", 1, 1.5, "open", None,
+        &pool,
+        "d",
+        "AAPL",
+        "covered_call",
+        200.0,
+        "2027-01-15",
+        1,
+        1.5,
+        "open",
+        None,
     )
     .await;
     sqlx::query("DELETE FROM option_positions WHERE id = ?")
@@ -95,7 +131,16 @@ async fn delete_removes_row() {
 async fn closed_early_status_persists_close_premium() {
     let (_dir, pool) = common::setup_test_db().await;
     insert_option(
-        &pool, "ce", "AAPL", "covered_call", 200.0, "2027-01-15", 1, 1.5, "open", None,
+        &pool,
+        "ce",
+        "AAPL",
+        "covered_call",
+        200.0,
+        "2027-01-15",
+        1,
+        1.5,
+        "open",
+        None,
     )
     .await;
     sqlx::query(
@@ -125,19 +170,55 @@ async fn summary_aggregates_mixed_strategies() {
     // 2 CC open + 1 CSP open + 1 expired CC.
     let (_dir, pool) = common::setup_test_db().await;
     insert_option(
-        &pool, "cc1", "AAPL", "covered_call", 200.0, "2027-01-15", 1, 1.5, "open", None,
+        &pool,
+        "cc1",
+        "AAPL",
+        "covered_call",
+        200.0,
+        "2027-01-15",
+        1,
+        1.5,
+        "open",
+        None,
     )
     .await;
     insert_option(
-        &pool, "cc2", "MSFT", "covered_call", 300.0, "2027-01-15", 2, 2.0, "open", None,
+        &pool,
+        "cc2",
+        "MSFT",
+        "covered_call",
+        300.0,
+        "2027-01-15",
+        2,
+        2.0,
+        "open",
+        None,
     )
     .await;
     insert_option(
-        &pool, "csp1", "GOOG", "cash_secured_put", 150.0, "2027-01-15", 1, 1.0, "open", None,
+        &pool,
+        "csp1",
+        "GOOG",
+        "cash_secured_put",
+        150.0,
+        "2027-01-15",
+        1,
+        1.0,
+        "open",
+        None,
     )
     .await;
     insert_option(
-        &pool, "exp", "AAPL", "covered_call", 250.0, "2026-04-15", 1, 3.0, "expired", None,
+        &pool,
+        "exp",
+        "AAPL",
+        "covered_call",
+        250.0,
+        "2026-04-15",
+        1,
+        3.0,
+        "expired",
+        None,
     )
     .await;
 
@@ -163,7 +244,10 @@ async fn summary_aggregates_mixed_strategies() {
     let csp_sum = aggregate_options_summary(&csp, "cash_secured_put");
 
     // CC open exposure: 200*1*100 + 300*2*100 = 20_000 + 60_000 = 80_000
-    assert_eq!(cc_sum["total_assignment_exposure"].as_f64().unwrap(), 80_000.0);
+    assert_eq!(
+        cc_sum["total_assignment_exposure"].as_f64().unwrap(),
+        80_000.0
+    );
     assert_eq!(cc_sum["total_cash_secured"].as_f64().unwrap(), 0.0);
     // CSP open exposure: 150*1*100 = 15_000
     assert_eq!(csp_sum["total_cash_secured"].as_f64().unwrap(), 15_000.0);
@@ -173,8 +257,8 @@ async fn summary_aggregates_mixed_strategies() {
         + csp_sum["realized_premium_ytd"].as_f64().unwrap();
     assert_eq!(total_realized, 300.0);
     // Total open count: 2 CC + 1 CSP = 3
-    let total_open = cc_sum["open_count"].as_i64().unwrap()
-        + csp_sum["open_count"].as_i64().unwrap();
+    let total_open =
+        cc_sum["open_count"].as_i64().unwrap() + csp_sum["open_count"].as_i64().unwrap();
     assert_eq!(total_open, 3);
 }
 

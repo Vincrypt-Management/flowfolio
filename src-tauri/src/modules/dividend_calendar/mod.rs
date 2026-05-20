@@ -22,7 +22,11 @@ pub const EMPTY_SENTINEL_EX_DATE: &str = "__empty__";
 /// for the cutoff comparison to keep the SQL bind simple.
 #[allow(dead_code)]
 pub fn cache_ttl_hours(events: &[UpcomingDividend]) -> i64 {
-    if events.is_empty() { 6 } else { 24 }
+    if events.is_empty() {
+        6
+    } else {
+        24
+    }
 }
 
 #[async_trait::async_trait]

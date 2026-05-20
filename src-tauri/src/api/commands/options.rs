@@ -44,7 +44,13 @@ pub async fn create_option_position(
     if !matches!(strategy.as_str(), "covered_call" | "cash_secured_put") {
         return Err(format!("invalid strategy: {strategy}"));
     }
-    validate_new_position(strike, contracts, premium_per_contract, &expiration, &open_date)?;
+    validate_new_position(
+        strike,
+        contracts,
+        premium_per_contract,
+        &expiration,
+        &open_date,
+    )?;
     let pool = get_pool().await?;
     sqlx::query(
         "INSERT INTO option_positions
@@ -312,7 +318,10 @@ mod tests {
     fn aggregate_covered_call_only_sets_assignment_exposure() {
         let rows = vec![("open".to_string(), 100.0, 2, 1.5, None)];
         let v = aggregate_options_summary(&rows, "covered_call");
-        assert_eq!(v["total_assignment_exposure"].as_f64().unwrap(), 100.0 * 2.0 * 100.0);
+        assert_eq!(
+            v["total_assignment_exposure"].as_f64().unwrap(),
+            100.0 * 2.0 * 100.0
+        );
         assert_eq!(v["total_cash_secured"].as_f64().unwrap(), 0.0);
         assert_eq!(v["open_count"].as_i64().unwrap(), 1);
     }
@@ -321,7 +330,10 @@ mod tests {
     fn aggregate_cash_secured_put_only_sets_cash_secured() {
         let rows = vec![("open".to_string(), 90.0, 1, 2.0, None)];
         let v = aggregate_options_summary(&rows, "cash_secured_put");
-        assert_eq!(v["total_cash_secured"].as_f64().unwrap(), 90.0 * 1.0 * 100.0);
+        assert_eq!(
+            v["total_cash_secured"].as_f64().unwrap(),
+            90.0 * 1.0 * 100.0
+        );
         assert_eq!(v["total_assignment_exposure"].as_f64().unwrap(), 0.0);
     }
 

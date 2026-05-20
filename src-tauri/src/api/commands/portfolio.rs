@@ -382,7 +382,7 @@ pub(crate) fn calculate_quick_score(metrics: &QuantMetrics) -> f64 {
 
 /// Saved portfolio info for listing
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SavedPortfolioInfo {
+pub struct SavedPortfolioInfo {
     id: String,
     name: String,
     created_at: String,

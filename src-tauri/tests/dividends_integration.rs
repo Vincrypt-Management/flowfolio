@@ -1,7 +1,9 @@
 mod common;
 
 use chrono::{Duration, Utc};
-use flowfolio_lib::modules::dividend_calendar::{cache_ttl_hours, UpcomingDividend, EMPTY_SENTINEL_EX_DATE};
+use flowfolio_lib::modules::dividend_calendar::{
+    cache_ttl_hours, UpcomingDividend, EMPTY_SENTINEL_EX_DATE,
+};
 
 fn fixture(symbol: &str) -> UpcomingDividend {
     UpcomingDividend {
@@ -116,7 +118,10 @@ async fn negative_cache_sentinel_hits_within_6h() {
     .fetch_optional(&pool)
     .await
     .unwrap();
-    assert!(sentinel.is_some(), "negative-cache sentinel should be a hit within 6h");
+    assert!(
+        sentinel.is_some(),
+        "negative-cache sentinel should be a hit within 6h"
+    );
 }
 
 #[tokio::test]
