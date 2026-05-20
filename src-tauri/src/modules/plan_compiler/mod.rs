@@ -757,14 +757,25 @@ mod tests {
             decoded.portfolio.max_position_pct,
             original.portfolio.max_position_pct
         );
-        assert_eq!(decoded.ranking.factors.len(), original.ranking.factors.len());
+        assert_eq!(
+            decoded.ranking.factors.len(),
+            original.ranking.factors.len()
+        );
     }
 
     #[test]
     fn test_serialized_plan_contains_expected_fields() {
         let plan = PlanCompiler::default_template();
         let json = serde_json::to_value(&plan).expect("serialize");
-        for key in ["name", "universe", "filters", "ranking", "portfolio", "cadence", "risk"] {
+        for key in [
+            "name",
+            "universe",
+            "filters",
+            "ranking",
+            "portfolio",
+            "cadence",
+            "risk",
+        ] {
             assert!(
                 json.get(key).is_some(),
                 "Serialized plan missing required top-level field: {}",

@@ -972,11 +972,19 @@ mod tests {
     // lookup or return math. These tests supply real prices and verify the
     // engine responds.
 
-    fn build_prices(symbol: &str, points: &[(&str, f64)]) -> HashMap<String, Vec<(NaiveDate, f64)>> {
+    fn build_prices(
+        symbol: &str,
+        points: &[(&str, f64)],
+    ) -> HashMap<String, Vec<(NaiveDate, f64)>> {
         let mut m = HashMap::new();
         let series: Vec<(NaiveDate, f64)> = points
             .iter()
-            .map(|(d, p)| (NaiveDate::parse_from_str(d, "%Y-%m-%d").expect("bad date"), *p))
+            .map(|(d, p)| {
+                (
+                    NaiveDate::parse_from_str(d, "%Y-%m-%d").expect("bad date"),
+                    *p,
+                )
+            })
             .collect();
         m.insert(symbol.to_string(), series);
         m
@@ -1033,10 +1041,7 @@ mod tests {
             symbols: vec!["AAPL".to_string()],
             allocation_method: "equal_weight".to_string(),
         };
-        let prices = build_prices(
-            "AAPL",
-            &[("2020-01-01", 100.0), ("2020-11-01", 200.0)],
-        );
+        let prices = build_prices("AAPL", &[("2020-01-01", 100.0), ("2020-11-01", 200.0)]);
         let result = BacktestEngine::run_backtest(config, prices);
         assert_eq!(result.metrics.total_invested, 10_000.0);
         assert!(
