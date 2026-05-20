@@ -964,4 +964,91 @@ mod tests {
         let metrics = BacktestEngine::calculate_metrics(&timeline, 1, 0.0, &[]);
         assert!(metrics.volatility >= 0.0);
     }
+
+    // ===== T4 gap fillers: exercise real price-driven paths =====
+    //
+    // All other tests in this module pass HashMap::new(), which triggers the
+    // $100 fallback in get_price_at_date and never tests the actual price
+    // lookup or return math. These tests supply real prices and verify the
+    // engine responds.
+
+    fn build_prices(symbol: &str, points: &[(&str, f64)]) -> HashMap<String, Vec<(NaiveDate, f64)>> {
+        let mut m = HashMap::new();
+        let series: Vec<(NaiveDate, f64)> = points
+            .iter()
+            .map(|(d, p)| (NaiveDate::parse_from_str(d, "%Y-%m-%d").expect("bad date"), *p))
+            .collect();
+        m.insert(symbol.to_string(), series);
+        m
+    }
+
+    #[test]
+    fn test_get_price_at_date_returns_fallback_when_symbol_missing() {
+        let prices = HashMap::new();
+        let date = NaiveDate::from_ymd_opt(2020, 6, 1).unwrap();
+        let p = BacktestEngine::get_price_at_date("UNKNOWN", date, &prices);
+        assert_eq!(p, 100.0, "missing symbol must fall back to $100");
+    }
+
+    #[test]
+    fn test_get_price_at_date_uses_most_recent_prior_price() {
+        // Series: Jan-01 = $50, Mar-01 = $80, Jun-01 = $120
+        // Query Apr-15 should resolve to $80 (most recent prior).
+        let prices = build_prices(
+            "AAPL",
+            &[
+                ("2020-01-01", 50.0),
+                ("2020-03-01", 80.0),
+                ("2020-06-01", 120.0),
+            ],
+        );
+        let q = NaiveDate::from_ymd_opt(2020, 4, 15).unwrap();
+        let p = BacktestEngine::get_price_at_date("AAPL", q, &prices);
+        assert!((p - 80.0).abs() < f64::EPSILON, "expected $80, got {}", p);
+    }
+
+    #[test]
+    fn test_get_price_at_date_falls_back_before_first_point() {
+        // Query date earlier than any data point → no prior price → fallback.
+        let prices = build_prices("AAPL", &[("2020-06-01", 120.0)]);
+        let q = NaiveDate::from_ymd_opt(2020, 1, 1).unwrap();
+        let p = BacktestEngine::get_price_at_date("AAPL", q, &prices);
+        assert_eq!(p, 100.0, "no prior data must fall back to $100");
+    }
+
+    #[test]
+    fn test_backtest_with_real_prices_produces_positive_return_when_prices_double() {
+        // Single symbol, no monthly contribution. Price doubles from $100 to
+        // $200 by 2020-11-01, which is the last date the engine actually
+        // simulates for a Jan→Dec config (add_months overshoots once at the
+        // tail). With no contributions the final snapshot value should be
+        // ≈ 100 shares × $200 = $20_000 against $10_000 invested.
+        let config = BacktestConfig {
+            start_date: "2020-01-01".to_string(),
+            end_date: "2020-12-31".to_string(),
+            initial_cash: 10_000.0,
+            monthly_contribution: 0.0,
+            rebalance_frequency: "yearly".to_string(),
+            rebalance_threshold: 50.0,
+            symbols: vec!["AAPL".to_string()],
+            allocation_method: "equal_weight".to_string(),
+        };
+        let prices = build_prices(
+            "AAPL",
+            &[("2020-01-01", 100.0), ("2020-11-01", 200.0)],
+        );
+        let result = BacktestEngine::run_backtest(config, prices);
+        assert_eq!(result.metrics.total_invested, 10_000.0);
+        assert!(
+            result.metrics.final_value > 15_000.0,
+            "doubled prices should produce final_value > $15k, got {}",
+            result.metrics.final_value
+        );
+        // total_return is reported in percent (line 410 multiplies by 100).
+        assert!(
+            result.metrics.total_return > 50.0,
+            "doubled prices should give total_return > 50%, got {}",
+            result.metrics.total_return
+        );
+    }
 }
