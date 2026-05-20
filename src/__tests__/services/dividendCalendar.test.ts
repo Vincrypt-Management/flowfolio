@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fetchUpcomingDividends, fetchProjectedIncome, _resetCacheForTests } from '../../services/dividendCalendar';
 
 const invokeMock = vi.fn();
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
+vi.mock('../../services/apiClient', () => ({
+  invokeWithResilience: (...args: unknown[]) => invokeMock(...args),
 }));
 
 beforeEach(() => {
@@ -12,12 +12,25 @@ beforeEach(() => {
 });
 
 describe('fetchUpcomingDividends', () => {
-  it('invokes get_upcoming_dividends with symbols + lookahead', async () => {
+  it('invokes get_upcoming_dividends with symbols + lookahead + portfolioName', async () => {
     invokeMock.mockResolvedValue([]);
-    await fetchUpcomingDividends(['VTI', 'SCHD'], 60);
+    await fetchUpcomingDividends(['VTI', 'SCHD'], 60, 'main');
     expect(invokeMock).toHaveBeenCalledWith(
       'get_upcoming_dividends',
-      expect.objectContaining({ symbols: ['VTI', 'SCHD'], lookaheadDays: 60 }),
+      expect.objectContaining({
+        symbols: ['VTI', 'SCHD'],
+        lookaheadDays: 60,
+        portfolioName: 'main',
+      }),
+    );
+  });
+
+  it('sends portfolioName=null when not provided', async () => {
+    invokeMock.mockResolvedValue([]);
+    await fetchUpcomingDividends(['VTI'], 60);
+    expect(invokeMock).toHaveBeenCalledWith(
+      'get_upcoming_dividends',
+      expect.objectContaining({ portfolioName: null }),
     );
   });
 

@@ -10,6 +10,7 @@ import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
 import { formatCurrency } from '../shared/utils';
+import { useMarginalRate } from '../hooks/useMarginalRate';
 import './TaxLotView.css';
 
 const log = createLogger('TaxLotView');
@@ -97,6 +98,7 @@ export function TaxLotView({ portfolioName, currentPrices }: TaxLotViewProps) {
   const [opportunities, setOpportunities] = useState<HarvestOpportunity[]>([]);
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
+  const { rate: marginalRate } = useMarginalRate();
 
   const loadData = useCallback(async () => {
     if (!portfolioName) return;
@@ -227,7 +229,9 @@ export function TaxLotView({ portfolioName, currentPrices }: TaxLotViewProps) {
                     <span>{opp.days_held.toLocaleString()}</span>
                   </div>
                   <div className="tax-lot-opportunity-card__field tax-lot-opportunity-card__field--highlight">
-                    <span className="tax-lot-opportunity-card__label">Est. Tax Benefit (25%)</span>
+                    <span className="tax-lot-opportunity-card__label">
+                      Est. Tax Benefit ({Math.round(marginalRate * 100)}%)
+                    </span>
                     <span className="tax-lot-benefit">{formatCurrency(opp.tax_benefit_estimate)}</span>
                   </div>
                 </div>

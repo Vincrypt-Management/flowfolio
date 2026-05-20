@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from '../services/apiClient';
+import { createLogger } from '../core/logger';
+import { useToast } from './Toast';
 import { findReplacementPeers } from '../services/replacementPeers';
+
+const log = createLogger('TaxTab');
 
 interface HarvestOpportunity {
   lot_id: string;
@@ -24,11 +28,12 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
   const [rate, setRate] = useState<number>(0.24);
   const [opportunities, setOpportunities] = useState<HarvestOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
 
   // Load default rate from settings on mount.
   useEffect(() => {
     let cancelled = false;
-    invoke<string | null>('load_setting', { key: 'marginal_tax_rate' })
+    invokeWithResilience<string | null>('load_setting', { key: 'marginal_tax_rate' })
       .then((v) => {
         if (cancelled) return;
         const parsed = v ? parseFloat(v) : NaN;
@@ -36,14 +41,16 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
           setRate(parsed);
         }
       })
-      .catch(() => { /* keep default 0.24 */ });
+      .catch((err) => {
+        log.warn('marginal_tax_rate load failed, keeping default', err);
+      });
     return () => { cancelled = true; };
   }, []);
 
   // Fetch opportunities whenever rate or prices change.
   useEffect(() => {
     let cancelled = false;
-    invoke<HarvestOpportunity[]>('get_tax_loss_harvest_opportunities', {
+    invokeWithResilience<HarvestOpportunity[]>('get_tax_loss_harvest_opportunities', {
       portfolioName,
       currentPrices,
       overrideRate: rate,
@@ -54,8 +61,9 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
+          log.error('failed to load harvest opportunities', err);
           setOpportunities([]);
           setLoading(false);
         }
@@ -65,21 +73,36 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
 
   const onMarkHarvested = useCallback(
     async (opp: HarvestOpportunity) => {
-      await invoke('record_wash_sale_event', {
-        id: `wash-${opp.lot_id}-${Date.now()}`,
-        portfolioName,
-        symbol: opp.symbol,
-        saleDate: new Date().toISOString().slice(0, 10),
-        harvestedLoss: opp.unrealized_loss,
-      });
-      setOpportunities((prev) => prev.filter((o) => o.lot_id !== opp.lot_id));
+      try {
+        await invokeWithResilience('record_wash_sale_event', {
+          id: `wash-${opp.lot_id}-${Date.now()}`,
+          portfolioName,
+          symbol: opp.symbol,
+          saleDate: new Date().toISOString().slice(0, 10),
+          harvestedLoss: opp.unrealized_loss,
+        });
+        setOpportunities((prev) => prev.filter((o) => o.lot_id !== opp.lot_id));
+        addToast('Loss harvested', 'success');
+      } catch (err) {
+        log.error('record_wash_sale_event failed', err);
+        addToast('Failed to record harvest', 'error');
+      }
     },
-    [portfolioName],
+    [portfolioName, addToast],
   );
 
   const onSaveRateAsDefault = useCallback(async () => {
-    await invoke('save_setting', { key: 'marginal_tax_rate', value: rate.toString() });
-  }, [rate]);
+    try {
+      await invokeWithResilience('save_setting', {
+        key: 'marginal_tax_rate',
+        value: rate.toString(),
+      });
+      addToast('Default rate saved', 'success');
+    } catch (err) {
+      log.error('save_setting failed', err);
+      addToast('Failed to save rate', 'error');
+    }
+  }, [rate, addToast]);
 
   const totalSavings = useMemo(
     () => opportunities.reduce((s, o) => s + o.tax_benefit_estimate, 0),

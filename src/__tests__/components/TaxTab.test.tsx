@@ -3,12 +3,18 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TaxTab } from '../../components/TaxTab';
 
 const invokeMock = vi.fn();
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
+vi.mock('../../services/apiClient', () => ({
+  invokeWithResilience: (...args: unknown[]) => invokeMock(...args),
+}));
+
+const addToastMock = vi.fn();
+vi.mock('../../components/Toast', () => ({
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
 beforeEach(() => {
   invokeMock.mockReset();
+  addToastMock.mockReset();
 });
 
 const sampleOpp = {

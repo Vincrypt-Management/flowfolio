@@ -4,8 +4,8 @@ import { DividendsTab } from '../../components/DividendsTab';
 import { _resetCacheForTests } from '../../services/dividendCalendar';
 
 const invokeMock = vi.fn();
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
+vi.mock('../../services/apiClient', () => ({
+  invokeWithResilience: (...args: unknown[]) => invokeMock(...args),
 }));
 
 beforeEach(() => {
@@ -15,7 +15,7 @@ beforeEach(() => {
 
 describe('DividendsTab', () => {
   const dividends = [
-    { symbol: 'VTI', ex_date: '2026-06-05', pay_date: '2026-06-20', amount_per_share: 0.85 },
+    { symbol: 'VTI', ex_date: '2026-06-05', pay_date: '2026-06-20', amount_per_share: 0.85, shares_held: 100, projected_payout: 85 },
   ];
   const projection = {
     portfolio_name: 'main',
@@ -44,6 +44,20 @@ describe('DividendsTab', () => {
     });
     render(<DividendsTab portfolioName="main" heldSymbols={['VTI', 'SCHD']} />);
     await waitFor(() => expect(screen.getByText(/\$3,?200/)).toBeInTheDocument());
+  });
+
+  it('renders projected payout column in list view', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_upcoming_dividends') return Promise.resolve(dividends);
+      if (cmd === 'get_projected_annual_income') return Promise.resolve(projection);
+      return Promise.resolve(null);
+    });
+    render(<DividendsTab portfolioName="main" heldSymbols={['VTI']} />);
+    await waitFor(() => expect(screen.getByText(/June 2026/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /^list$/i }));
+    expect(screen.getByText('VTI')).toBeInTheDocument();
+    expect(screen.getByText(/Projected payout/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$85\.00/)).toBeInTheDocument();
   });
 
   it('toggles between calendar and list views', async () => {
