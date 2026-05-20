@@ -1,11 +1,11 @@
-import { useReducer, useRef, useCallback, useEffect } from 'react';
+import { useReducer, useRef, useCallback, useEffect, useState } from 'react';
 import { useUserProfile, AccountType, UserProfile } from '../contexts/UserProfileContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency, SUPPORTED_CURRENCIES } from '../contexts/CurrencyContext';
 import { invoke } from '../services/tauri'; // Direct invoke: vault commands should fail fast
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
-import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound } from 'lucide-react';
+import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound, Receipt } from 'lucide-react';
 
 const log = createLogger('SettingsPage');
 
@@ -129,6 +129,8 @@ export function SettingsPage() {
     form,
   } = state;
 
+  const [marginalRatePct, setMarginalRatePct] = useState<number>(24);
+
   useEffect(() => {
     invokeWithResilience<Record<string, boolean>>('get_api_key_statuses')
       .then(statuses => dispatch({ type: 'SET_API_KEY_STATUSES', payload: statuses }))
@@ -138,6 +140,14 @@ export function SettingsPage() {
       .catch(() => {});
     invoke<boolean>('vault_is_unlocked')
       .then(unlocked => dispatch({ type: 'SET_VAULT_UNLOCKED', payload: unlocked }))
+      .catch(() => {});
+    invokeWithResilience<string | null>('load_setting', { key: 'marginal_tax_rate' })
+      .then(v => {
+        const parsed = v ? parseFloat(v) : NaN;
+        if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 0.6) {
+          setMarginalRatePct(parsed * 100);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -459,6 +469,37 @@ export function SettingsPage() {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Tax Settings Section */}
+        <div className="card settings-card">
+          <h3><Receipt size={20} /> Tax Settings</h3>
+          <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
+            Marginal tax rate used by tax-loss harvesting to estimate savings.
+            Common US brackets: 12, 22, 24, 32, 35, 37.
+          </p>
+          <div className="form-group">
+            <label htmlFor="marginal-tax-rate">Marginal tax rate (%)</label>
+            <input
+              id="marginal-tax-rate"
+              type="number"
+              min={0}
+              max={60}
+              step={1}
+              value={marginalRatePct}
+              onChange={e => setMarginalRatePct(Number(e.target.value))}
+              onBlur={async () => {
+                const decimal = marginalRatePct / 100;
+                if (decimal >= 0 && decimal <= 0.6) {
+                  await invokeWithResilience('save_setting', {
+                    key: 'marginal_tax_rate',
+                    value: decimal.toString(),
+                  });
+                }
+              }}
+              style={{ width: '120px' }}
+            />
           </div>
         </div>
 
