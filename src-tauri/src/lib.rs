@@ -404,8 +404,14 @@ mod runtime_keys_tests {
         RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
         std::env::remove_var("TEST_FLOWFOLIO_PRIO");
         std::env::set_var("TEST_FLOWFOLIO_PRIO", "from_env");
-        RUNTIME_KEYS.write().insert("TEST_FLOWFOLIO_PRIO".to_string(), "from_runtime".to_string());
-        assert_eq!(get_api_key("TEST_FLOWFOLIO_PRIO"), Some("from_runtime".to_string()));
+        RUNTIME_KEYS.write().insert(
+            "TEST_FLOWFOLIO_PRIO".to_string(),
+            "from_runtime".to_string(),
+        );
+        assert_eq!(
+            get_api_key("TEST_FLOWFOLIO_PRIO"),
+            Some("from_runtime".to_string())
+        );
         RUNTIME_KEYS.write().remove("TEST_FLOWFOLIO_PRIO");
         std::env::remove_var("TEST_FLOWFOLIO_PRIO");
     }
@@ -413,7 +419,10 @@ mod runtime_keys_tests {
     #[test]
     fn test_get_api_key_falls_back_to_env() {
         std::env::set_var("TEST_FLOWFOLIO_FALLBACK", "env_value");
-        assert_eq!(get_api_key("TEST_FLOWFOLIO_FALLBACK"), Some("env_value".to_string()));
+        assert_eq!(
+            get_api_key("TEST_FLOWFOLIO_FALLBACK"),
+            Some("env_value".to_string())
+        );
         std::env::remove_var("TEST_FLOWFOLIO_FALLBACK");
     }
 
