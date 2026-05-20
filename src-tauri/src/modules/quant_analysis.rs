@@ -1873,4 +1873,75 @@ mod tests {
             );
         }
     }
+
+    // ===== T4 contract guards (gap fillers from track-4 plan) =====
+
+    /// All metric fields must be finite for any valid price series. Catches a
+    /// regression that would silently propagate NaN/Inf into the UI.
+    #[test]
+    fn test_calculate_metrics_all_fields_finite() {
+        let prices = generate_test_prices(60, 100.0, 0.002);
+        let m = QuantAnalyzer::calculate_metrics("FIN", &prices);
+        assert!(m.sharpe_ratio.is_finite(), "sharpe");
+        assert!(m.annualized_return.is_finite(), "annualized_return");
+        assert!(m.volatility.is_finite(), "volatility");
+        assert!(m.max_drawdown.is_finite(), "max_drawdown");
+        assert!(m.rsi.is_finite(), "rsi");
+        assert!(m.confidence.is_finite(), "confidence");
+    }
+
+    /// RSI is a bounded indicator — must always stay in [0, 100].
+    #[test]
+    fn test_rsi_bounded_0_to_100() {
+        for trend in [-0.005_f64, 0.0, 0.005_f64] {
+            let prices = generate_test_prices(60, 100.0, trend);
+            let m = QuantAnalyzer::calculate_metrics("RSI", &prices);
+            assert!(
+                m.rsi >= 0.0 && m.rsi <= 100.0,
+                "RSI must be in [0, 100], got {} (trend={})",
+                m.rsi,
+                trend
+            );
+        }
+    }
+
+    /// Drawdown should equal ~50% on a clean V-shape: 100 → 50 → 100.
+    /// (calculate_max_drawdown_fast returns percentage form.)
+    #[test]
+    fn test_v_shape_drawdown_is_50_percent() {
+        let mut closes: Vec<f64> = vec![100.0; 10];
+        closes.extend(vec![50.0; 10]); // 50% drop
+        closes.extend(vec![100.0; 10]); // full recovery
+        let dd = QuantAnalyzer::calculate_max_drawdown_fast(&closes);
+        assert!(
+            (dd - 50.0).abs() < 1e-6,
+            "V-shape max drawdown should be 50%, got {}",
+            dd
+        );
+    }
+
+    /// Signal must always be one of the known enum strings — no silent
+    /// inclusion of free-form text that the frontend would fail to render.
+    #[test]
+    fn test_signal_is_known_enum_value() {
+        let valid_signals = [
+            "BUY",
+            "STRONG BUY",
+            "SELL",
+            "STRONG SELL",
+            "NEUTRAL",
+            "HOLD",
+            "INSUFFICIENT DATA",
+        ];
+        for trend in [-0.003_f64, 0.0, 0.003_f64] {
+            let prices = generate_test_prices(60, 100.0, trend);
+            let m = QuantAnalyzer::calculate_metrics("SIG", &prices);
+            assert!(
+                valid_signals.iter().any(|s| m.signal == *s),
+                "Signal '{}' is not a known value (trend={})",
+                m.signal,
+                trend
+            );
+        }
+    }
 }
