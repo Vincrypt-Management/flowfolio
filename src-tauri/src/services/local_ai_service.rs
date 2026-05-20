@@ -314,8 +314,7 @@ async fn download_if_needed(client: &Client, dest: &PathBuf) -> Result<(), Strin
             .map_err(|e| format!("File write error: {e}"))?;
         downloaded += chunk.len() as u64;
 
-        if total > 0 {
-            let pct = downloaded * 100 / total;
+        if let Some(pct) = (downloaded * 100).checked_div(total) {
             if pct >= last_log_pct + 10 {
                 eprintln!(
                     "[LOCAL_AI] Download: {pct}% ({} / {} MB)",

@@ -232,11 +232,11 @@ impl HealthMonitor {
             components.push(ComponentHealth {
                 name: format!("provider:{}", name),
                 status,
-                latency_ms: if total > 0 {
-                    Some(metrics.total_latency_us.load(Ordering::SeqCst) / total / 1000)
-                } else {
-                    None
-                },
+                latency_ms: metrics
+                    .total_latency_us
+                    .load(Ordering::SeqCst)
+                    .checked_div(total)
+                    .map(|v| v / 1000),
                 message: Some(format!("{:.1}% success rate", success_rate * 100.0)),
                 last_check: timestamp,
             });

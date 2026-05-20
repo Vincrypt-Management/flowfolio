@@ -292,7 +292,7 @@ impl Journal {
 
         // Get top 10 tags
         let mut common_tags: Vec<(String, usize)> = tag_counts.into_iter().collect();
-        common_tags.sort_by(|a, b| b.1.cmp(&a.1));
+        common_tags.sort_by_key(|b| std::cmp::Reverse(b.1));
         common_tags.truncate(10);
 
         JournalStats {

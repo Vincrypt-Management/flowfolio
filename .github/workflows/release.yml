@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -25,11 +29,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit
       - run: npm run lint
       - run: npm run test:coverage
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.91.1"
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
@@ -75,8 +80,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -84,7 +91,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit
 
       - name: Write encrypted env
         run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
@@ -120,8 +127,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (pinned)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -129,7 +138,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit
 
       - name: Write encrypted env
         shell: bash
@@ -173,9 +182,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (pinned)
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.91.1"
           targets: ${{ matrix.target }}
 
       - name: Rust cache
@@ -185,7 +195,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit
 
       - name: Write encrypted env
         run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
@@ -233,9 +243,10 @@ jobs:
       - name: Install Android NDK
         run: sdkmanager "ndk;27.0.12077973"
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (pinned)
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.91.1"
           targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Rust cache
@@ -245,7 +256,7 @@ jobs:
           key: android
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit
 
       - name: Write encrypted env
         run: echo "${{ secrets.ENV_ENCRYPTED }}" > .env.encrypted
