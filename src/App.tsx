@@ -47,7 +47,10 @@ import {
   Shield,
   GitCompare,
   Clock,
-  Newspaper
+  Newspaper,
+  Receipt,
+  CalendarDays,
+  Coins
 } from "lucide-react";
 import "./App.css";
 import "./styles/mobile.css";
@@ -71,6 +74,9 @@ const NewsFeed = lazy(() => import("./components/NewsFeed").then(m => ({ default
 const TickerAnalysis = lazy(() => import('./components/TickerAnalysis'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const VibeStudio = lazy(() => import('./components/VibeStudio'));
+const TaxTab = lazy(() => import('./components/TaxTab').then(m => ({ default: m.TaxTab })));
+const DividendsTab = lazy(() => import('./components/DividendsTab').then(m => ({ default: m.DividendsTab })));
+const OptionsTab = lazy(() => import('./components/OptionsTab').then(m => ({ default: m.OptionsTab })));
 
 import { UserProfileCard } from "./components/UserProfileCard";
 import { RateLimitBanner } from "./components/RateLimitBanner";
@@ -594,6 +600,36 @@ function App() {
             onDismiss={dismissTooltip}
           />
         </div>
+        <button
+          className={`nav-item ${state.activeTab === "tax" ? "active" : ""}`}
+          onClick={() => handleNavClick("tax")}
+          title={state.isSidebarCollapsed ? "Tax" : ""}
+          role="menuitem"
+          aria-current={state.activeTab === "tax" ? "page" : undefined}
+        >
+          <Receipt className="nav-icon" size={20} />
+          {!state.isSidebarCollapsed && <span>Tax</span>}
+        </button>
+        <button
+          className={`nav-item ${state.activeTab === "dividends" ? "active" : ""}`}
+          onClick={() => handleNavClick("dividends")}
+          title={state.isSidebarCollapsed ? "Dividends" : ""}
+          role="menuitem"
+          aria-current={state.activeTab === "dividends" ? "page" : undefined}
+        >
+          <CalendarDays className="nav-icon" size={20} />
+          {!state.isSidebarCollapsed && <span>Dividends</span>}
+        </button>
+        <button
+          className={`nav-item ${state.activeTab === "options" ? "active" : ""}`}
+          onClick={() => handleNavClick("options")}
+          title={state.isSidebarCollapsed ? "Options" : ""}
+          role="menuitem"
+          aria-current={state.activeTab === "options" ? "page" : undefined}
+        >
+          <Coins className="nav-icon" size={20} />
+          {!state.isSidebarCollapsed && <span>Options</span>}
+        </button>
         <div style={{ position: 'relative' }}>
           <button
             className={`nav-item ${state.activeTab === "watchlist" ? "active" : ""}`}
@@ -954,6 +990,44 @@ function App() {
             <div className="animate-fade-in">
               <Suspense fallback={<TabLoading />}>
                 <JournalTab />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
+        )}
+
+        {state.activeTab === "tax" && (
+          <TabErrorBoundary tabName="Tax">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <TaxTab
+                  portfolioName={state.portfolioName}
+                  currentPrices={Object.fromEntries(
+                    state.persistedHoldings.map(h => [h.symbol, h.current_price])
+                  )}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
+        )}
+
+        {state.activeTab === "dividends" && (
+          <TabErrorBoundary tabName="Dividends">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <DividendsTab
+                  portfolioName={state.portfolioName}
+                  heldSymbols={state.persistedHoldings.map(h => h.symbol)}
+                />
+              </Suspense>
+            </div>
+          </TabErrorBoundary>
+        )}
+
+        {state.activeTab === "options" && (
+          <TabErrorBoundary tabName="Options">
+            <div className="animate-fade-in">
+              <Suspense fallback={<TabLoading />}>
+                <OptionsTab portfolioName={state.portfolioName} />
               </Suspense>
             </div>
           </TabErrorBoundary>
