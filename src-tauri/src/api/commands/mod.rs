@@ -3,6 +3,7 @@
 
 pub mod ai;
 pub mod backtest;
+pub mod dividend_calendar;
 pub mod dividends_tax;
 pub mod journal;
 pub mod market;
