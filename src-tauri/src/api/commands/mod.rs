@@ -6,6 +6,7 @@ pub mod backtest;
 pub mod dividends_tax;
 pub mod journal;
 pub mod market;
+pub mod options;
 pub mod portfolio;
 pub mod settings;
 pub mod vibe;
