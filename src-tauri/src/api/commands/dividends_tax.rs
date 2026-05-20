@@ -276,8 +276,9 @@ mod tests {
     use super::resolve_marginal_rate;
 
     // The bare wash-sale window arithmetic, isolated from sqlx for unit testing.
-    // record_wash_sale_event and check_wash_sale_window depend on the live DB
-    // pool — those are exercised by integration tests in src-tauri/tests/.
+    // record_wash_sale_event and check_wash_sale_window depend on the live DB pool —
+    // those are exercised by integration tests in src-tauri/tests/tax_integration.rs
+    // (run via `cargo test --test tax_integration`).
 
     #[test]
     fn day_30_is_inside_the_wash_sale_window() {

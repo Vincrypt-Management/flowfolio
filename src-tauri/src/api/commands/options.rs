@@ -1,6 +1,32 @@
 use crate::get_pool;
 use serde_json::Value;
 
+fn validate_new_position(
+    strike: f64,
+    contracts: i64,
+    premium_per_contract: f64,
+    expiration: &str,
+    open_date: &str,
+) -> Result<(), String> {
+    if strike <= 0.0 {
+        return Err("strike must be > 0".into());
+    }
+    if contracts <= 0 {
+        return Err("contracts must be > 0".into());
+    }
+    if premium_per_contract < 0.0 {
+        return Err("premium cannot be negative".into());
+    }
+    let exp = chrono::NaiveDate::parse_from_str(expiration, "%Y-%m-%d")
+        .map_err(|_| "expiration must be YYYY-MM-DD".to_string())?;
+    let open = chrono::NaiveDate::parse_from_str(open_date, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Utc::now().date_naive());
+    if exp < open {
+        return Err("expiration must be on or after open date".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn create_option_position(
@@ -18,6 +44,7 @@ pub async fn create_option_position(
     if !matches!(strategy.as_str(), "covered_call" | "cash_secured_put") {
         return Err(format!("invalid strategy: {strategy}"));
     }
+    validate_new_position(strike, contracts, premium_per_contract, &expiration, &open_date)?;
     let pool = get_pool().await?;
     sqlx::query(
         "INSERT INTO option_positions
@@ -138,9 +165,11 @@ pub async fn delete_option_position(id: String) -> Result<(), String> {
 }
 
 /// Pure aggregation — testable without DB.
-pub(crate) fn aggregate_options_summary(
+/// `strategy` must be "covered_call" or "cash_secured_put"; any other value zeros both exposure fields.
+/// Tuple shape: (status, strike, contracts, premium_per_contract, close_premium).
+pub fn aggregate_options_summary(
     rows: &[(String, f64, i64, f64, Option<f64>)],
-    // tuple: (status, strike, contracts, premium_per_contract, close_premium)
+    strategy: &str,
 ) -> Value {
     let mut open_count = 0i64;
     let mut total_cash_secured = 0.0;
@@ -152,6 +181,11 @@ pub(crate) fn aggregate_options_summary(
         match status.as_str() {
             "open" => {
                 open_count += 1;
+                match strategy {
+                    "covered_call" => total_assignment_exposure += notional,
+                    "cash_secured_put" => total_cash_secured += notional,
+                    _ => {}
+                }
             }
             "expired" | "assigned" => {
                 realized_premium += gross_credit;
@@ -161,13 +195,6 @@ pub(crate) fn aggregate_options_summary(
                 realized_premium += gross_credit - close_debit;
             }
             _ => {}
-        }
-        // For ALL open positions, track cash secured + assignment exposure by strategy.
-        if status == "open" {
-            // Caller passes strategy separately if needed; here we approximate via
-            // strike notional only (caller-side splits by strategy if desired).
-            total_cash_secured += notional;
-            total_assignment_exposure += notional;
         }
     }
     serde_json::json!({
@@ -197,8 +224,8 @@ pub async fn get_options_summary(portfolio_name: String) -> Result<Value, String
             _ => {}
         }
     }
-    let cc_summary = aggregate_options_summary(&cc_rows);
-    let csp_summary = aggregate_options_summary(&csp_rows);
+    let cc_summary = aggregate_options_summary(&cc_rows, "covered_call");
+    let csp_summary = aggregate_options_summary(&csp_rows, "cash_secured_put");
 
     Ok(serde_json::json!({
         "open_count":
@@ -251,14 +278,14 @@ mod tests {
             ("open".to_string(), 50.0, 2, 1.0, None),
             ("expired".to_string(), 100.0, 1, 3.0, None),
         ];
-        let s = aggregate_options_summary(&rows);
+        let s = aggregate_options_summary(&rows, "covered_call");
         assert_eq!(s["open_count"].as_i64().unwrap(), 2);
     }
 
     #[test]
     fn summary_realized_premium_for_expired() {
         let rows = vec![("expired".to_string(), 100.0, 1, 2.50, None)];
-        let s = aggregate_options_summary(&rows);
+        let s = aggregate_options_summary(&rows, "covered_call");
         // 1 contract * $2.50 * 100 = $250
         assert_eq!(s["realized_premium_ytd"].as_f64().unwrap(), 250.0);
     }
@@ -266,7 +293,7 @@ mod tests {
     #[test]
     fn summary_realized_premium_for_closed_early_subtracts_close_debit() {
         let rows = vec![("closed_early".to_string(), 100.0, 1, 2.50, Some(0.80))];
-        let s = aggregate_options_summary(&rows);
+        let s = aggregate_options_summary(&rows, "covered_call");
         // ($2.50 - $0.80) * 1 * 100 = $170
         assert_eq!(s["realized_premium_ytd"].as_f64().unwrap(), 170.0);
     }
@@ -277,7 +304,72 @@ mod tests {
             ("open".to_string(), 100.0, 1, 2.0, None), // $10,000 notional
             ("assigned".to_string(), 100.0, 1, 2.0, None),
         ];
-        let s = aggregate_options_summary(&rows);
+        let s = aggregate_options_summary(&rows, "cash_secured_put");
         assert_eq!(s["total_cash_secured"].as_f64().unwrap(), 10000.0);
+    }
+
+    #[test]
+    fn aggregate_covered_call_only_sets_assignment_exposure() {
+        let rows = vec![("open".to_string(), 100.0, 2, 1.5, None)];
+        let v = aggregate_options_summary(&rows, "covered_call");
+        assert_eq!(v["total_assignment_exposure"].as_f64().unwrap(), 100.0 * 2.0 * 100.0);
+        assert_eq!(v["total_cash_secured"].as_f64().unwrap(), 0.0);
+        assert_eq!(v["open_count"].as_i64().unwrap(), 1);
+    }
+
+    #[test]
+    fn aggregate_cash_secured_put_only_sets_cash_secured() {
+        let rows = vec![("open".to_string(), 90.0, 1, 2.0, None)];
+        let v = aggregate_options_summary(&rows, "cash_secured_put");
+        assert_eq!(v["total_cash_secured"].as_f64().unwrap(), 90.0 * 1.0 * 100.0);
+        assert_eq!(v["total_assignment_exposure"].as_f64().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn aggregate_unknown_strategy_zeros_both_exposures() {
+        let rows = vec![("open".to_string(), 50.0, 1, 1.0, None)];
+        let v = aggregate_options_summary(&rows, "bogus");
+        assert_eq!(v["total_cash_secured"].as_f64().unwrap(), 0.0);
+        assert_eq!(v["total_assignment_exposure"].as_f64().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn validate_rejects_zero_strike() {
+        let err = validate_new_position(0.0, 1, 1.0, "2027-01-15", "2026-05-20").unwrap_err();
+        assert!(err.contains("strike must be > 0"));
+    }
+
+    #[test]
+    fn validate_rejects_zero_contracts() {
+        let err = validate_new_position(100.0, 0, 1.0, "2027-01-15", "2026-05-20").unwrap_err();
+        assert!(err.contains("contracts must be > 0"));
+    }
+
+    #[test]
+    fn validate_rejects_negative_premium() {
+        let err = validate_new_position(100.0, 1, -0.01, "2027-01-15", "2026-05-20").unwrap_err();
+        assert!(err.contains("premium cannot be negative"));
+    }
+
+    #[test]
+    fn validate_rejects_past_expiration() {
+        let err = validate_new_position(100.0, 1, 1.0, "2026-01-01", "2026-05-20").unwrap_err();
+        assert!(err.contains("expiration must be on or after open date"));
+    }
+
+    #[test]
+    fn validate_rejects_malformed_date() {
+        let err = validate_new_position(100.0, 1, 1.0, "garbage", "2026-05-20").unwrap_err();
+        assert!(err.contains("expiration must be YYYY-MM-DD"));
+    }
+
+    #[test]
+    fn validate_accepts_well_formed_input() {
+        assert!(validate_new_position(100.0, 1, 1.0, "2027-01-15", "2026-05-20").is_ok());
+    }
+
+    #[test]
+    fn validate_allows_same_day_expiration_as_open_date() {
+        assert!(validate_new_position(100.0, 1, 1.0, "2026-05-20", "2026-05-20").is_ok());
     }
 }

@@ -1,11 +1,12 @@
 use crate::get_pool;
 use crate::modules::dividend_calendar::{
-    DividendCalendarChain, DividendCalendarProvider, UpcomingDividend,
+    DividendCalendarChain, DividendCalendarProvider, UpcomingDividend, EMPTY_SENTINEL_EX_DATE,
 };
+use futures::stream::{self, StreamExt};
 use serde::Deserialize;
 use std::env;
 
-const CACHE_TTL_HOURS: i64 = 24;
+const CACHE_CONCURRENCY: usize = 5;
 
 // ─── Finnhub ───────────────────────────────────────────────────
 
@@ -37,15 +38,15 @@ impl DividendCalendarProvider for FinnhubDividendProvider {
         let today = chrono::Utc::now().date_naive();
         let until = today + chrono::Duration::days(lookahead_days as i64);
         let url = format!(
-            "https://finnhub.io/api/v1/stock/dividend?symbol={}&from={}&to={}&token={}",
+            "https://finnhub.io/api/v1/stock/dividend?symbol={}&from={}&to={}",
             symbol,
             today.format("%Y-%m-%d"),
             until.format("%Y-%m-%d"),
-            self.api_key
         );
         let resp = self
             .http
             .get(&url)
+            .header("X-Finnhub-Token", &self.api_key)
             .send()
             .await
             .map_err(|e| e.to_string())?;
@@ -61,6 +62,8 @@ impl DividendCalendarProvider for FinnhubDividendProvider {
                     ex_date: r.ex_date?,
                     pay_date: r.pay_date,
                     amount_per_share: r.amount.unwrap_or(0.0),
+                    shares_held: None,
+                    projected_payout: None,
                 })
             })
             .collect())
@@ -82,6 +85,19 @@ struct FmpDividendRow {
     dividend: Option<f64>,
 }
 
+fn scrub_fmp_err(e: reqwest::Error) -> String {
+    let raw = e.to_string();
+    if raw.contains("apikey=") {
+        let status = e
+            .status()
+            .map(|s| s.as_u16().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        format!("FMP request failed: status={}", status)
+    } else {
+        raw
+    }
+}
+
 #[async_trait::async_trait]
 impl DividendCalendarProvider for FmpDividendProvider {
     fn name(&self) -> &str {
@@ -101,12 +117,7 @@ impl DividendCalendarProvider for FmpDividendProvider {
             until.format("%Y-%m-%d"),
             self.api_key,
         );
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let resp = self.http.get(&url).send().await.map_err(scrub_fmp_err)?;
         if !resp.status().is_success() {
             return Err(format!("fmp http {}", resp.status()));
         }
@@ -115,7 +126,7 @@ impl DividendCalendarProvider for FmpDividendProvider {
             symbol: String,
             historical: Vec<FmpDividendRow>,
         }
-        let env: FmpEnvelope = resp.json().await.map_err(|e| e.to_string())?;
+        let env: FmpEnvelope = resp.json().await.map_err(scrub_fmp_err)?;
         Ok(env
             .historical
             .into_iter()
@@ -125,6 +136,8 @@ impl DividendCalendarProvider for FmpDividendProvider {
                     ex_date: r.date?,
                     pay_date: r.payment_date,
                     amount_per_share: r.dividend.unwrap_or(0.0),
+                    shares_held: None,
+                    projected_payout: None,
                 })
             })
             .collect())
@@ -154,15 +167,42 @@ fn build_chain() -> DividendCalendarChain {
 
 // ─── Cache helpers ──────────────────────────────────────────────
 
+const NON_EMPTY_TTL_HOURS: i64 = 24;
+const EMPTY_TTL_HOURS: i64 = 6;
+
+/// Returns Some(rows) on cache hit (empty Vec == negative-cache hit), None on miss.
 async fn read_cache(symbol: &str) -> Result<Option<Vec<UpcomingDividend>>, String> {
     let pool = get_pool().await?;
-    let cutoff = chrono::Utc::now() - chrono::Duration::hours(CACHE_TTL_HOURS);
-    let rows: Vec<(String, String, Option<String>, f64)> = sqlx::query_as(
-        "SELECT symbol, ex_date, pay_date, amount_per_share FROM dividend_calendar_cache
-         WHERE symbol = ? AND fetched_at >= ?",
+    let now = chrono::Utc::now();
+    let non_empty_cutoff = (now - chrono::Duration::hours(NON_EMPTY_TTL_HOURS))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    let empty_cutoff = (now - chrono::Duration::hours(EMPTY_TTL_HOURS))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+
+    // Negative-cache check first: a fresh sentinel row means provider returned empty recently.
+    let sentinel: Option<(String,)> = sqlx::query_as(
+        "SELECT symbol FROM dividend_calendar_cache
+         WHERE symbol = ? AND ex_date = ? AND fetched_at >= ?",
     )
     .bind(symbol)
-    .bind(cutoff.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+    .bind(EMPTY_SENTINEL_EX_DATE)
+    .bind(&empty_cutoff)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    if sentinel.is_some() {
+        return Ok(Some(Vec::new()));
+    }
+
+    let rows: Vec<(String, String, Option<String>, f64)> = sqlx::query_as(
+        "SELECT symbol, ex_date, pay_date, amount_per_share FROM dividend_calendar_cache
+         WHERE symbol = ? AND ex_date != ? AND fetched_at >= ?",
+    )
+    .bind(symbol)
+    .bind(EMPTY_SENTINEL_EX_DATE)
+    .bind(&non_empty_cutoff)
     .fetch_all(&pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -176,14 +216,40 @@ async fn read_cache(symbol: &str) -> Result<Option<Vec<UpcomingDividend>>, Strin
                 ex_date: r.1,
                 pay_date: r.2,
                 amount_per_share: r.3,
+                shares_held: None,
+                projected_payout: None,
             })
             .collect(),
     ))
 }
 
-async fn write_cache(divs: &[UpcomingDividend]) -> Result<(), String> {
+async fn write_cache(symbol: &str, divs: &[UpcomingDividend]) -> Result<(), String> {
     let pool = get_pool().await?;
     let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    if divs.is_empty() {
+        // Negative cache: drop any stale sentinel and write a fresh one.
+        sqlx::query(
+            "INSERT OR REPLACE INTO dividend_calendar_cache
+             (symbol, ex_date, pay_date, amount_per_share, fetched_at) VALUES (?, ?, NULL, 0, ?)",
+        )
+        .bind(symbol)
+        .bind(EMPTY_SENTINEL_EX_DATE)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    // Non-empty payload: clear any prior sentinel so it doesn't shadow real rows.
+    sqlx::query("DELETE FROM dividend_calendar_cache WHERE symbol = ? AND ex_date = ?")
+        .bind(symbol)
+        .bind(EMPTY_SENTINEL_EX_DATE)
+        .execute(&pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
     for d in divs {
         sqlx::query(
             "INSERT OR REPLACE INTO dividend_calendar_cache
@@ -201,33 +267,77 @@ async fn write_cache(divs: &[UpcomingDividend]) -> Result<(), String> {
     Ok(())
 }
 
+/// Fetches dividends for one symbol with cache-first + provider-chain fallback.
+async fn fetch_one_with_cache(
+    symbol: String,
+    chain: &DividendCalendarChain,
+    lookahead: u32,
+) -> Vec<UpcomingDividend> {
+    if let Ok(Some(cached)) = read_cache(&symbol).await {
+        return cached;
+    }
+    match chain.upcoming(&symbol, lookahead).await {
+        Ok(divs) => {
+            let _ = write_cache(&symbol, &divs).await;
+            divs
+        }
+        Err(_) => Vec::new(), // swallow per-symbol errors; caller sees zero rows
+    }
+}
+
+/// Optional join: returns shares-held per symbol from open tax lots for the given portfolio.
+/// Symbols not present in the map are simply absent (frontend treats as None).
+async fn shares_held_by_symbol(
+    portfolio_name: Option<&str>,
+) -> std::collections::HashMap<String, f64> {
+    let mut map = std::collections::HashMap::new();
+    let Some(name) = portfolio_name else {
+        return map;
+    };
+    let Ok(pool) = get_pool().await else {
+        return map;
+    };
+    let rows: Result<Vec<(String, f64)>, _> = sqlx::query_as(
+        "SELECT symbol, COALESCE(SUM(shares), 0) FROM tax_lots
+         WHERE portfolio_name = ? AND is_closed = 0
+         GROUP BY symbol",
+    )
+    .bind(name)
+    .fetch_all(&pool)
+    .await;
+    if let Ok(rows) = rows {
+        for (sym, shares) in rows {
+            map.insert(sym, shares);
+        }
+    }
+    map
+}
+
 #[tauri::command]
 pub async fn get_upcoming_dividends(
     symbols: Vec<String>,
     lookahead_days: Option<u32>,
+    portfolio_name: Option<String>,
 ) -> Result<Vec<UpcomingDividend>, String> {
     let lookahead = lookahead_days.unwrap_or(90);
     let chain = build_chain();
-    let mut out: Vec<UpcomingDividend> = Vec::new();
+    let shares_map = shares_held_by_symbol(portfolio_name.as_deref()).await;
 
-    for sym in symbols {
-        // Cache check first.
-        if let Some(cached) = read_cache(&sym).await? {
-            out.extend(cached);
-            continue;
-        }
-        // Cache miss → provider chain.
-        match chain.upcoming(&sym, lookahead).await {
-            Ok(divs) => {
-                if !divs.is_empty() {
-                    write_cache(&divs).await?;
-                }
-                out.extend(divs);
+    let chain_ref = &chain;
+    let results: Vec<Vec<UpcomingDividend>> = stream::iter(symbols.into_iter())
+        .map(|sym| async move { fetch_one_with_cache(sym, chain_ref, lookahead).await })
+        .buffer_unordered(CACHE_CONCURRENCY)
+        .collect()
+        .await;
+
+    let mut out: Vec<UpcomingDividend> = Vec::new();
+    for batch in results {
+        for mut d in batch {
+            if let Some(&shares) = shares_map.get(&d.symbol) {
+                d.shares_held = Some(shares);
+                d.projected_payout = Some(d.amount_per_share * shares);
             }
-            Err(_) => {
-                // Swallow per-symbol provider errors; caller sees zero rows.
-                continue;
-            }
+            out.push(d);
         }
     }
     Ok(out)
@@ -242,9 +352,14 @@ pub async fn get_projected_annual_income(
         .format("%Y-%m-%d")
         .to_string();
 
-    let rows: Vec<(String, f64)> = sqlx::query_as(
-        "SELECT symbol, COALESCE(SUM(total_amount), 0) FROM dividends
-         WHERE portfolio_name = ? AND ex_date >= ? GROUP BY symbol",
+    // Trailing 12-month per-share total + per-event count per symbol.
+    let per_share_rows: Vec<(String, f64, f64)> = sqlx::query_as(
+        "SELECT symbol,
+                COALESCE(SUM(amount_per_share), 0) AS trailing_per_share,
+                COALESCE(SUM(total_amount), 0)     AS trailing_12mo
+         FROM dividends
+         WHERE portfolio_name = ? AND ex_date >= ?
+         GROUP BY symbol",
     )
     .bind(&portfolio_name)
     .bind(&cutoff)
@@ -252,17 +367,32 @@ pub async fn get_projected_annual_income(
     .await
     .map_err(|e| e.to_string())?;
 
+    // Current shares from open tax lots.
+    let shares_rows: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT symbol, COALESCE(SUM(shares), 0) FROM tax_lots
+         WHERE portfolio_name = ? AND is_closed = 0
+         GROUP BY symbol",
+    )
+    .bind(&portfolio_name)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let shares_map: std::collections::HashMap<String, f64> = shares_rows.into_iter().collect();
+
     let mut by_symbol = Vec::new();
     let mut total = 0.0;
-    for (sym, sum) in rows {
-        // 1:1 projection: trailing-12-month total is the projected annual.
-        // Refinement (shares-adjusted) can come in 0.4.7.
+    for (sym, trailing_per_share, trailing_12mo) in per_share_rows {
+        let current_shares = shares_map.get(&sym).copied().unwrap_or(0.0);
+        // Shares-adjusted projection: trailing per-share * current shares.
+        let projected_annual = trailing_per_share * current_shares;
         by_symbol.push(serde_json::json!({
             "symbol": sym,
-            "trailing_12mo": sum,
-            "projected_annual": sum,
+            "trailing_12mo": trailing_12mo,
+            "trailing_per_share": trailing_per_share,
+            "current_shares": current_shares,
+            "projected_annual": projected_annual,
         }));
-        total += sum;
+        total += projected_annual;
     }
     Ok(serde_json::json!({
         "portfolio_name": portfolio_name,

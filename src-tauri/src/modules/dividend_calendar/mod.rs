@@ -6,6 +6,23 @@ pub struct UpcomingDividend {
     pub ex_date: String,
     pub pay_date: Option<String>,
     pub amount_per_share: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shares_held: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projected_payout: Option<f64>,
+}
+
+/// Negative-cache sentinel: stored with this ex_date when a provider returns empty,
+/// allowing 6h suppression of re-checks. Filtered out before returning to callers.
+pub const EMPTY_SENTINEL_EX_DATE: &str = "__empty__";
+
+/// TTL in hours for the cache entry written after a provider call.
+/// Empty payload → short TTL so newly-announced dividends surface quickly enough.
+/// Consumed by unit + integration tests; the read-path in commands uses inline constants
+/// for the cutoff comparison to keep the SQL bind simple.
+#[allow(dead_code)]
+pub fn cache_ttl_hours(events: &[UpcomingDividend]) -> i64 {
+    if events.is_empty() { 6 } else { 24 }
 }
 
 #[async_trait::async_trait]
@@ -74,7 +91,19 @@ mod tests {
             ex_date: "2026-06-01".into(),
             pay_date: Some("2026-06-15".into()),
             amount_per_share: 0.50,
+            shares_held: None,
+            projected_payout: None,
         }
+    }
+
+    #[test]
+    fn ttl_hours_for_empty_payload_is_6() {
+        assert_eq!(cache_ttl_hours(&[]), 6);
+    }
+
+    #[test]
+    fn ttl_hours_for_non_empty_payload_is_24() {
+        assert_eq!(cache_ttl_hours(&[one("VTI")]), 24);
     }
 
     #[tokio::test]
