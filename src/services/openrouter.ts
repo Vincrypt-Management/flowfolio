@@ -82,7 +82,8 @@ class OpenRouterService {
 
   /**
    * Stream chat completion - yields chunks as they arrive
-   * Note: Streaming is not yet supported via Tauri backend, falls back to non-streaming
+   * Real streaming via Tauri `ai_chat_stream` + `ai-token` events. Each event payload
+   * is yielded as a non-terminal chunk; a final `{ content: '', done: true }` marks completion.
    */
   async *chatStream(
     messages: OpenRouterMessage[],
@@ -93,20 +94,51 @@ class OpenRouterService {
       top_p?: number;
     }
   ): AsyncGenerator<StreamChunk> {
-    // For now, use non-streaming and yield the full response
-    // TODO: Implement proper streaming via Tauri events
+    log.debug(`chatStream called with model: ${model}`);
+
+    const queue: string[] = [];
+    let resolveNext: (() => void) | null = null;
+    let finished = false;
+    let error: Error | null = null;
+
+    const unlisten = await listen<string>('ai-token', (event) => {
+      queue.push(event.payload);
+      resolveNext?.();
+      resolveNext = null;
+    });
+
+    const invokePromise = invokeWithResilience<string>('ai_chat_stream', {
+      messages,
+      model,
+      temperature: options?.temperature,
+      maxTokens: options?.max_tokens,
+    })
+      .then(() => { finished = true; resolveNext?.(); resolveNext = null; })
+      .catch((e) => {
+        error = e instanceof Error ? e : new Error(String(e));
+        finished = true;
+        resolveNext?.();
+        resolveNext = null;
+      });
+
     try {
-      log.debug(`chatStream called with model: ${model}`);
-      const response = await this.chat(messages, model, options);
-      log.debug(`chatStream response received, length: ${response?.length}`);
-      
-      // First yield the content with done: false so it gets captured
-      yield { content: response, done: false };
-      // Then signal completion
+      while (true) {
+        while (queue.length > 0) {
+          const content = queue.shift()!;
+          yield { content, done: false };
+        }
+        if (finished) break;
+        await new Promise<void>((res) => { resolveNext = res; });
+      }
+      // Drain any tokens that arrived between the queue check and finished flag.
+      while (queue.length > 0) {
+        yield { content: queue.shift()!, done: false };
+      }
+      if (error) throw error;
       yield { content: '', done: true };
-    } catch (error) {
-      log.error('chatStream error', error);
-      throw error;
+    } finally {
+      unlisten();
+      await invokePromise;
     }
   }
 
