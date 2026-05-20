@@ -110,6 +110,7 @@ export function TaxLotView({ portfolioName, currentPrices }: TaxLotViewProps) {
         invokeWithResilience<HarvestOpportunity[]>('get_tax_loss_harvest_opportunities', {
           portfolioName,
           currentPrices,
+          overrideRate: null,
         }),
       ]);
       setLots(lotsResult);
