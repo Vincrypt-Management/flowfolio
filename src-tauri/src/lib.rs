@@ -322,6 +322,8 @@ pub fn run() {
             record_dividend,
             list_dividends,
             get_dividend_summary,
+            crate::api::commands::dividend_calendar::get_upcoming_dividends,
+            crate::api::commands::dividend_calendar::get_projected_annual_income,
             // Multi-Currency
             get_exchange_rate,
             // Tax Lot Tracking
