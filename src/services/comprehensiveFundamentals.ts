@@ -286,7 +286,7 @@ export interface ComprehensiveFundamentalAnalysis {
 
 class ComprehensiveFundamentalsService {
   private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-  private readonly analysisModel = 'anthropic/claude-3.5-sonnet';
+  private readonly analysisModel = 'meta-llama/llama-3.3-70b-instruct:free';
   private readonly CACHE_PREFIX = 'flowfolio_fundamentals_';
   
   /**

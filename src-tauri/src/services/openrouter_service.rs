@@ -64,7 +64,7 @@ impl OpenRouterService {
         let api_url = crate::core::encrypted_env::get_env_var("OPENROUTER_API_URL")
             .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
         let default_model = crate::core::encrypted_env::get_env_var("DEFAULT_LLM_MODEL")
-            .unwrap_or_else(|| "anthropic/claude-3-sonnet-20240229".to_string());
+            .unwrap_or_else(|| "meta-llama/llama-3.3-70b-instruct:free".to_string());
 
         // Debug: Log API key status
         tracing::debug!(configured = api_key.is_some(), "OpenRouter API key status");
@@ -320,10 +320,10 @@ mod tests {
     }
 
     #[test]
-    fn default_model_is_claude_sonnet() {
+    fn default_model_is_free_tier() {
         std::env::remove_var("DEFAULT_LLM_MODEL");
         let svc = OpenRouterService::new();
-        assert_eq!(svc.default_model, "anthropic/claude-3-sonnet-20240229");
+        assert_eq!(svc.default_model, "meta-llama/llama-3.3-70b-instruct:free");
     }
 
     #[test]

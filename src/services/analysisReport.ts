@@ -18,7 +18,7 @@ import { createLogger } from '../core/logger';
 const log = createLogger('analysis-report');
 
 // Report generation model (use a capable model for analysis)
-const REPORT_MODEL = import.meta.env.VITE_REPORT_MODEL || 'anthropic/claude-3.5-sonnet';
+const REPORT_MODEL = import.meta.env.VITE_REPORT_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
 
 // Auto-generation configuration
 export interface AutoReportConfig {

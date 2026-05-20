@@ -113,7 +113,7 @@ pub async fn ai_chat_stream(
     let api_key = crate::get_api_key("OPENROUTER_API_KEY")
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
-    let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".to_string());
+    let model = model.unwrap_or_else(|| "meta-llama/llama-3.3-70b-instruct:free".to_string());
     let client = crate::HTTP_CLIENT.clone();
 
     let body = serde_json::json!({
