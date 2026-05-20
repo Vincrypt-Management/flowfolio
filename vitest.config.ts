@@ -11,6 +11,19 @@ export default defineConfig({
     poolOptions: {
       threads: { singleThread: true },
     },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      include: ['src/shared/utils/calculations.ts'],
+      thresholds: {
+        'src/shared/utils/calculations.ts': {
+          lines: 80,
+          branches: 80,
+          functions: 80,
+          statements: 80,
+        },
+      },
+    },
   },
   resolve: {
     alias: {
