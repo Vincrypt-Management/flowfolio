@@ -108,6 +108,59 @@ export function buildVibePlanPrompt(p: VibePlanInput): string {
   ].join('\n');
 }
 
+// ─── Generated portfolio (VibeStudio output) ──────────────────────
+
+export interface GeneratedPortfolioAssetInput {
+  symbol: string;
+  name: string;
+  allocation: number; // percentage 0-100
+  sector?: string;
+  assetType?: string;
+  rationale?: string;
+}
+
+export interface GeneratedPortfolioInput {
+  title: string;
+  description: string;
+  strategy: string;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  timeHorizon: string;
+  rebalanceFrequency: string;
+  expectedReturn: string;
+  volatility: string;
+  reasoning?: string;
+  assets: GeneratedPortfolioAssetInput[];
+}
+
+export function buildGeneratedPortfolioPrompt(p: GeneratedPortfolioInput): string {
+  const assetsList = p.assets.length > 0
+    ? p.assets
+        .map((a) => {
+          const sector = a.sector ? ` [${a.sector}]` : '';
+          return `${a.symbol} (${a.name}) — ${a.allocation.toFixed(1)}%${sector}`;
+        })
+        .join('\n')
+    : '(no assets)';
+
+  return [
+    'You are a portfolio strategist. Describe what this portfolio favors and where it could go wrong.',
+    'Cover: (1) the kind of investor this fits, (2) what the allocation tilts toward (growth, defensive, sector concentration), (3) the single biggest risk based on the holdings, (4) one situation where this portfolio would underperform.',
+    'Be concise (3–4 short paragraphs). No disclaimers.',
+    '',
+    `Title: ${p.title}`,
+    `Description: ${p.description}`,
+    `Strategy: ${p.strategy}`,
+    `Risk level: ${p.riskLevel}`,
+    `Time horizon: ${p.timeHorizon}`,
+    `Rebalance: ${p.rebalanceFrequency}`,
+    `Expected return: ${p.expectedReturn}`,
+    `Volatility: ${p.volatility}`,
+    '',
+    `Holdings (${p.assets.length}):`,
+    assetsList,
+  ].join('\n');
+}
+
 // ─── Risk dashboard ───────────────────────────────────────────────
 
 export interface RiskConcentration {

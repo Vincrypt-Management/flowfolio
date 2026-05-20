@@ -56,6 +56,8 @@ import QuantDashboard from "./charts/QuantDashboard";
 import TickerAnalysis from "./TickerAnalysis";
 import { PrivacyDisclosure } from "./PrivacyDisclosure";
 import { StrategyShareCard } from "./StrategyShareCard";
+import { AiInlinePanel } from './AiInlinePanel';
+import { buildGeneratedPortfolioPrompt, type GeneratedPortfolioInput } from '../services/agentSurfaces';
 import "./VibeStudio.css";
 
 interface ProgressStep {
@@ -1858,6 +1860,30 @@ Be conversational but professional. Cite specific data points from the portfolio
               </div>
             </div>
           )}
+
+          <AiInlinePanel
+            prompt={buildGeneratedPortfolioPrompt({
+              title: generatedPortfolio.title,
+              description: generatedPortfolio.description,
+              strategy: generatedPortfolio.strategy,
+              riskLevel: generatedPortfolio.riskLevel,
+              timeHorizon: generatedPortfolio.timeHorizon,
+              rebalanceFrequency: generatedPortfolio.rebalanceFrequency,
+              expectedReturn: generatedPortfolio.expectedReturn,
+              volatility: generatedPortfolio.volatility,
+              reasoning: generatedPortfolio.reasoning,
+              assets: generatedPortfolio.assets.map((a) => ({
+                symbol: a.symbol,
+                name: a.name,
+                allocation: a.allocation,
+                sector: a.sector,
+                assetType: a.assetType,
+                rationale: a.rationale,
+              })),
+            } satisfies GeneratedPortfolioInput)}
+            triggerLabel="Explain this plan"
+            emptyHint="Have AI describe what this portfolio favors and where it could fail."
+          />
         </div>
       )}
 

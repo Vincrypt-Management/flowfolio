@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   buildBacktestPrompt,
   buildVibePlanPrompt,
+  buildGeneratedPortfolioPrompt,
   buildRiskPrompt,
   type BacktestInput,
   type VibePlanInput,
+  type GeneratedPortfolioInput,
   type RiskInput,
 } from '../../services/agentSurfaces';
 
@@ -125,6 +127,55 @@ describe('buildVibePlanPrompt', () => {
       cadence: { quarterly_rebalance: false, rebalance_threshold_pct: 10 },
     });
     expect(p).toContain('manual rebalance');
+  });
+});
+
+describe('buildGeneratedPortfolioPrompt', () => {
+  const sample: GeneratedPortfolioInput = {
+    title: 'Conservative Income',
+    description: 'Dividend-focused balanced portfolio.',
+    strategy: 'Buy and hold dividend payers and bonds.',
+    riskLevel: 'Low',
+    timeHorizon: '10+ years',
+    rebalanceFrequency: 'Annually',
+    expectedReturn: '6-8% annually',
+    volatility: '8-12%',
+    assets: [
+      { symbol: 'VYM', name: 'Vanguard High Dividend', allocation: 40, sector: 'Equity' },
+      { symbol: 'BND', name: 'Vanguard Total Bond', allocation: 35 },
+      { symbol: 'SCHD', name: 'Schwab US Dividend', allocation: 25, sector: 'Equity' },
+    ],
+  };
+
+  it('lists each asset with symbol, name, and allocation', () => {
+    const p = buildGeneratedPortfolioPrompt(sample);
+    expect(p).toContain('VYM (Vanguard High Dividend) — 40.0%');
+    expect(p).toContain('BND (Vanguard Total Bond) — 35.0%');
+    expect(p).toContain('SCHD (Schwab US Dividend) — 25.0%');
+  });
+
+  it('includes sector in brackets when present', () => {
+    const p = buildGeneratedPortfolioPrompt(sample);
+    expect(p).toContain('[Equity]');
+  });
+
+  it('includes title, risk level, time horizon, and rebalance frequency', () => {
+    const p = buildGeneratedPortfolioPrompt(sample);
+    expect(p).toContain('Title: Conservative Income');
+    expect(p).toContain('Risk level: Low');
+    expect(p).toContain('Time horizon: 10+ years');
+    expect(p).toContain('Rebalance: Annually');
+  });
+
+  it('renders "(no assets)" when assets array is empty', () => {
+    const p = buildGeneratedPortfolioPrompt({ ...sample, assets: [] });
+    expect(p).toContain('(no assets)');
+    expect(p).toContain('Holdings (0):');
+  });
+
+  it('starts with strategist framing', () => {
+    const p = buildGeneratedPortfolioPrompt(sample);
+    expect(p.startsWith('You are a portfolio strategist.')).toBe(true);
   });
 });
 
