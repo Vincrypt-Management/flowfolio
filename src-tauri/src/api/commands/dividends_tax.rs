@@ -126,12 +126,37 @@ pub async fn list_tax_lots(
         .collect())
 }
 
+/// Resolves the effective marginal tax rate from settings + optional override.
+/// Defaults to 0.24 if unset or out of range (0–60%).
+pub(crate) fn resolve_marginal_rate(
+    settings_value: Option<&str>,
+    override_rate: Option<f64>,
+) -> f64 {
+    if let Some(o) = override_rate {
+        return o;
+    }
+    settings_value
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| (0.0..=0.6).contains(v))
+        .unwrap_or(0.24)
+}
+
 #[tauri::command]
 pub async fn get_tax_loss_harvest_opportunities(
     portfolio_name: String,
     current_prices: HashMap<String, f64>,
+    override_rate: Option<f64>,
 ) -> Result<Vec<serde_json::Value>, String> {
     let pool = get_pool().await?;
+
+    // Resolve marginal rate from user_settings (default 0.24).
+    let rate_row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM user_settings WHERE key = 'marginal_tax_rate'")
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    let rate = resolve_marginal_rate(rate_row.as_ref().map(|r| r.0.as_str()), override_rate);
+
     let rows = sqlx::query_as::<_, (String, String, f64, f64, String)>(
         "SELECT id, symbol, shares, cost_basis_per_share, purchase_date FROM tax_lots WHERE portfolio_name = ? AND is_closed = 0"
     ).bind(&portfolio_name).fetch_all(&pool).await.map_err(|e| e.to_string())?;
@@ -145,12 +170,16 @@ pub async fn get_tax_loss_harvest_opportunities(
                     .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
                     .unwrap_or(0);
                 opportunities.push(serde_json::json!({
-                    "lot_id": r.0, "symbol": r.1, "shares": r.2,
-                    "cost_basis": r.3, "current_price": current_price,
+                    "lot_id": r.0,
+                    "symbol": r.1,
+                    "shares": r.2,
+                    "cost_basis": r.3,
+                    "current_price": current_price,
                     "unrealized_loss": unrealized_gain,
                     "days_held": days_held,
                     "is_long_term": days_held > 365,
-                    "tax_benefit_estimate": unrealized_gain.abs() * 0.25,
+                    "tax_benefit_estimate": unrealized_gain.abs() * rate,
+                    "applied_rate": rate,
                 }));
             }
         }
@@ -244,6 +273,7 @@ pub async fn check_wash_sale_window(
 #[cfg(test)]
 mod tests {
     use super::is_in_wash_sale_window;
+    use super::resolve_marginal_rate;
 
     // The bare wash-sale window arithmetic, isolated from sqlx for unit testing.
     // record_wash_sale_event and check_wash_sale_window depend on the live DB
@@ -279,5 +309,33 @@ mod tests {
     fn invalid_date_string_is_outside_the_window() {
         let today = chrono::NaiveDate::from_ymd_opt(2026, 5, 20).unwrap();
         assert!(!is_in_wash_sale_window("not-a-date", today));
+    }
+
+    #[test]
+    fn rate_resolution_uses_override_when_provided() {
+        assert_eq!(resolve_marginal_rate(Some("0.32"), Some(0.50)), 0.50);
+    }
+
+    #[test]
+    fn rate_resolution_falls_back_to_settings() {
+        assert_eq!(resolve_marginal_rate(Some("0.32"), None), 0.32);
+    }
+
+    #[test]
+    fn rate_resolution_uses_default_24pct_on_missing() {
+        assert_eq!(resolve_marginal_rate(None, None), 0.24);
+    }
+
+    #[test]
+    fn rate_resolution_uses_default_on_invalid_string() {
+        assert_eq!(resolve_marginal_rate(Some("not-a-number"), None), 0.24);
+    }
+
+    #[test]
+    fn rate_resolution_uses_default_on_out_of_range_setting() {
+        // Rate above 60% is rejected (sanity bound).
+        assert_eq!(resolve_marginal_rate(Some("0.95"), None), 0.24);
+        // Negative also rejected.
+        assert_eq!(resolve_marginal_rate(Some("-0.10"), None), 0.24);
     }
 }
