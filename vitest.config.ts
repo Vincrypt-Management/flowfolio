@@ -14,9 +14,18 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
-      include: ['src/shared/utils/calculations.ts'],
+      include: [
+        'src/shared/utils/calculations.ts',
+        'src/services/agentSurfaces.ts',
+      ],
       thresholds: {
         'src/shared/utils/calculations.ts': {
+          lines: 80,
+          branches: 80,
+          functions: 80,
+          statements: 80,
+        },
+        'src/services/agentSurfaces.ts': {
           lines: 80,
           branches: 80,
           functions: 80,
