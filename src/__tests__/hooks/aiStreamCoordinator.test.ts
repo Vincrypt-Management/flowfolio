@@ -48,4 +48,16 @@ describe('aiStreamCoordinator', () => {
     claim(stopC);
     expect(stopA).toHaveBeenCalledOnce();
   });
+
+  it('double-release of the same stop is a no-op (Strict Mode safety)', () => {
+    const stopA = vi.fn();
+    claim(stopA);
+    release(stopA);
+    release(stopA); // second release in Strict Mode style — must not throw or affect state
+    // Slot should be empty; a fresh claim should not trigger any cancel.
+    const stopB = vi.fn();
+    claim(stopB);
+    expect(stopA).not.toHaveBeenCalled();
+    expect(stopB).not.toHaveBeenCalled();
+  });
 });

@@ -1,8 +1,9 @@
 let activeStop: (() => void) | null = null;
 
 export function claim(stop: () => void): void {
-  if (activeStop && activeStop !== stop) activeStop();
+  const prior = activeStop;
   activeStop = stop;
+  if (prior && prior !== stop) prior();
 }
 
 export function release(stop: () => void): void {
