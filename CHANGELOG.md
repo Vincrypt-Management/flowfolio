@@ -2,6 +2,42 @@
 
 All notable changes to FlowFolio are documented here.
 
+## [0.4.7] - 2026-05-20
+
+**Patch + correctness + spec completion** for the 0.4.6 "Richer Data" release.
+Internally tracked as v0.4.6.1 (branch `patch/0.4.6.1`); shipped as semver 0.4.7
+because 4-part versions are not accepted by Cargo or Tauri.
+
+### Fixed
+- Options Add form and `create_option_position` backend reject strike ≤ 0, contracts ≤ 0, premium < 0, and past-dated expirations.
+- Tax Lot harvest UI shows the user's actual marginal rate (was hardcoded 25%).
+- Options History view no longer double-filters: backend `status_filter` is the single source of truth.
+- `aggregate_options_summary` refactored to take an explicit `strategy` parameter (clarity; output values unchanged).
+- Documentation comment in `dividends_tax.rs` now references the real integration test file path.
+
+### Added
+- Close Early action + modal in Options tab (uses existing `update_option_position`).
+- Delete confirmation flow for option positions.
+- Wash-sale badge on Portfolio Holdings and Buy List rows (`useWashSaleStatus` hook).
+- Projected payout column in Dividends list (`amount_per_share × shares_held`).
+- Shares-adjusted projected annual income (`trailing_per_share × current_shares` from open tax lots).
+- Command palette entries for Tax / Dividends / Options.
+- `useMarginalRate` hook with 5-min TTL cache, shared between TaxTab and TaxLotView.
+- `src-tauri/tests/` integration test suite (16 cases across tax / options / dividends + scaffold).
+
+### Performance
+- `get_upcoming_dividends` fetches with bounded concurrency (5 inflight via `futures::buffer_unordered`).
+- Dividend negative cache: empty provider responses cached for 6h via `__empty__` sentinel rows (was: re-hit providers every call for non-payers like TSLA / NVDA).
+
+### Security
+- Finnhub auth moved from `?token=` query string to `X-Finnhub-Token` header.
+- FMP error strings scrubbed of `?apikey=` before surfacing to frontend.
+
+### Tests / CI
+- New backend integration suite: `tests/tax_integration.rs`, `tests/options_integration.rs`, `tests/dividends_integration.rs`, plus `tests/common/mod.rs` scaffold using `tempfile` + `run_migrations`.
+- New frontend tests: `useWashSaleStatus`, `useMarginalRate`, `TaxLotView`, plus extensions to `OptionsTab`, `DividendsTab`, `TaxTab`, `services/dividendCalendar`.
+- Coverage gate extended to require ≥ 80% lines on the two new hooks.
+
 ## [0.2.2] - 2026-03-13
 
 ### Added

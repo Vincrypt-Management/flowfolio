@@ -45,4 +45,18 @@ describe('useMarginalRate', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.rate).toBe(0.25);
   });
+
+  it('serves second hook from the module-level cache without re-fetching', async () => {
+    const mock = invokeWithResilience as unknown as ReturnType<typeof vi.fn>;
+    mock.mockResolvedValue('0.32');
+
+    const first = renderHook(() => useMarginalRate());
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    expect(first.result.current.rate).toBe(0.32);
+
+    const second = renderHook(() => useMarginalRate());
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+    expect(second.result.current.rate).toBe(0.32);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
 });
