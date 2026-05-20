@@ -740,4 +740,66 @@ mod tests {
         let plan = PlanCompiler::get_template("Global Diversified").unwrap();
         assert!(plan.universe.regions.len() > 1);
     }
+
+    // ===== T4 gap fillers: JSON serialization contract =====
+    //
+    // The existing tests cover semantic validation and template structure but
+    // never exercise the serde JSON path that the frontend depends on. These
+    // tests pin the wire format and the error behavior on malformed input.
+
+    #[test]
+    fn test_template_round_trips_through_json() {
+        let original = PlanCompiler::default_template();
+        let json = serde_json::to_string(&original).expect("serialize");
+        let decoded: VibePlanScript = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded.name, original.name);
+        assert_eq!(
+            decoded.portfolio.max_position_pct,
+            original.portfolio.max_position_pct
+        );
+        assert_eq!(decoded.ranking.factors.len(), original.ranking.factors.len());
+    }
+
+    #[test]
+    fn test_serialized_plan_contains_expected_fields() {
+        let plan = PlanCompiler::default_template();
+        let json = serde_json::to_value(&plan).expect("serialize");
+        for key in ["name", "universe", "filters", "ranking", "portfolio", "cadence", "risk"] {
+            assert!(
+                json.get(key).is_some(),
+                "Serialized plan missing required top-level field: {}",
+                key
+            );
+        }
+    }
+
+    #[test]
+    fn test_deserialize_malformed_json_fails() {
+        let bad = r#"{"name": "x", "universe": "not-an-object"}"#;
+        let result: Result<VibePlanScript, _> = serde_json::from_str(bad);
+        assert!(result.is_err(), "Malformed plan JSON should fail to decode");
+    }
+
+    #[test]
+    fn test_deserialize_empty_object_fails() {
+        let result: Result<VibePlanScript, _> = serde_json::from_str("{}");
+        assert!(
+            result.is_err(),
+            "Empty object should fail decode — required fields missing"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_missing_required_field_fails() {
+        // Has every field except `ranking` — should be rejected.
+        let plan = PlanCompiler::default_template();
+        let mut v = serde_json::to_value(&plan).unwrap();
+        v.as_object_mut().unwrap().remove("ranking");
+        let json = v.to_string();
+        let result: Result<VibePlanScript, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_err(),
+            "Plan JSON missing 'ranking' should fail decode"
+        );
+    }
 }
