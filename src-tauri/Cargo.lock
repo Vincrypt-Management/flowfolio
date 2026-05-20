@@ -1581,6 +1581,7 @@ dependencies = [
  "tauri-plugin-os",
  "tauri-plugin-store",
  "tauri-plugin-stronghold",
+ "tempfile",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
