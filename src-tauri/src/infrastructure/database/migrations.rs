@@ -17,6 +17,11 @@ const MIGRATIONS: &[Migration] = &[
         description: "Performance indexes",
         sql: include_str!("sql/002_performance_indexes.sql"),
     },
+    Migration {
+        version: 3,
+        description: "Options + wash sale events + dividend calendar cache",
+        sql: include_str!("sql/003_options_and_wash_sale.sql"),
+    },
 ];
 
 pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
