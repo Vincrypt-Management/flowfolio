@@ -43,7 +43,6 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
   // Fetch opportunities whenever rate or prices change.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     invoke<HarvestOpportunity[]>('get_tax_loss_harvest_opportunities', {
       portfolioName,
       currentPrices,

@@ -66,8 +66,21 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
   }, [portfolioName, view]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    let cancelled = false;
+    const filter = view === 'open' ? 'open' : undefined;
+    invoke<OptionPosition[]>('list_option_positions', {
+      portfolioName,
+      statusFilter: filter,
+    })
+      .then(async (list) => {
+        const sum = await invoke<OptionsSummary>('get_options_summary', { portfolioName });
+        if (cancelled) return;
+        setPositions(view === 'history' ? list.filter((p) => p.status !== 'open') : list);
+        setSummary(sum);
+      })
+      .catch(() => { /* swallow — empty state will render */ });
+    return () => { cancelled = true; };
+  }, [portfolioName, view]);
 
   const transition = useCallback(
     async (id: string, status: OptionPosition['status']) => {
