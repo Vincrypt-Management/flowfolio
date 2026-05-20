@@ -33,6 +33,8 @@ import { TouchableChart } from './TouchableChart';
 import { ExposureChart } from './ExposureChart';
 import { ScenarioAnalysis } from './ScenarioAnalysis';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
+import { AiInlinePanel } from './AiInlinePanel';
+import { buildRiskPrompt, type RiskInput } from '../services/agentSurfaces';
 import './RiskDashboard.css';
 
 interface RiskDashboardProps {
@@ -333,7 +335,6 @@ function RiskDashboard({
   const dailyVol = portfolioVolatility / Math.sqrt(252);
   const var95 = portfolioValue * dailyVol * VAR_Z_SCORE;
 
-  // Correlation matrix
   const correlationPairs = useMemo(() => {
     if (symbolMetrics.length < 2) return [];
     const pairs: Array<{
@@ -393,6 +394,41 @@ function RiskDashboard({
 
     return points;
   }, [symbolMetrics, portfolioMaxDrawdown]);
+
+  // Assemble RiskInput for the AI summary panel — undefined fields when there are
+  // no holdings render as 'n/a' placeholders in the prompt.
+  const riskInput: RiskInput = useMemo(() => {
+    const dailyVol = portfolioVolatility / Math.sqrt(252);
+    const var95Pct =
+      symbolMetrics.length > 0 ? dailyVol * VAR_Z_SCORE * 100 : undefined;
+    const topConcentrations =
+      symbolMetrics.length > 0
+        ? [...symbolMetrics]
+            .sort((a, b) => b.weight - a.weight)
+            .slice(0, 3)
+            .map((sm) => ({ symbol: sm.symbol, weight: sm.weight * 100 }))
+        : undefined;
+    const avgCorrelation =
+      correlationPairs.length > 0
+        ? correlationPairs.reduce((sum, p) => sum + p.correlation, 0) /
+          correlationPairs.length
+        : undefined;
+
+    return {
+      compositeScore: symbolMetrics.length > 0 ? riskScore : undefined,
+      volatility: symbolMetrics.length > 0 ? portfolioVolatility : undefined,
+      maxDrawdown: symbolMetrics.length > 0 ? portfolioMaxDrawdown : undefined,
+      var95: var95Pct,
+      topConcentrations,
+      avgCorrelation,
+    };
+  }, [
+    riskScore,
+    portfolioVolatility,
+    portfolioMaxDrawdown,
+    symbolMetrics,
+    correlationPairs,
+  ]);
 
   const handleRefresh = useCallback(() => {
     fetchMetrics();
@@ -656,6 +692,14 @@ function RiskDashboard({
           </div>
         )}
       </div>
+
+      {riskInput.compositeScore !== undefined && (
+        <AiInlinePanel
+          prompt={buildRiskPrompt(riskInput)}
+          triggerLabel="Summarize risk"
+          emptyHint="Get a plain-English read on this portfolio's risk profile."
+        />
+      )}
     </div>
   );
 }
