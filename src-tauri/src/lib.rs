@@ -328,6 +328,12 @@ pub fn run() {
             create_tax_lot,
             list_tax_lots,
             get_tax_loss_harvest_opportunities,
+            // Options Tracking (CC / CSP)
+            crate::api::commands::options::create_option_position,
+            crate::api::commands::options::update_option_position,
+            crate::api::commands::options::list_option_positions,
+            crate::api::commands::options::delete_option_position,
+            crate::api::commands::options::get_options_summary,
         ])
         .setup(|app| {
             let salt_path = match app.path().app_local_data_dir() {
