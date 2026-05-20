@@ -4,6 +4,8 @@ import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
 import { formatCurrency } from './shared/utils';
+import { AiInlinePanel } from './components/AiInlinePanel';
+import { buildBacktestPrompt } from './services/agentSurfaces';
 import {
   FlaskConical,
   Play,
@@ -612,6 +614,11 @@ export function BacktestTab() {
               )}
             </div>
           </div>
+
+          <AiInlinePanel
+            prompt={buildBacktestPrompt(result)}
+            emptyHint="Get an AI explanation of what this backtest tells you."
+          />
         </div>
       )}
     </div>
