@@ -1,5 +1,6 @@
 pub mod backtest;
 pub mod data_provider;
+pub mod dividend_calendar;
 pub mod journal;
 pub mod plan_compiler;
 pub mod portfolio;
