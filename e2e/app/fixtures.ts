@@ -88,7 +88,14 @@ const test = base.extend<object>({
     await page.addInitScript((responses: Record<string, unknown>) => {
       // Minimal __TAURI_INTERNALS__ shim — enough for @tauri-apps/api/core
       (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
-        invoke: (cmd: string) => {
+        invoke: (cmd: string, args?: Record<string, unknown>) => {
+          // Per-spec setups can install a routing hook on window.__INVOKE_HOOK__
+          // to inspect (cmd, args) and return a value. Falsy → fall through to defaults.
+          const hook = (window as unknown as { __INVOKE_HOOK__?: (c: string, a?: Record<string, unknown>) => unknown }).__INVOKE_HOOK__;
+          if (hook) {
+            const v = hook(cmd, args);
+            if (v !== undefined) return Promise.resolve(v);
+          }
           if (Object.prototype.hasOwnProperty.call(responses, cmd)) {
             return Promise.resolve(responses[cmd]);
           }
