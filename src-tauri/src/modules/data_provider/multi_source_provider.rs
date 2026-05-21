@@ -87,6 +87,12 @@ pub struct MultiSourceProvider {
     historical_cache_ttl: Duration,
 }
 
+impl Default for MultiSourceProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiSourceProvider {
     pub fn new() -> Self {
         // Load API keys from environment (RUNTIME_KEYS first, then encrypted env fallback)

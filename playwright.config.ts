@@ -2,25 +2,33 @@ import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
 
+// Use Vite's production preview server by default. The dev server triggers
+// "504 Outdated Optimize Dep" responses mid-suite when lazy chunks load,
+// which crashes ErrorBoundary; preview serves prebuilt static files and is
+// stable. Set USE_DEV=1 to opt back in to the dev server.
+const useDev = !!process.env.USE_DEV;
+
 export default defineConfig({
-  // Global test timeout
   timeout: 30000,
-  // Fail fast in CI
   forbidOnly: isCI,
-  // Retry once on CI to reduce flake
   retries: isCI ? 1 : 0,
-  // Parallelism
   workers: isCI ? 1 : undefined,
-  // HTML reporter
   reporter: [['html', { open: 'never' }]],
 
   webServer: [
-    {
-      command: 'npm run dev:web',
-      url: 'http://localhost:1420',
-      reuseExistingServer: !isCI,
-      timeout: 30000,
-    },
+    useDev
+      ? {
+          command: 'npm run dev:web',
+          url: 'http://localhost:1420',
+          reuseExistingServer: !isCI,
+          timeout: 30000,
+        }
+      : {
+          command: 'npm run build && npx vite preview --port 1420 --strictPort',
+          url: 'http://localhost:1420',
+          reuseExistingServer: !isCI,
+          timeout: 120000,
+        },
     {
       command: 'npm run dev:landing',
       url: 'http://localhost:3000/flowfolio/landing.html',
@@ -30,45 +38,39 @@ export default defineConfig({
   ],
 
   projects: [
-    // CI projects (Chromium only)
     {
       name: 'landing',
       testDir: './e2e/landing',
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:3000',
-      },
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3000' },
     },
     {
       name: 'app',
       testDir: './e2e/app',
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: 'http://localhost:1420',
-      },
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:1420' },
     },
-    // Local-only: Firefox and WebKit (split per surface for correct baseURL)
-    ...(!isCI ? [
-      {
-        name: 'firefox-landing',
-        testDir: './e2e/landing',
-        use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:3000' },
-      },
-      {
-        name: 'firefox-app',
-        testDir: './e2e/app',
-        use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:1420' },
-      },
-      {
-        name: 'webkit-landing',
-        testDir: './e2e/landing',
-        use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:3000' },
-      },
-      {
-        name: 'webkit-app',
-        testDir: './e2e/app',
-        use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:1420' },
-      },
-    ] : []),
+    ...(!isCI
+      ? [
+          {
+            name: 'firefox-landing',
+            testDir: './e2e/landing',
+            use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:3000' },
+          },
+          {
+            name: 'firefox-app',
+            testDir: './e2e/app',
+            use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:1420' },
+          },
+          {
+            name: 'webkit-landing',
+            testDir: './e2e/landing',
+            use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:3000' },
+          },
+          {
+            name: 'webkit-app',
+            testDir: './e2e/app',
+            use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:1420' },
+          },
+        ]
+      : []),
   ],
 });

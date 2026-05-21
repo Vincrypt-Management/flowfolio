@@ -7,10 +7,10 @@
 // - modules/  : Feature modules (data_provider, scoring, backtest, portfolio, etc.)
 // - services/ : Service layer
 
-mod api;
+pub mod api;
 pub mod core;
-mod infrastructure;
-mod modules;
+pub mod infrastructure;
+pub mod modules;
 mod services;
 mod shared_types;
 

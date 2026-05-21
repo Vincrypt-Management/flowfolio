@@ -1,6 +1,6 @@
 [package]
 name = "flowfolio"
-version = "0.4.6"
+version = "0.4.7"
 description = "FlowFolio - AI-Powered Vibe-Based Investing"
 authors = ["evintleovonzko"]
 edition = "2021"
@@ -26,6 +26,9 @@ path = "src/bin/encrypt_env.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [dependencies]
 tauri = { version = "2", features = [] }

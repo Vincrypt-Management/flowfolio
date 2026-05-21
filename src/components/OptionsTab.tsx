@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invokeWithResilience } from '../services/apiClient';
+import { createLogger } from '../core/logger';
+import { useToast } from './Toast';
+import {
+  OptionsCloseEarlyModal,
+  type OptionsCloseEarlyPosition,
+} from './OptionsCloseEarlyModal';
+
+const log = createLogger('OptionsTab');
 
 interface OptionPosition {
   id: string;
@@ -47,84 +55,157 @@ const EMPTY_FORM: AddPositionForm = {
   premiumPerContract: '',
 };
 
+function validateForm(form: AddPositionForm): string | null {
+  if (!form.symbol.trim()) return 'Symbol is required';
+  if (!form.expiration) return 'Expiration is required';
+  const strike = parseFloat(form.strike);
+  const contracts = parseInt(form.contracts, 10);
+  const premium = parseFloat(form.premiumPerContract);
+  if (!Number.isFinite(strike) || strike <= 0) return 'Strike must be > 0';
+  if (!Number.isFinite(contracts) || contracts <= 0) return 'Contracts must be > 0';
+  if (!Number.isFinite(premium) || premium < 0) return 'Premium cannot be negative';
+  const today = new Date().toISOString().slice(0, 10);
+  if (form.expiration < today) return 'Expiration must be on or after today';
+  return null;
+}
+
 export function OptionsTab({ portfolioName }: OptionsTabProps) {
   const [view, setView] = useState<View>('open');
   const [positions, setPositions] = useState<OptionPosition[]>([]);
   const [summary, setSummary] = useState<OptionsSummary | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<AddPositionForm>(EMPTY_FORM);
+  const [closeTarget, setCloseTarget] = useState<OptionsCloseEarlyPosition | null>(null);
+  const { addToast } = useToast();
 
   const reload = useCallback(async () => {
-    const filter = view === 'open' ? 'open' : undefined;
-    const list = await invoke<OptionPosition[]>('list_option_positions', {
-      portfolioName,
-      statusFilter: filter,
-    });
-    const sum = await invoke<OptionsSummary>('get_options_summary', { portfolioName });
-    setPositions(view === 'history' ? list.filter((p) => p.status !== 'open') : list);
-    setSummary(sum);
-  }, [portfolioName, view]);
+    const statusFilter = view === 'open' ? 'open' : null;
+    try {
+      const list = await invokeWithResilience<OptionPosition[]>('list_option_positions', {
+        portfolioName,
+        statusFilter,
+      });
+      const sum = await invokeWithResilience<OptionsSummary>('get_options_summary', {
+        portfolioName,
+      });
+      setPositions(list);
+      setSummary(sum);
+    } catch (err) {
+      log.error('failed to load options', err);
+      addToast('Failed to load options', 'error');
+    }
+  }, [portfolioName, view, addToast]);
 
   useEffect(() => {
     let cancelled = false;
-    const filter = view === 'open' ? 'open' : undefined;
-    invoke<OptionPosition[]>('list_option_positions', {
+    const statusFilter = view === 'open' ? 'open' : null;
+    invokeWithResilience<OptionPosition[]>('list_option_positions', {
       portfolioName,
-      statusFilter: filter,
+      statusFilter,
     })
       .then(async (list) => {
-        const sum = await invoke<OptionsSummary>('get_options_summary', { portfolioName });
+        const sum = await invokeWithResilience<OptionsSummary>('get_options_summary', {
+          portfolioName,
+        });
         if (cancelled) return;
-        setPositions(view === 'history' ? list.filter((p) => p.status !== 'open') : list);
+        setPositions(list);
         setSummary(sum);
       })
-      .catch(() => { /* swallow — empty state will render */ });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        if (!cancelled) {
+          log.error('failed to load options', err);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [portfolioName, view]);
 
   const transition = useCallback(
     async (id: string, status: OptionPosition['status']) => {
-      await invoke('update_option_position', {
-        id,
-        status,
-        closeDate: new Date().toISOString().slice(0, 10),
-        closePremium: null,
-      });
-      await reload();
+      try {
+        await invokeWithResilience('update_option_position', {
+          id,
+          status,
+          closeDate: new Date().toISOString().slice(0, 10),
+          closePremium: null,
+        });
+        await reload();
+      } catch (err) {
+        log.error('failed to update option position', err);
+        addToast('Failed to update position', 'error');
+      }
     },
-    [reload],
+    [reload, addToast],
+  );
+
+  const deletePosition = useCallback(
+    async (id: string) => {
+      if (!window.confirm('Delete this option position? This cannot be undone.')) return;
+      try {
+        await invokeWithResilience('delete_option_position', { id });
+        addToast('Position deleted', 'success');
+        await reload();
+      } catch (err) {
+        log.error('failed to delete option position', err);
+        addToast('Failed to delete position', 'error');
+      }
+    },
+    [reload, addToast],
+  );
+
+  const confirmClose = useCallback(
+    async (closeDebitPerContract: number, closeDate: string) => {
+      if (!closeTarget) return;
+      try {
+        await invokeWithResilience('update_option_position', {
+          id: closeTarget.id,
+          status: 'closed_early',
+          closeDate,
+          closePremium: closeDebitPerContract,
+        });
+        addToast('Position closed', 'success');
+        setCloseTarget(null);
+        await reload();
+      } catch (err) {
+        log.error('failed to close option position', err);
+        addToast('Failed to close position', 'error');
+      }
+    },
+    [closeTarget, reload, addToast],
   );
 
   const submitAdd = useCallback(async () => {
+    const err = validateForm(form);
+    if (err) {
+      addToast(err, 'error');
+      return;
+    }
     const strike = parseFloat(form.strike);
     const contracts = parseInt(form.contracts, 10);
     const premium = parseFloat(form.premiumPerContract);
-    if (
-      !form.symbol ||
-      !form.expiration ||
-      Number.isNaN(strike) ||
-      Number.isNaN(contracts) ||
-      Number.isNaN(premium) ||
-      contracts <= 0
-    ) {
-      return;
+    try {
+      await invokeWithResilience('create_option_position', {
+        id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        portfolioName,
+        symbol: form.symbol.toUpperCase(),
+        strategy: form.strategy,
+        strike,
+        expiration: form.expiration,
+        contracts,
+        premiumPerContract: premium,
+        openDate: new Date().toISOString().slice(0, 10),
+        notes: null,
+      });
+      setForm(EMPTY_FORM);
+      setShowAdd(false);
+      addToast('Position added', 'success');
+      await reload();
+    } catch (e) {
+      log.error('create_option_position failed', e);
+      addToast(typeof e === 'string' ? e : 'Failed to add position', 'error');
     }
-    await invoke('create_option_position', {
-      id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      portfolioName,
-      symbol: form.symbol.toUpperCase(),
-      strategy: form.strategy,
-      strike,
-      expiration: form.expiration,
-      contracts,
-      premiumPerContract: premium,
-      openDate: new Date().toISOString().slice(0, 10),
-      notes: null,
-    });
-    setForm(EMPTY_FORM);
-    setShowAdd(false);
-    await reload();
-  }, [form, portfolioName, reload]);
+  }, [form, portfolioName, reload, addToast]);
 
   return (
     <section className="options-tab">
@@ -219,9 +300,19 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
         </div>
       )}
 
+      {closeTarget && (
+        <OptionsCloseEarlyModal
+          position={closeTarget}
+          onCancel={() => setCloseTarget(null)}
+          onConfirm={confirmClose}
+        />
+      )}
+
       {positions.length === 0 ? (
         <p className="empty-state">
-          No options tracked. Add a covered call or cash-secured put to start tracking premium income.
+          {view === 'open'
+            ? 'No options tracked. Add a covered call or cash-secured put to start tracking premium income.'
+            : 'No historical positions yet.'}
         </p>
       ) : (
         <table className="options-tab__table">
@@ -234,7 +325,7 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
               <th>Contracts</th>
               <th>Premium</th>
               <th>Status</th>
-              {view === 'open' && <th>Actions</th>}
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -247,16 +338,36 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
                 <td>{p.contracts}</td>
                 <td>${p.premium_per_contract.toFixed(2)}</td>
                 <td>{p.status}</td>
-                {view === 'open' && (
-                  <td>
-                    <button type="button" onClick={() => transition(p.id, 'expired')}>
-                      Mark Expired
-                    </button>
-                    <button type="button" onClick={() => transition(p.id, 'assigned')}>
-                      Mark Assigned
-                    </button>
-                  </td>
-                )}
+                <td>
+                  {p.status === 'open' && (
+                    <>
+                      <button type="button" onClick={() => transition(p.id, 'expired')}>
+                        Mark Expired
+                      </button>
+                      <button type="button" onClick={() => transition(p.id, 'assigned')}>
+                        Mark Assigned
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCloseTarget({
+                            id: p.id,
+                            symbol: p.symbol,
+                            strategy: p.strategy,
+                            strike: p.strike,
+                            contracts: p.contracts,
+                            premium_per_contract: p.premium_per_contract,
+                          })
+                        }
+                      >
+                        Close Early
+                      </button>
+                    </>
+                  )}
+                  <button type="button" onClick={() => deletePosition(p.id)}>
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

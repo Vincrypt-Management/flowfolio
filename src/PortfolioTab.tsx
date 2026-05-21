@@ -1,6 +1,7 @@
 import { useState, useReducer, useEffect, useCallback, useMemo, useRef } from "react";
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useIsMounted } from './hooks/useIsMounted';
+import { useWashSaleStatus } from './hooks/useWashSaleStatus';
 import { invokeWithResilience } from './services/apiClient';
 import { YearlyReviewComponent } from "./components/YearlyReview";
 import { PortfolioOptimizerComponent } from "./components/PortfolioOptimizer";
@@ -222,6 +223,27 @@ function portfolioReducer(state: PortfolioUIState, action: PortfolioAction): Por
     default:
       return state;
   }
+}
+
+function WashSaleBadge({ symbol }: { symbol: string }) {
+  const { status } = useWashSaleStatus(symbol);
+  if (status !== 'window') return null;
+  return (
+    <span
+      className="wash-sale-badge"
+      title="Selling at a loss within 30 days of a recent harvest may trigger a wash-sale disallowance"
+      style={{
+        marginLeft: 6,
+        fontSize: 11,
+        padding: '1px 6px',
+        borderRadius: 4,
+        background: 'var(--warn-bg, #fff4e5)',
+        color: 'var(--warn-fg, #b75d00)',
+      }}
+    >
+      Wash-sale window
+    </span>
+  );
 }
 
 export function PortfolioTab({
@@ -836,7 +858,7 @@ export function PortfolioTab({
                         const holding = portfolio.holdings[virtualRow.index];
                         return (
                           <tr key={virtualRow.key} data-index={virtualRow.index} ref={holdingsVirtualizer.measureElement}>
-                            <td><strong>{holding.symbol}</strong></td>
+                            <td><strong>{holding.symbol}</strong><WashSaleBadge symbol={holding.symbol} /></td>
                             <td>{holding.shares.toFixed(2)}</td>
                             <td>${holding.current_price.toFixed(2)}</td>
                             <td>${holding.market_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
@@ -962,7 +984,7 @@ export function PortfolioTab({
                   <div key={rec.symbol} className="buy-rec-item">
                     <div className="rec-header">
                       <span className="rec-priority">#{rec.priority}</span>
-                      <span className="rec-symbol">{rec.symbol}</span>
+                      <span className="rec-symbol">{rec.symbol}<WashSaleBadge symbol={rec.symbol} /></span>
                       <span className={`rec-action ${rec.action.toLowerCase()}`}>{rec.action}</span>
                     </div>
                     <div className="rec-details">

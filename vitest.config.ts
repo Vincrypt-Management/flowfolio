@@ -19,6 +19,8 @@ export default defineConfig({
         'src/services/agentSurfaces.ts',
         'src/services/replacementPeers.ts',
         'src/services/dividendCalendar.ts',
+        'src/hooks/useWashSaleStatus.ts',
+        'src/hooks/useMarginalRate.ts',
       ],
       thresholds: {
         'src/shared/utils/calculations.ts': {
@@ -42,6 +44,18 @@ export default defineConfig({
         'src/services/dividendCalendar.ts': {
           lines: 80,
           branches: 80,
+          functions: 80,
+          statements: 80,
+        },
+        'src/hooks/useWashSaleStatus.ts': {
+          lines: 80,
+          branches: 75,
+          functions: 80,
+          statements: 80,
+        },
+        'src/hooks/useMarginalRate.ts': {
+          lines: 80,
+          branches: 75,
           functions: 80,
           statements: 80,
         },

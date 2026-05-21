@@ -48,6 +48,21 @@ export default defineConfig({
       cssMinify: true,
     },
 
+    // Eagerly crawl every top-level component so Vite pre-bundles all transitive
+    // node_modules deps. Without this, the first time the user lazily-loads a tab
+    // (TaxTab/OptionsTab/DividendsTab etc.) Vite re-runs optimization mid-session,
+    // returning 504 "Outdated Optimize Dep" for in-flight requests.
+    // Pre-include lazy-loaded tabs so Vite eagerly crawls every entry at startup.
+    // Without this, the first time a lazy tab loads, Vite re-bundles mid-session
+    // and returns 504 "Outdated Optimize Dep" to in-flight requests during the rebuild.
+    // Keep `entries` in sync with `const X = lazy(...)` declarations in src/App.tsx.
+    optimizeDeps: {
+      entries: [
+        'index.html',
+        'src/**/*.tsx',
+      ],
+    },
+
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
     //
     // 1. prevent Vite from obscuring rust errors

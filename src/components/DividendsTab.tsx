@@ -34,7 +34,7 @@ export function DividendsTab({ portfolioName, heldSymbols }: DividendsTabProps) 
 
   useEffect(() => {
     let cancelled = false;
-    fetchUpcomingDividends(heldSymbols, 90).then((d) => {
+    fetchUpcomingDividends(heldSymbols, 90, portfolioName).then((d) => {
       if (!cancelled) setDividends(d);
     });
     fetchProjectedIncome(portfolioName).then((p) => {
@@ -109,6 +109,7 @@ export function DividendsTab({ portfolioName, heldSymbols }: DividendsTabProps) 
               <th>Ex-date</th>
               <th>Pay-date</th>
               <th>$/share</th>
+              <th>Projected payout</th>
             </tr>
           </thead>
           <tbody>
@@ -118,6 +119,7 @@ export function DividendsTab({ portfolioName, heldSymbols }: DividendsTabProps) 
                 <td>{d.ex_date}</td>
                 <td>{d.pay_date ?? '—'}</td>
                 <td>${d.amount_per_share.toFixed(2)}</td>
+                <td>{d.projected_payout != null ? `$${d.projected_payout.toFixed(2)}` : '—'}</td>
               </tr>
             ))}
           </tbody>
