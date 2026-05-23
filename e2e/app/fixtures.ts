@@ -38,8 +38,6 @@ const MOCK_RESPONSES: Record<string, unknown> = {
 
   list_saved_plans: ['My Growth Strategy', 'Dividend Income'],
 
-  load_setting: 'true',
-
   get_api_key_statuses: {
     alpaca_key: false,
     alpaca_secret: false,
@@ -95,6 +93,13 @@ const test = base.extend<object>({
           if (hook) {
             const v = hook(cmd, args);
             if (v !== undefined) return Promise.resolve(v);
+          }
+          // load_setting is key-dependent: onboarding_complete must be 'true'
+          // so the app skips the wizard and shows the main UI. All other keys
+          // return null (settings fall back to their defaults in the app).
+          if (cmd === 'load_setting') {
+            const key = args && (args.key as string);
+            return Promise.resolve(key === 'onboarding_complete' ? 'true' : null);
           }
           if (Object.prototype.hasOwnProperty.call(responses, cmd)) {
             return Promise.resolve(responses[cmd]);

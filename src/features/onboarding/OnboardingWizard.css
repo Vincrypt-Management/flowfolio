@@ -205,7 +205,7 @@
   max-width: 200px;
   z-index: 100;
   white-space: normal;
-  pointer-events: auto;
+  pointer-events: none;
   display: flex;
   gap: 6px;
   align-items: flex-start;
@@ -233,4 +233,5 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  pointer-events: auto;
 }
