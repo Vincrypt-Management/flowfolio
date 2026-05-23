@@ -14,11 +14,9 @@
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import type { GeneratedPortfolio } from './portfolioAgent';
 import { createLogger } from '../core/logger';
+import { getSelectedModel } from './aiModel';
 
 const log = createLogger('analysis-report');
-
-// Report generation model (use a capable model for analysis)
-const REPORT_MODEL = import.meta.env.VITE_REPORT_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
 
 // Auto-generation configuration
 export interface AutoReportConfig {
@@ -412,7 +410,7 @@ class AnalysisReportService {
     ];
 
     try {
-      const response = await openRouterService.chat(messages, REPORT_MODEL, {
+      const response = await openRouterService.chat(messages, await getSelectedModel(), {
         temperature: 0.7,
         max_tokens: depth === 'comprehensive' ? 6000 : depth === 'standard' ? 4000 : 2000,
       });
@@ -456,7 +454,7 @@ class AnalysisReportService {
     ];
 
     try {
-      const response = await openRouterService.chat(messages, REPORT_MODEL, {
+      const response = await openRouterService.chat(messages, await getSelectedModel(), {
         temperature: 0.7,
         max_tokens: 4000,
       });
@@ -499,7 +497,7 @@ class AnalysisReportService {
     ];
 
     try {
-      const response = await openRouterService.chat(messages, REPORT_MODEL, {
+      const response = await openRouterService.chat(messages, await getSelectedModel(), {
         temperature: 0.6,
         max_tokens: 4500,
       });
@@ -542,7 +540,7 @@ class AnalysisReportService {
     ];
 
     try {
-      const response = await openRouterService.chat(messages, REPORT_MODEL, {
+      const response = await openRouterService.chat(messages, await getSelectedModel(), {
         temperature: 0.5,
         max_tokens: 4000,
       });
@@ -600,7 +598,7 @@ class AnalysisReportService {
     let currentSection = 'Executive Summary';
     let currentContent = '';
 
-    for await (const chunk of openRouterService.chatStream(messages, REPORT_MODEL, {
+    for await (const chunk of openRouterService.chatStream(messages, await getSelectedModel(), {
       temperature: 0.7,
       max_tokens: 5000,
     })) {

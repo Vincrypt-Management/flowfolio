@@ -2,6 +2,7 @@ import { createLogger } from '../core/logger';
 import { listen } from '@tauri-apps/api/event';
 import { isTauriContext } from './tauri';
 import { invokeWithResilience } from './apiClient';
+import { getSelectedModel } from './aiModel';
 
 const log = createLogger('openrouter');
 
@@ -64,7 +65,7 @@ class OpenRouterService {
       
       // Check for common error patterns and provide helpful messages
       if (errorMsg.includes('not configured')) {
-        throw new Error('AI service not configured. Please set up your OpenRouter API key in the .env file.');
+        throw new Error('AI service not configured. Please add your OpenRouter API key in Settings → API Keys.');
       }
       if (errorMsg.includes('Invalid API key')) {
         throw new Error('Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY in .env.');
@@ -161,13 +162,16 @@ class OpenRouterService {
   }
 
   async generatePortfolioInsight(portfolioData: unknown): Promise<string> {
-    return invokeWithResilience<string>('ai_generate_portfolio_insight', { portfolioData });
+    const model = await getSelectedModel();
+    return invokeWithResilience<string>('ai_generate_portfolio_insight', { portfolioData, model });
   }
 
   async chatWithAssistant(userMessage: string, conversationHistory: OpenRouterMessage[] = []): Promise<string> {
+    const model = await getSelectedModel();
     return invokeWithResilience<string>('ai_chat_assistant', {
       message: userMessage,
       history: conversationHistory,
+      model,
     });
   }
 }

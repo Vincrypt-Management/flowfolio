@@ -5,6 +5,7 @@ import { newsService, SentimentAnalysis, AnalystRating } from './newsService';
 import { comprehensiveFundamentalsService, ComprehensiveFundamentalAnalysis } from './comprehensiveFundamentals';
 import type { MarketInsight } from './webSearch';
 import { createLogger } from '../core/logger';
+import { getSelectedModel } from './aiModel';
 
 const log = createLogger('portfolio-agent');
 
@@ -658,7 +659,9 @@ const POPULAR_ETFS = {
 type AssetType = 'stocks' | 'etfs' | 'mixed';
 
 class PortfolioAgentService {
-  private vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
+  private async getModel(): Promise<string> {
+    return getSelectedModel();
+  }
 
   /**
    * Auto-detect asset type from user prompt
@@ -886,7 +889,7 @@ Generate a JSON array with detailed descriptions for each of the ${portfolio.ass
     ];
 
     try {
-      const response = await openRouterService.chat(messages, this.vibeModel, {
+      const response = await openRouterService.chat(messages, await this.getModel(), {
         temperature: 0.7,
         max_tokens: AI_MAX_TOKENS,
       });
@@ -1755,7 +1758,7 @@ Suggest better alternatives with similar exposure.`
     ];
 
     try {
-      const response = await openRouterService.chat(messages, this.vibeModel, {
+      const response = await openRouterService.chat(messages, await this.getModel(), {
         temperature: 0.5,
         max_tokens: AI_MAX_TOKENS_SMALL,
       });
@@ -1862,7 +1865,7 @@ Suggest better alternatives with similar exposure.`
       }
     ];
 
-    for await (const chunk of openRouterService.chatStream(messages, this.vibeModel, {
+    for await (const chunk of openRouterService.chatStream(messages, await this.getModel(), {
       temperature: 0.7,
       max_tokens: AI_MAX_TOKENS_LARGE, // Reduced from 3000 for faster response
     })) {
@@ -2184,7 +2187,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
         // Try with JSON mode first, fall back to regular mode if not supported
         let response: string;
         try {
-          response = await openRouterService.chat(messages, this.vibeModel, {
+          response = await openRouterService.chat(messages, await this.getModel(), {
             temperature: 0.7,
             max_tokens: AI_MAX_TOKENS,
             response_format: { type: 'json_object' } // Enable JSON mode
@@ -2194,7 +2197,7 @@ Remember: Output ONLY the JSON object. No explanations. No markdown. Just pure J
           const errMsg = error instanceof Error ? error.message : '';
           if (errMsg.includes('response_format') || errMsg.includes('json_object')) {
             log.warn('Model does not support JSON mode, retrying without it...');
-            response = await openRouterService.chat(messages, this.vibeModel, {
+            response = await openRouterService.chat(messages, await this.getModel(), {
               temperature: 0.7,
               max_tokens: AI_MAX_TOKENS
             });
@@ -3384,7 +3387,7 @@ Be conversational but professional. Cite specific data points from the portfolio
       }
     ];
 
-    return openRouterService.chat(messages, this.vibeModel, {
+    return openRouterService.chat(messages, await this.getModel(), {
       temperature: 0.8,
       max_tokens: AI_MAX_TOKENS_MEDIUM
     });
@@ -3427,7 +3430,7 @@ Provide specific rebalancing recommendations with:
       }
     ];
 
-    return openRouterService.chat(messages, this.vibeModel, {
+    return openRouterService.chat(messages, await this.getModel(), {
       temperature: 0.6,
       max_tokens: AI_MAX_TOKENS_STANDARD
     });
@@ -3492,7 +3495,7 @@ Provide a comprehensive investment analysis with:
       }
     ];
 
-    return openRouterService.chat(messages, this.vibeModel, {
+    return openRouterService.chat(messages, await this.getModel(), {
       temperature: 0.7,
       max_tokens: AI_MAX_TOKENS_LARGE
     });
@@ -3527,7 +3530,7 @@ Provide:
       }
     ];
 
-    return openRouterService.chat(messages, this.vibeModel, {
+    return openRouterService.chat(messages, await this.getModel(), {
       temperature: 0.6,
       max_tokens: AI_MAX_TOKENS_STANDARD
     });
