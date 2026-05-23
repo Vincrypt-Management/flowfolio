@@ -5,6 +5,8 @@ use crate::services::openrouter_service::OpenRouterMessage;
 use crate::{get_user_tier, LOCAL_AI_SERVICE, OPENROUTER_SERVICE};
 use tauri::{AppHandle, Emitter};
 
+const DEFAULT_FREE_MODEL: &str = "meta-llama/llama-3.3-70b-instruct:free";
+
 /// Check if AI service is configured (OpenRouter or local model)
 #[tauri::command]
 pub fn ai_is_configured() -> bool {
@@ -45,13 +47,14 @@ pub async fn ai_chat(
 #[tauri::command]
 pub async fn ai_generate_portfolio_insight(
     portfolio_data: serde_json::Value,
+    model: Option<String>,
 ) -> Result<String, String> {
     let tier = get_user_tier().await;
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
     match OPENROUTER_SERVICE
-        .generate_portfolio_insight(portfolio_data.clone())
+        .generate_portfolio_insight(portfolio_data.clone(), model)
         .await
     {
         Ok(r) => Ok(r),
@@ -74,13 +77,14 @@ pub async fn ai_generate_portfolio_insight(
 pub async fn ai_chat_assistant(
     message: String,
     history: Vec<OpenRouterMessage>,
+    model: Option<String>,
 ) -> Result<String, String> {
     let tier = get_user_tier().await;
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
     match OPENROUTER_SERVICE
-        .chat_with_assistant(message.clone(), history.clone())
+        .chat_with_assistant(message.clone(), history.clone(), model)
         .await
     {
         Ok(r) => Ok(r),
@@ -113,7 +117,7 @@ pub async fn ai_chat_stream(
     let api_key = crate::get_api_key("OPENROUTER_API_KEY")
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
-    let model = model.unwrap_or_else(|| "meta-llama/llama-3.3-70b-instruct:free".to_string());
+    let model = model.unwrap_or_else(|| DEFAULT_FREE_MODEL.to_string());
     let client = crate::HTTP_CLIENT.clone();
 
     let body = serde_json::json!({

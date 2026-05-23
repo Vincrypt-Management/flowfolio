@@ -92,7 +92,7 @@ impl OpenRouterService {
         max_tokens: Option<u32>,
     ) -> Result<String, String> {
         let api_key = self.api_key.as_ref().ok_or_else(|| {
-            "OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env file.".to_string()
+            "OpenRouter API key not configured. Add it in Settings → API Keys.".to_string()
         })?;
 
         // Validate API key format (should start with sk-)
@@ -175,6 +175,7 @@ impl OpenRouterService {
     pub async fn generate_portfolio_insight(
         &self,
         portfolio_data: serde_json::Value,
+        model: Option<String>,
     ) -> Result<String, String> {
         let messages = vec![
             OpenRouterMessage {
@@ -187,7 +188,7 @@ impl OpenRouterService {
             },
         ];
 
-        self.chat(messages, None, Some(0.7), Some(2000)).await
+        self.chat(messages, model, Some(0.7), Some(2000)).await
     }
 
     /// Chat with assistant
@@ -195,6 +196,7 @@ impl OpenRouterService {
         &self,
         user_message: String,
         conversation_history: Vec<OpenRouterMessage>,
+        model: Option<String>,
     ) -> Result<String, String> {
         let mut messages = vec![
             OpenRouterMessage {
@@ -208,7 +210,7 @@ impl OpenRouterService {
             content: user_message,
         });
 
-        self.chat(messages, None, Some(0.7), Some(2000)).await
+        self.chat(messages, model, Some(0.7), Some(2000)).await
     }
 
     /// Compile a natural language prompt into a VibePlan
