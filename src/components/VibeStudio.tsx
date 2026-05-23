@@ -3,6 +3,7 @@ import { useIsMounted } from '../hooks/useIsMounted';
 import { saveFile } from '../shared/utils/fileSystem';
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
 import { OpenRouterMessage, streamChat } from "../services/openrouter";
+import { getSelectedModel } from "../services/aiModel";
 import { chatHistoryService, Conversation } from "../services/chatHistory";
 import { invokeWithResilience } from "../services/apiClient";
 import { isMobile } from "../services/tauri";
@@ -533,7 +534,7 @@ function VibeStudio({ initialPortfolio, onPortfolioLoaded }: VibeStudioProps) {
 
       dispatch({ type: 'SET_STREAMING_MESSAGE', payload: '' });
 
-      const vibeModel = import.meta.env.VITE_VIBE_STUDIO_MODEL || 'minimax/minimax-01';
+      const vibeModel = await getSelectedModel();
       const streamMessages: Array<{ role: string; content: string }> = [
         {
           role: 'system',
