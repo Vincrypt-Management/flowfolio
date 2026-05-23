@@ -38,6 +38,8 @@ const MOCK_RESPONSES: Record<string, unknown> = {
 
   list_saved_plans: ['My Growth Strategy', 'Dividend Income'],
 
+  list_saved_portfolios: [],
+
   get_api_key_statuses: {
     alpaca_key: false,
     alpaca_secret: false,
@@ -99,7 +101,9 @@ const test = base.extend<object>({
           // return null (settings fall back to their defaults in the app).
           if (cmd === 'load_setting') {
             const key = args && (args.key as string);
-            return Promise.resolve(key === 'onboarding_complete' ? 'true' : null);
+            if (key === 'onboarding_complete') return Promise.resolve('true');
+            if (key === 'user_mode') return Promise.resolve('advanced');
+            return Promise.resolve(null);
           }
           if (Object.prototype.hasOwnProperty.call(responses, cmd)) {
             return Promise.resolve(responses[cmd]);
