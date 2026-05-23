@@ -5,7 +5,7 @@ import { useCurrency, SUPPORTED_CURRENCIES } from '../contexts/CurrencyContext';
 import { invoke } from '../services/tauri'; // Direct invoke: vault commands should fail fast
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
-import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound, Receipt } from 'lucide-react';
+import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound, Receipt, Bot } from 'lucide-react';
 
 const log = createLogger('SettingsPage');
 
@@ -21,6 +21,8 @@ const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }>
   { key: 'openrouter_key',    label: 'OpenRouter Key',    placeholder: 'Enter key…' },
 ];
 import './SettingsPage.css';
+import { FREE_MODELS, DEFAULT_FREE_MODEL } from '../constants/freeModels';
+import { getSelectedModel, setSelectedModel } from '../services/aiModel';
 
 // --- SettingsPage useReducer ---
 
@@ -37,10 +39,14 @@ interface SettingsState {
   vaultError: string;
   vaultLoading: boolean;
   form: UserProfile;
+  selectedAiModel: string;
+  aiModelSaved: boolean;
 }
 
 type SettingsAction =
   | { type: 'SET_SAVED'; payload: boolean }
+  | { type: 'SET_AI_MODEL'; payload: string }
+  | { type: 'SET_AI_MODEL_SAVED'; payload: boolean }
   | { type: 'SET_API_KEYS'; payload: Record<string, string> }
   | { type: 'SET_API_KEY'; payload: { key: string; value: string } }
   | { type: 'SET_API_KEY_STATUSES'; payload: Record<string, boolean> }
@@ -69,6 +75,8 @@ function makeInitialSettingsState(profile: UserProfile): SettingsState {
     vaultError: '',
     vaultLoading: false,
     form: { ...profile },
+    selectedAiModel: DEFAULT_FREE_MODEL,
+    aiModelSaved: false,
   };
 }
 
@@ -102,6 +110,10 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
       return { ...state, form: action.payload };
     case 'SET_FORM_FIELD':
       return { ...state, form: { ...state.form, [action.payload.field]: action.payload.value } };
+    case 'SET_AI_MODEL':
+      return { ...state, selectedAiModel: action.payload };
+    case 'SET_AI_MODEL_SAVED':
+      return { ...state, aiModelSaved: action.payload };
     default:
       return state;
   }
@@ -127,6 +139,8 @@ export function SettingsPage() {
     vaultError,
     vaultLoading,
     form,
+    selectedAiModel,
+    aiModelSaved,
   } = state;
 
   const [marginalRatePct, setMarginalRatePct] = useState<number>(24);
@@ -148,6 +162,9 @@ export function SettingsPage() {
           setMarginalRatePct(parsed * 100);
         }
       })
+      .catch(() => {});
+    getSelectedModel()
+      .then(model => dispatch({ type: 'SET_AI_MODEL', payload: model }))
       .catch(() => {});
   }, []);
 
@@ -197,6 +214,16 @@ export function SettingsPage() {
       // silent
     }
   }, [apiKeys]);
+
+  const handleSaveAiModel = useCallback(async () => {
+    try {
+      await setSelectedModel(selectedAiModel);
+      dispatch({ type: 'SET_AI_MODEL_SAVED', payload: true });
+      setTimeout(() => dispatch({ type: 'SET_AI_MODEL_SAVED', payload: false }), 2000);
+    } catch {
+      // silent — model stays in state, next call will retry
+    }
+  }, [selectedAiModel]);
 
   const handleVaultSetup = useCallback(async () => {
     dispatch({ type: 'SET_VAULT_ERROR', payload: '' });
@@ -501,6 +528,44 @@ export function SettingsPage() {
               style={{ width: '120px' }}
             />
           </div>
+        </div>
+
+        {/* AI Configuration Section */}
+        <div className="card settings-card">
+          <h3><Bot size={20} /> AI Model</h3>
+          <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
+            Choose the AI model used for portfolio generation, reports, and chat. All models are free via OpenRouter.
+          </p>
+          <div className="form-group">
+            <label htmlFor="ai-model">Model</label>
+            <select
+              id="ai-model"
+              value={selectedAiModel}
+              onChange={e => dispatch({ type: 'SET_AI_MODEL', payload: e.target.value })}
+              style={{ width: '320px' }}
+            >
+              {FREE_MODELS.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{m.recommended ? ' (recommended)' : ''} — {(m.contextWindow / 1000).toFixed(0)}k ctx
+                </option>
+              ))}
+            </select>
+          </div>
+          {(() => {
+            const m = FREE_MODELS.find(fm => fm.id === selectedAiModel);
+            return m ? (
+              <p className="text-muted" style={{ fontSize: '12px', marginTop: '6px' }}>
+                {m.description}
+              </p>
+            ) : null;
+          })()}
+          <button
+            className="btn btn-primary"
+            onClick={handleSaveAiModel}
+            style={{ marginTop: '12px' }}
+          >
+            {aiModelSaved ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Model</>}
+          </button>
         </div>
 
         {/* Account Section */}
