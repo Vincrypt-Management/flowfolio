@@ -179,3 +179,60 @@ fn backtest_empty_timeline_returns_zeros_not_panic() {
     assert_eq!(m.total_return, 0.0);
     assert_eq!(m.final_value, 0.0);
 }
+
+// ============================================================================
+// Portfolio allocation math tests
+// ============================================================================
+
+use flowfolio_lib::modules::portfolio::{AllocationConstraints, PortfolioManager};
+
+fn perm_constraints(max_pos: f64, cash: f64) -> AllocationConstraints {
+    AllocationConstraints {
+        max_position_pct: max_pos,
+        min_position_pct: 0.0,
+        max_sector_pct: None,
+        cash_buffer_pct: cash,
+    }
+}
+
+#[test]
+fn equal_weight_three_symbols_no_cap_gives_thirds() {
+    // (100 - 0) / 3 ≈ 33.333%, under max 50 → 33.333
+    let alloc = PortfolioManager::equal_weight_allocation(
+        vec!["A".into(), "B".into(), "C".into()],
+        perm_constraints(50.0, 0.0),
+    ).unwrap();
+    for a in &alloc.allocations {
+        assert!((a.target_pct - 100.0/3.0).abs() < 1e-6,
+                "expected 33.333..%, got {}", a.target_pct);
+    }
+}
+
+#[test]
+fn equal_weight_with_cash_buffer_reduces_each() {
+    // (100 - 10) / 5 = 18.0, under max 30 → 18.0
+    let symbols: Vec<String> = (0..5).map(|i| format!("S{i}")).collect();
+    let alloc = PortfolioManager::equal_weight_allocation(symbols, perm_constraints(30.0, 10.0)).unwrap();
+    for a in &alloc.allocations {
+        assert!((a.target_pct - 18.0).abs() < 1e-9,
+                "expected 18.0%, got {}", a.target_pct);
+    }
+}
+
+#[test]
+fn equal_weight_capped_by_max_position() {
+    // (100 - 0) / 2 = 50, but max_position=20 → each capped at 20
+    let alloc = PortfolioManager::equal_weight_allocation(
+        vec!["X".into(), "Y".into()],
+        perm_constraints(20.0, 0.0),
+    ).unwrap();
+    for a in &alloc.allocations {
+        assert!((a.target_pct - 20.0).abs() < 1e-9, "expected cap 20.0%, got {}", a.target_pct);
+    }
+}
+
+#[test]
+fn equal_weight_empty_symbols_is_err() {
+    let result = PortfolioManager::equal_weight_allocation(vec![], perm_constraints(50.0, 5.0));
+    assert!(result.is_err(), "empty symbol list must return Err, got {:?}", result);
+}
