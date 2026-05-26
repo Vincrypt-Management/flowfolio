@@ -1218,6 +1218,16 @@ impl MultiSourceProvider {
 
     // ================== PUBLIC API ==================
 
+    /// Format a list of per-provider failures into a single user-visible error string.
+    pub fn format_aggregated_error(symbol: &str, errors: &[(String, String)]) -> String {
+        use std::fmt::Write as _;
+        let mut s = format!("All providers failed for {}:", symbol);
+        for (provider, err) in errors {
+            let _ = write!(s, "\n  - {}: {}", provider, err);
+        }
+        s
+    }
+
     /// Fetch market data with intelligent failover and caching
     pub async fn get_market_data(&self, symbol: &str) -> Result<MarketDataResult, String> {
         let symbol = symbol.to_uppercase();
@@ -1240,7 +1250,7 @@ impl MultiSourceProvider {
 
         // Try providers in health-based order
         let providers = self.get_provider_order();
-        let mut last_error = String::new();
+        let mut errors: Vec<(String, String)> = Vec::new();
 
         for provider in providers {
             let result = match provider {
@@ -1288,17 +1298,14 @@ impl MultiSourceProvider {
                 }
                 Err(e) => {
                     self.track_failure(provider);
-                    last_error = format!("{}: {}", provider, e);
+                    errors.push((provider.to_string(), e.to_string()));
                     tracing::warn!(provider = %provider, symbol = %symbol, error = %e, "Provider failed");
                     continue;
                 }
             }
         }
 
-        Err(format!(
-            "All providers failed for {}: {}",
-            symbol, last_error
-        ))
+        Err(Self::format_aggregated_error(&symbol, &errors))
     }
 
     /// Batch fetch market data for multiple symbols
@@ -1677,5 +1684,22 @@ mod tests {
         provider.clear_cache();
         assert!(provider.quote_cache.is_empty());
         assert!(provider.historical_cache.is_empty());
+    }
+
+    #[test]
+    fn aggregated_error_contains_all_failed_provider_messages() {
+        let errors = vec![
+            ("alpaca".to_string(), "401 unauthorized".to_string()),
+            ("finnhub".to_string(), "429 rate limited".to_string()),
+            ("yahoo".to_string(), "crumb expired".to_string()),
+        ];
+        let aggregated = MultiSourceProvider::format_aggregated_error("AAPL", &errors);
+        assert!(aggregated.contains("AAPL"), "should mention symbol");
+        assert!(aggregated.contains("alpaca"), "should name alpaca");
+        assert!(aggregated.contains("finnhub"), "should name finnhub");
+        assert!(aggregated.contains("yahoo"), "should name yahoo");
+        assert!(aggregated.contains("401 unauthorized"), "should include alpaca error");
+        assert!(aggregated.contains("429 rate limited"), "should include finnhub error");
+        assert!(aggregated.contains("crumb expired"), "should include yahoo error");
     }
 }
