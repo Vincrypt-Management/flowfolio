@@ -269,3 +269,75 @@ fn tiingo_historical_malformed_errors() {
     let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
     assert!(bad);
 }
+
+// ── Twelve Data tests (Task 16) ─────────────────────────────────────────────
+
+#[test]
+fn twelve_data_quote_ok_parses() {
+    let json = load_json("twelve_data_quote_ok.json");
+    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_quote(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(q.symbol, "AAPL");
+    assert!((q.price - 185.92).abs() < 1e-6);
+    assert_ne!(q.price, 0.0);
+}
+
+#[test]
+fn twelve_data_quote_malformed_errors() {
+    let json = load_json("twelve_data_quote_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_quote(&json);
+    assert!(result.is_err());
+}
+
+#[test]
+fn twelve_data_historical_ok_parses() {
+    let json = load_json("twelve_data_historical_ok.json");
+    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_historical(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(bars.len(), 1);
+    assert_ne!(bars[0].close, 0.0);
+}
+
+#[test]
+fn twelve_data_historical_malformed_errors() {
+    let json = load_json("twelve_data_historical_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_historical(&json);
+    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    assert!(bad);
+}
+
+// ── Polygon tests (Task 16) ─────────────────────────────────────────────────
+
+#[test]
+fn polygon_quote_ok_parses() {
+    let json = load_json("polygon_quote_ok.json");
+    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_quote(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(q.symbol, "AAPL");
+    assert!((q.price - 185.92).abs() < 1e-6);
+    assert_ne!(q.price, 0.0);
+}
+
+#[test]
+fn polygon_quote_malformed_errors() {
+    let json = load_json("polygon_quote_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_quote(&json);
+    assert!(result.is_err());
+}
+
+#[test]
+fn polygon_historical_ok_parses() {
+    let json = load_json("polygon_historical_ok.json");
+    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_historical(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(bars.len(), 2);
+    for b in &bars { assert_ne!(b.close, 0.0); }
+}
+
+#[test]
+fn polygon_historical_malformed_errors() {
+    let json = load_json("polygon_historical_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_historical(&json);
+    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    assert!(bad);
+}

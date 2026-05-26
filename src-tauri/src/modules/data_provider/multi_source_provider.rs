@@ -394,6 +394,161 @@ pub fn parse_tiingo_historical(
     Ok(out)
 }
 
+/// Parse a Twelve Data `/quote?symbol={symbol}` response.
+/// Returns `Err` when `symbol` or `close` is missing/invalid.
+pub fn parse_twelve_data_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseError> {
+    let symbol = json
+        .get("symbol")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "twelve_data".into(),
+            field: "symbol".into(),
+        })?
+        .to_string();
+    let price = parse_required_f64(json, "close", "twelve_data")?;
+    let volume = parse_optional_i64(json, "volume", "twelve_data")?;
+    Ok(ProviderQuote {
+        symbol,
+        price,
+        bid: None,
+        ask: None,
+        volume,
+    })
+}
+
+/// Parse a Twelve Data `/time_series` response into a vec of `HistoricalPrice`.
+/// Bars with a missing or bad `close` field are skipped (logged as warn).
+/// Returns `Err(EmptyResponse)` if no bars survive.
+pub fn parse_twelve_data_historical(
+    json: &serde_json::Value,
+) -> Result<Vec<HistoricalPrice>, ParseError> {
+    let values = json
+        .get("values")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "twelve_data".into(),
+            field: "values".into(),
+        })?;
+    let mut out = Vec::with_capacity(values.len());
+    for (i, bar) in values.iter().enumerate() {
+        let close = match parse_required_f64(bar, "close", "twelve_data") {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(idx = i, err = %e, "twelve_data: skip bar (missing close)");
+                continue;
+            }
+        };
+        let open = parse_required_f64(bar, "open", "twelve_data").unwrap_or(close);
+        let high = parse_required_f64(bar, "high", "twelve_data").unwrap_or(close);
+        let low = parse_required_f64(bar, "low", "twelve_data").unwrap_or(close);
+        let volume = parse_required_i64(bar, "volume", "twelve_data").unwrap_or(0);
+        let date = bar
+            .get("datetime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        out.push(HistoricalPrice {
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        });
+    }
+    if out.is_empty() {
+        return Err(ParseError::EmptyResponse {
+            provider: "twelve_data".into(),
+        });
+    }
+    Ok(out)
+}
+
+/// Parse a Polygon `/v2/aggs/ticker/{symbol}/prev` response.
+/// Returns `Err` when `ticker`, `results` array, or `c` (close) is missing.
+pub fn parse_polygon_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseError> {
+    let symbol = json
+        .get("ticker")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "polygon".into(),
+            field: "ticker".into(),
+        })?
+        .to_string();
+    let results = json
+        .get("results")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "polygon".into(),
+            field: "results".into(),
+        })?;
+    let first = results
+        .first()
+        .ok_or_else(|| ParseError::EmptyResponse {
+            provider: "polygon".into(),
+        })?;
+    let price = parse_required_f64(first, "c", "polygon")?;
+    let volume = parse_optional_i64(first, "v", "polygon")?;
+    Ok(ProviderQuote {
+        symbol,
+        price,
+        bid: None,
+        ask: None,
+        volume,
+    })
+}
+
+/// Parse a Polygon `/v2/aggs/ticker/{symbol}/range/...` response into a vec of `HistoricalPrice`.
+/// Bars with a missing or bad `c` (close) field are skipped (logged as warn).
+/// Polygon timestamps are milliseconds; converted to YYYY-MM-DD dates.
+/// Returns `Err(EmptyResponse)` if no bars survive.
+pub fn parse_polygon_historical(
+    json: &serde_json::Value,
+) -> Result<Vec<HistoricalPrice>, ParseError> {
+    let results = json
+        .get("results")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "polygon".into(),
+            field: "results".into(),
+        })?;
+    let mut out = Vec::with_capacity(results.len());
+    for (i, bar) in results.iter().enumerate() {
+        let close = match parse_required_f64(bar, "c", "polygon") {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(idx = i, err = %e, "polygon: skip bar (missing close)");
+                continue;
+            }
+        };
+        let open = parse_required_f64(bar, "o", "polygon").unwrap_or(close);
+        let high = parse_required_f64(bar, "h", "polygon").unwrap_or(close);
+        let low = parse_required_f64(bar, "l", "polygon").unwrap_or(close);
+        let volume = parse_required_i64(bar, "v", "polygon").unwrap_or(0);
+        // Polygon timestamps are ms since epoch; convert to YYYY-MM-DD
+        let date = bar
+            .get("t")
+            .and_then(|v| v.as_i64())
+            .and_then(|ms| chrono::DateTime::from_timestamp(ms / 1000, 0))
+            .map(|dt: chrono::DateTime<chrono::Utc>| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| format!("idx:{i}"));
+        out.push(HistoricalPrice {
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        });
+    }
+    if out.is_empty() {
+        return Err(ParseError::EmptyResponse {
+            provider: "polygon".into(),
+        });
+    }
+    Ok(out)
+}
+
 /// Provider priority and configuration
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
@@ -1074,13 +1229,11 @@ impl MultiSourceProvider {
             return Err("Twelve Data API error".to_string());
         }
 
+        let pq = parse_twelve_data_quote(&data)
+            .map_err(|e| format!("Twelve Data quote parse error: {e}"))?;
         let quote = Some(StockQuote {
             symbol: symbol.to_string(),
-            price: data
-                .get("close")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.0),
+            price: pq.price,
             change: data
                 .get("change")
                 .and_then(|v| v.as_str())
@@ -1091,11 +1244,7 @@ impl MultiSourceProvider {
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.0),
-            volume: data
-                .get("volume")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0),
+            volume: pq.volume.unwrap_or(0),
             timestamp: data
                 .get("datetime")
                 .and_then(|d| d.as_str())
@@ -1113,24 +1262,7 @@ impl MultiSourceProvider {
         let ts_response = crate::HTTP_CLIENT.get(&ts_url).send().await;
         let historical = if let Ok(resp) = ts_response {
             if let Ok(ts_data) = resp.json::<Value>().await {
-                ts_data
-                    .get("values")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|bar| {
-                                Some(HistoricalPrice {
-                                    date: bar.get("datetime")?.as_str()?.to_string(),
-                                    open: bar.get("open")?.as_str()?.parse().ok()?,
-                                    high: bar.get("high")?.as_str()?.parse().ok()?,
-                                    low: bar.get("low")?.as_str()?.parse().ok()?,
-                                    close: bar.get("close")?.as_str()?.parse().ok()?,
-                                    volume: bar.get("volume")?.as_str()?.parse().ok()?,
-                                })
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default()
+                parse_twelve_data_historical(&ts_data).unwrap_or_default()
             } else {
                 vec![]
             }
@@ -1181,25 +1313,23 @@ impl MultiSourceProvider {
             .json()
             .await
             .map_err(|e| format!("Parse error: {}", e))?;
-        let results = data
-            .get("results")
-            .and_then(|r| r.as_array())
-            .and_then(|a| a.first());
 
-        let quote = results.map(|r| StockQuote {
+        let pq = parse_polygon_quote(&data)
+            .map_err(|e| format!("Polygon quote parse error: {e}"))?;
+        let quote = Some(StockQuote {
             symbol: symbol.to_string(),
-            price: r.get("c").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            price: pq.price,
             change: 0.0,
             change_percent: 0.0,
-            volume: r.get("v").and_then(|v| v.as_i64()).unwrap_or(0),
-            timestamp: r
-                .get("t")
+            volume: pq.volume.unwrap_or(0),
+            timestamp: data
+                .get("results")
+                .and_then(|r| r.as_array())
+                .and_then(|a| a.first())
+                .and_then(|r| r.get("t"))
                 .and_then(|t| t.as_i64())
-                .map(|ts| {
-                    chrono::DateTime::from_timestamp_millis(ts)
-                        .map(|dt| dt.format("%Y-%m-%d").to_string())
-                        .unwrap_or_default()
-                })
+                .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts))
+                .map(|dt| dt.format("%Y-%m-%d").to_string())
                 .unwrap_or_default(),
             source: "polygon".to_string(),
         });
@@ -1218,28 +1348,7 @@ impl MultiSourceProvider {
         let hist_response = crate::HTTP_CLIENT.get(&hist_url).send().await;
         let historical = if let Ok(resp) = hist_response {
             if let Ok(hist_data) = resp.json::<Value>().await {
-                hist_data
-                    .get("results")
-                    .and_then(|r| r.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|bar| {
-                                Some(HistoricalPrice {
-                                    date: chrono::DateTime::from_timestamp_millis(
-                                        bar.get("t")?.as_i64()?,
-                                    )?
-                                    .format("%Y-%m-%d")
-                                    .to_string(),
-                                    open: bar.get("o")?.as_f64()?,
-                                    high: bar.get("h")?.as_f64()?,
-                                    low: bar.get("l")?.as_f64()?,
-                                    close: bar.get("c")?.as_f64()?,
-                                    volume: bar.get("v")?.as_i64()?,
-                                })
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default()
+                parse_polygon_historical(&hist_data).unwrap_or_default()
             } else {
                 vec![]
             }
