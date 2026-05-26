@@ -172,3 +172,15 @@ pub async fn ai_chat_stream(
 
     Ok(full_response)
 }
+
+/// Clear all cached OpenRouter responses. Returns rows deleted.
+#[tauri::command]
+pub async fn ai_clear_cache() -> Result<u64, String> {
+    OPENROUTER_SERVICE.clear_cache().await
+}
+
+/// (entry_count, oldest_entry_age_seconds) for the response cache.
+#[tauri::command]
+pub async fn ai_cache_stats() -> Result<(i64, i64), String> {
+    OPENROUTER_SERVICE.cache_stats().await
+}

@@ -162,10 +162,11 @@ async fn init_local_database(app_data_dir: PathBuf) -> Result<sqlx::Pool<sqlx::S
 /// Initialize the enhanced market service with database
 async fn init_market_service_with_db(pool: sqlx::Pool<sqlx::Sqlite>) {
     ENHANCED_MARKET_SERVICE.set_db_pool(pool.clone()).await;
+    OPENROUTER_SERVICE.set_db_pool(pool.clone()).await;
     let mut db = DB_POOL.lock().await;
     *db = Some(pool);
     DB_INITIALIZED.store(true, std::sync::atomic::Ordering::Release);
-    tracing::info!("Enhanced market service initialized with database caching");
+    tracing::info!("Enhanced market service + OpenRouter cache initialized with database");
 }
 
 // ==================== APP ENTRY POINT ====================
@@ -269,6 +270,8 @@ pub fn run() {
             ai_chat_assistant,
             ai_is_configured,
             ai_local_is_ready,
+            ai_clear_cache,
+            ai_cache_stats,
             // Alpaca Trading (backend-proxied)
             alpaca_get_account,
             alpaca_get_positions,

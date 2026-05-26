@@ -71,6 +71,7 @@ urlencoding = "2.1"                                      # URL-encode crumb toke
 aes-gcm = "0.10"                                         # AES-256-GCM encryption with random nonces
 base64 = "0.22"                                          # Base64 encoding
 whoami = "1.5"                                           # Machine identity for key derivation
+sha2 = "0.10"                                            # SHA-256 for response cache keys
 
 [target.'cfg(target_os = "android")'.dependencies]
 # Android-specific dependencies if needed

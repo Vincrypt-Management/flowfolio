@@ -22,6 +22,11 @@ const MIGRATIONS: &[Migration] = &[
         description: "Options + wash sale events + dividend calendar cache",
         sql: include_str!("sql/003_options_and_wash_sale.sql"),
     },
+    Migration {
+        version: 4,
+        description: "OpenRouter response cache",
+        sql: include_str!("sql/004_openrouter_cache.sql"),
+    },
 ];
 
 pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
