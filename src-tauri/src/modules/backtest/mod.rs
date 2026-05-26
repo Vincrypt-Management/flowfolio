@@ -375,7 +375,7 @@ impl BacktestEngine {
         trades
     }
 
-    fn calculate_metrics(
+    pub fn calculate_metrics(
         timeline: &[PortfolioSnapshot],
         duration_months: usize,
         total_invested: f64,
@@ -842,6 +842,51 @@ mod tests {
         assert!((metrics.cagr - 0.0).abs() < 1e-6);
         assert!((metrics.final_value - 0.0).abs() < 1e-6);
         assert_eq!(metrics.num_trades, 0);
+    }
+
+    // --- Bug #3 regression: empty-timeline unwrap guard ---
+
+    #[test]
+    fn calculate_metrics_with_empty_timeline_returns_zeros_not_panic() {
+        // Bug #3 regression test. The unwraps at lines 398-399 are guarded by
+        // the is_empty() check at line 384. This test pins that safe behavior
+        // so a future change cannot re-introduce the panic.
+        let metrics = BacktestEngine::calculate_metrics(&[], 12, 10_000.0, &[]);
+        assert_eq!(metrics.cagr, 0.0);
+        assert_eq!(metrics.total_return, 0.0);
+        assert_eq!(metrics.final_value, 0.0);
+        assert_eq!(metrics.max_drawdown, 0.0);
+        assert_eq!(metrics.volatility, 0.0);
+        assert_eq!(metrics.num_trades, 0);
+    }
+
+    #[test]
+    fn run_backtest_with_no_price_data_does_not_panic() {
+        // Bug #3 upstream regression: when all data providers fail and prices
+        // is empty, get_price_at_date returns 100.0 fallback so run_backtest
+        // must complete without panicking and return a valid result.
+        let config = BacktestConfig {
+            start_date: "2024-01-01".to_string(),
+            end_date: "2024-12-31".to_string(),
+            initial_cash: 10_000.0,
+            monthly_contribution: 0.0,
+            rebalance_frequency: "monthly".to_string(),
+            rebalance_threshold: 5.0,
+            symbols: vec!["AAPL".to_string()],
+            allocation_method: "equal_weight".to_string(),
+        };
+        let prices: HashMap<String, Vec<(NaiveDate, f64)>> = HashMap::new();
+
+        // catch_unwind confirms no panic regardless of internal branching
+        let result = std::panic::catch_unwind(|| {
+            BacktestEngine::run_backtest(config, prices)
+        });
+        assert!(result.is_ok(), "run_backtest must not panic on empty price data");
+
+        // Also assert the returned result is structurally valid
+        let backtest = result.unwrap();
+        assert!(!backtest.timeline.is_empty(), "timeline must have at least an initial snapshot");
+        assert!(backtest.metrics.final_value >= 0.0);
     }
 
     // --- long backtest to trigger rebalance SELL branch ---

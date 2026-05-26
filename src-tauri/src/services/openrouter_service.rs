@@ -90,8 +90,39 @@ impl OpenRouterService {
             .or_else(|| crate::get_api_key("OPENROUTER_API_KEY"))
     }
 
+    /// Validate a successfully-parsed OpenRouter response.
+    /// Returns Ok(content) only if choices are present, content non-empty,
+    /// and finish_reason indicates successful completion (not truncated or filtered).
+    fn validate_openrouter_response(response: &OpenRouterResponse) -> Result<String, String> {
+        let choice = response.choices.first()
+            .ok_or_else(|| "No response from model - no choices returned".to_string())?;
+
+        let content = choice.message.content.trim();
+        if content.is_empty() {
+            return Err(format!(
+                "Model returned empty response. Finish reason: {:?}.",
+                choice.finish_reason
+            ));
+        }
+
+        match choice.finish_reason.as_deref() {
+            Some("stop") | None => Ok(choice.message.content.clone()),
+            Some("length") => Err(
+                "Model response was truncated (hit max_tokens). Try a larger max_tokens or shorter prompt.".to_string()
+            ),
+            Some("content_filter") => Err(
+                "Response blocked by content filter.".to_string()
+            ),
+            Some(other) => Err(format!(
+                "Model stopped unexpectedly (finish_reason: {}). Response may be incomplete.",
+                other
+            )),
+        }
+    }
+
     /// Send chat completion request — retries up to 2× on upstream 429s,
     /// honouring the `retry_after_seconds` field in the OpenRouter error body.
+    /// Validates the response (rejects truncated/filtered/empty content).
     pub async fn chat(
         &self,
         messages: Vec<OpenRouterMessage>,
@@ -182,21 +213,24 @@ impl OpenRouterService {
                 format!("Failed to parse AI response: {}", e)
             })?;
 
-            if let Some(choice) = result.choices.first() {
-                let content = choice.message.content.clone();
-                if content.trim().is_empty() {
-                    tracing::warn!(finish_reason = ?choice.finish_reason, "Model returned empty content");
-                    return Err(format!(
-                        "Model returned empty response. Finish reason: {:?}.",
-                        choice.finish_reason
-                    ));
+            return match Self::validate_openrouter_response(&result) {
+                Ok(content) => {
+                    tracing::info!(
+                        tokens = ?result.usage,
+                        content_len = content.len(),
+                        "OpenRouter response received"
+                    );
+                    Ok(content)
                 }
-                tracing::info!(tokens = ?result.usage, content_len = content.len(), "OpenRouter response received");
-                return Ok(content);
-            } else {
-                tracing::error!(response = ?result, "No choices in OpenRouter response");
-                return Err("No response from model - no choices returned".to_string());
-            }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        response_choices = result.choices.len(),
+                        "OpenRouter response failed validation"
+                    );
+                    Err(e)
+                }
+            };
         }
     }
 
@@ -329,6 +363,65 @@ impl Default for OpenRouterService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_response(content: &str, finish: Option<&str>) -> OpenRouterResponse {
+        OpenRouterResponse {
+            id: "id".into(),
+            model: "m".into(),
+            choices: vec![OpenRouterChoice {
+                message: OpenRouterMessage {
+                    role: "assistant".into(),
+                    content: content.into(),
+                },
+                finish_reason: finish.map(String::from),
+            }],
+            usage: None,
+        }
+    }
+
+    #[test]
+    fn validate_accepts_stop_finish() {
+        let r = make_response("hello world", Some("stop"));
+        assert_eq!(OpenRouterService::validate_openrouter_response(&r).unwrap(), "hello world");
+    }
+
+    #[test]
+    fn validate_accepts_missing_finish_reason() {
+        let r = make_response("hello", None);
+        assert!(OpenRouterService::validate_openrouter_response(&r).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_length_finish() {
+        let r = make_response("partial answ", Some("length"));
+        let err = OpenRouterService::validate_openrouter_response(&r).unwrap_err();
+        assert!(err.contains("truncated"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_content_filter() {
+        let r = make_response("blocked", Some("content_filter"));
+        let err = OpenRouterService::validate_openrouter_response(&r).unwrap_err();
+        assert!(err.to_lowercase().contains("content filter"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_empty_content() {
+        let r = make_response("   ", Some("stop"));
+        let err = OpenRouterService::validate_openrouter_response(&r).unwrap_err();
+        assert!(err.to_lowercase().contains("empty"), "got: {}", err);
+    }
+
+    #[test]
+    fn validate_rejects_no_choices() {
+        let r = OpenRouterResponse {
+            id: "id".into(),
+            model: "m".into(),
+            choices: vec![],
+            usage: None,
+        };
+        assert!(OpenRouterService::validate_openrouter_response(&r).is_err());
+    }
 
     #[test]
     fn new_constructs_without_panic() {
