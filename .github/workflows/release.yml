@@ -32,7 +32,7 @@ jobs:
       - run: npm ci --prefer-offline --no-audit
       - run: npm run lint
       - run: npm run test:coverage
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.91.1"
           components: clippy, rustfmt
@@ -83,7 +83,7 @@ jobs:
           cache: npm
 
       - name: Install Rust (pinned)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.91.1"
 
@@ -170,7 +170,7 @@ jobs:
           cache: npm
 
       - name: Install Rust (pinned)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.91.1"
 
@@ -237,7 +237,7 @@ jobs:
           cache: npm
 
       - name: Install Rust (pinned)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.91.1"
           targets: ${{ matrix.target }}
@@ -335,7 +335,7 @@ jobs:
         run: sdkmanager "ndk;27.0.12077973"
 
       - name: Install Rust (pinned)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.91.1"
           targets: aarch64-linux-android
