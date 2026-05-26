@@ -49,6 +49,10 @@ use flowfolio_lib::modules::data_provider::AlphaVantageClient;
 
 use flowfolio_lib::modules::data_provider::free_sources;
 
+// ── Alpaca + Finnhub (Task 14) ──────────────────────────────────────────────
+
+use flowfolio_lib::modules::data_provider::multi_source_provider;
+
 #[test]
 fn alphavantage_ok_fixture_parses_all_fields() {
     let json = load_json("alphavantage_timeseries_ok.json");
@@ -119,4 +123,76 @@ fn yahoo_historical_malformed_errors_not_silent_zero() {
         Ok(v) => v.is_empty(),
     };
     assert!(bad, "missing close array must NOT produce bar{{close:0.0}}, got: {result:?}");
+}
+
+// ── Alpaca tests (Task 14) ──────────────────────────────────────────────────
+
+#[test]
+fn alpaca_quote_ok_parses() {
+    let json = load_json("alpaca_quote_ok.json");
+    let q = multi_source_provider::parse_alpaca_quote(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(q.symbol, "AAPL");
+    assert!(q.price > 0.0, "price must not be 0; got {}", q.price);
+    // Midpoint of bp=185.91 and ap=185.93 = 185.92
+    assert!((q.price - 185.92).abs() < 1e-6);
+}
+
+#[test]
+fn alpaca_quote_malformed_errors() {
+    let json = load_json("alpaca_quote_malformed.json");
+    let result = multi_source_provider::parse_alpaca_quote(&json);
+    assert!(result.is_err(), "missing prices must Err, got: {result:?}");
+}
+
+#[test]
+fn alpaca_bars_ok_parses() {
+    let json = load_json("alpaca_bars_ok.json");
+    let bars = multi_source_provider::parse_alpaca_bars(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(bars.len(), 1);
+    assert!(bars[0].close > 0.0, "close must not be 0");
+}
+
+#[test]
+fn alpaca_bars_malformed_errors_or_skips() {
+    let json = load_json("alpaca_bars_malformed.json");
+    let result = multi_source_provider::parse_alpaca_bars(&json);
+    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    assert!(bad, "missing close must Err or skip, got: {result:?}");
+}
+
+// ── Finnhub tests (Task 14) ─────────────────────────────────────────────────
+
+#[test]
+fn finnhub_quote_ok_parses() {
+    let json = load_json("finnhub_quote_ok.json");
+    let q = multi_source_provider::parse_finnhub_quote(&json)
+        .expect("ok fixture must parse");
+    assert!((q.price - 185.92).abs() < 1e-6);
+    assert_ne!(q.price, 0.0);
+}
+
+#[test]
+fn finnhub_quote_malformed_errors() {
+    let json = load_json("finnhub_quote_malformed.json");
+    let result = multi_source_provider::parse_finnhub_quote(&json);
+    assert!(result.is_err(), "missing c must Err, got: {result:?}");
+}
+
+#[test]
+fn finnhub_candles_ok_parses() {
+    let json = load_json("finnhub_candles_ok.json");
+    let bars = multi_source_provider::parse_finnhub_candles(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(bars.len(), 2);
+    for bar in &bars { assert!(bar.close > 0.0); }
+}
+
+#[test]
+fn finnhub_candles_malformed_errors() {
+    let json = load_json("finnhub_candles_malformed.json");
+    let result = multi_source_provider::parse_finnhub_candles(&json);
+    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    assert!(bad);
 }
