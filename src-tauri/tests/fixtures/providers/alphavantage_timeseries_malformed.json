@@ -1,0 +1,14 @@
+{
+  "Meta Data": {
+    "1. Information": "Daily Prices",
+    "2. Symbol": "AAPL"
+  },
+  "Time Series (Daily)": {
+    "2024-01-15": {
+      "1. open": "185.92",
+      "2. high": "186.74",
+      "3. low": "184.30",
+      "5. volume": "47471400"
+    }
+  }
+}

@@ -62,6 +62,48 @@ pub struct AlphaVantageError {
 }
 
 impl AlphaVantageClient {
+    /// Pure parser for TIME_SERIES_DAILY JSON. Public for testing.
+    /// Bars whose required fields can't be parsed are skipped (with a warn log).
+    /// Returns Err if the top-level "Time Series (Daily)" key is missing.
+    pub fn parse_time_series(json: &Value) -> Result<Vec<TimeSeriesDaily>, ParseError> {
+        let time_series = json
+            .get("Time Series (Daily)")
+            .ok_or_else(|| ParseError::MissingField {
+                provider: "alphavantage".to_string(),
+                field: "Time Series (Daily)".to_string(),
+            })?;
+
+        let series_map = time_series.as_object().ok_or_else(|| ParseError::InvalidType {
+            provider: "alphavantage".to_string(),
+            field: "Time Series (Daily)".to_string(),
+            expected: "object".to_string(),
+            got: format!("{time_series}"),
+        })?;
+
+        let mut results = Vec::with_capacity(series_map.len());
+        for (date, values) in series_map {
+            match Self::parse_time_series_bar(date, values) {
+                Ok(e) => results.push(e),
+                Err(e) => {
+                    tracing::warn!(date = %date, error = %e, "Skipping malformed Alpha Vantage bar");
+                }
+            }
+        }
+        results.sort_by(|a, b| b.date.cmp(&a.date));
+        Ok(results)
+    }
+
+    fn parse_time_series_bar(date: &str, values: &Value) -> Result<TimeSeriesDaily, ParseError> {
+        Ok(TimeSeriesDaily {
+            date: date.to_string(),
+            open: parse_required_f64(values, "1. open", "alphavantage")?,
+            high: parse_required_f64(values, "2. high", "alphavantage")?,
+            low: parse_required_f64(values, "3. low", "alphavantage")?,
+            close: parse_required_f64(values, "4. close", "alphavantage")?,
+            volume: parse_required_i64(values, "5. volume", "alphavantage")?,
+        })
+    }
+
     /// Create new Alpha Vantage client with API key
     pub fn new(api_key: String) -> Self {
         let rate_limiter = RateLimiter::new_daily(25); // Free tier: 25 requests/day
@@ -104,50 +146,10 @@ impl AlphaVantageClient {
             anyhow::bail!("API error: {}", error.as_str().unwrap_or("Unknown error"));
         }
 
-        // Parse time series data
-        let time_series = json
-            .get("Time Series (Daily)")
-            .ok_or_else(|| anyhow::anyhow!("No time series data found"))?;
-
-        let mut results = Vec::new();
-
-        if let Some(series_map) = time_series.as_object() {
-            for (date, values) in series_map {
-                if let Some(vals) = values.as_object() {
-                    let entry = TimeSeriesDaily {
-                        date: date.clone(),
-                        open: vals
-                            .get("1. open")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or(0.0),
-                        high: vals
-                            .get("2. high")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or(0.0),
-                        low: vals
-                            .get("3. low")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or(0.0),
-                        close: vals
-                            .get("4. close")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or(0.0),
-                        volume: vals
-                            .get("5. volume")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse().ok())
-                            .unwrap_or(0),
-                    };
-                    results.push(entry);
-                }
-            }
-        }
-
-        // Sort by date descending
+        // Parse time series data using the shared parse helper (no silent zeros)
+        let mut results = Self::parse_time_series(&json)
+            .map_err(|e| anyhow::anyhow!("Alpha Vantage parse failed: {}", e))?;
+        // results already sorted desc by parse_time_series, but sort defensively
         results.sort_by(|a, b| b.date.cmp(&a.date));
 
         Ok(results)
