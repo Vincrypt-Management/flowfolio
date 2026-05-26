@@ -112,3 +112,70 @@ fn calculate_metrics_returns_all_finite_for_realistic_series() {
         assert!(sr.is_finite(), "sortino_ratio must be finite when present, got {sr}");
     }
 }
+
+// ============================================================================
+// Backtest metric tests
+// ============================================================================
+
+use flowfolio_lib::modules::backtest::{BacktestEngine, PortfolioSnapshot};
+
+fn snapshot(value: f64, month: u32) -> PortfolioSnapshot {
+    PortfolioSnapshot {
+        date: format!("2024-{:02}-01", month),
+        value,
+        cash: 0.0,
+        invested: value,
+        positions: vec![],
+    }
+}
+
+#[test]
+fn backtest_cagr_doubling_in_one_year_is_100pct() {
+    // 10k → 20k over 12 months = 100% CAGR (reported as percent)
+    // Formula: (final/initial)^(1/years) - 1) * 100 = (20000/10000)^1 - 1) * 100 = 100.0
+    let timeline = vec![snapshot(10_000.0, 1), snapshot(20_000.0, 12)];
+    let m = BacktestEngine::calculate_metrics(&timeline, 12, 10_000.0, &[]);
+    assert!((m.cagr - 100.0).abs() < 1e-3,
+            "expected CAGR ≈ 100.0, got {}", m.cagr);
+}
+
+#[test]
+fn backtest_cagr_doubling_in_two_years_is_41_42pct() {
+    // 10k → 20k over 24 months = 2^(1/2) - 1 = 0.4142... → 41.42%
+    // Formula: (20000/10000)^(12/24) - 1) * 100 = sqrt(2) - 1) * 100 ≈ 41.4214
+    let timeline = vec![snapshot(10_000.0, 1), snapshot(20_000.0, 12)];
+    let m = BacktestEngine::calculate_metrics(&timeline, 24, 10_000.0, &[]);
+    assert!((m.cagr - 41.4214).abs() < 1e-2,
+            "expected CAGR ≈ 41.42, got {}", m.cagr);
+}
+
+#[test]
+fn backtest_total_return_is_in_percent() {
+    // Invested 10k, ended at 12.5k → (12500 - 10000) / 10000 * 100 = +25%
+    let timeline = vec![snapshot(10_000.0, 1), snapshot(12_500.0, 12)];
+    let m = BacktestEngine::calculate_metrics(&timeline, 12, 10_000.0, &[]);
+    assert!((m.total_return - 25.0).abs() < 1e-6,
+            "expected 25.0%, got {}", m.total_return);
+}
+
+#[test]
+fn backtest_max_drawdown_peak_to_trough() {
+    // 100 → 120 → 60 → 80. Peak=120, trough=60. DD = (120-60)/120 * 100 = 50%.
+    let timeline = vec![
+        snapshot(100.0, 1),
+        snapshot(120.0, 3),
+        snapshot(60.0, 6),
+        snapshot(80.0, 12),
+    ];
+    let m = BacktestEngine::calculate_metrics(&timeline, 12, 100.0, &[]);
+    assert!((m.max_drawdown - 50.0).abs() < 1e-6,
+            "expected 50.0%, got {}", m.max_drawdown);
+}
+
+#[test]
+fn backtest_empty_timeline_returns_zeros_not_panic() {
+    let m = BacktestEngine::calculate_metrics(&[], 12, 10_000.0, &[]);
+    assert_eq!(m.cagr, 0.0);
+    assert_eq!(m.total_return, 0.0);
+    assert_eq!(m.final_value, 0.0);
+}
