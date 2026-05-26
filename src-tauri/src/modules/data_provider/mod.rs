@@ -2,8 +2,10 @@
 
 pub mod free_sources;
 pub mod multi_source_provider;
+pub mod parse_helpers;
 
 pub use multi_source_provider::{HistoricalPrice, MultiSourceProvider};
+pub use parse_helpers::{ParseError, parse_required_f64, parse_required_i64, parse_optional_f64, parse_optional_i64};
 
 use crate::modules::rate_limiter::RateLimiter;
 use anyhow::Result;
