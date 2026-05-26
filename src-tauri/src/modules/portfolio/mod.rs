@@ -771,10 +771,14 @@ mod tests {
         let result = PortfolioManager::equal_weight_allocation(
             vec!["AAPL".into(), "MSFT".into()],
             default_constraints(),
-        ).expect("should succeed with 2 symbols");
+        )
+        .expect("should succeed with 2 symbols");
         for alloc in &result.allocations {
-            assert!((alloc.target_pct - 25.0).abs() < 1e-9,
-                    "expected 25.0% per symbol (capped), got {}", alloc.target_pct);
+            assert!(
+                (alloc.target_pct - 25.0).abs() < 1e-9,
+                "expected 25.0% per symbol (capped), got {}",
+                alloc.target_pct
+            );
         }
     }
 
@@ -785,8 +789,11 @@ mod tests {
         let result = PortfolioManager::equal_weight_allocation(symbols, default_constraints())
             .expect("should succeed with 5 symbols");
         for alloc in &result.allocations {
-            assert!((alloc.target_pct - 19.0).abs() < 1e-9,
-                    "expected 19.0%, got {}", alloc.target_pct);
+            assert!(
+                (alloc.target_pct - 19.0).abs() < 1e-9,
+                "expected 19.0%, got {}",
+                alloc.target_pct
+            );
         }
     }
 

@@ -34,7 +34,10 @@ fn quick_stats_finite_for_typical_series() {
     assert!(last.is_finite(), "last must be finite");
     assert!(total_return.is_finite(), "total_return must be finite");
     assert!(volatility.is_finite(), "volatility must be finite");
-    assert!(volatility >= 0.0, "volatility must be non-negative, got {volatility}");
+    assert!(
+        volatility >= 0.0,
+        "volatility must be non-negative, got {volatility}"
+    );
 }
 
 #[test]
@@ -56,11 +59,7 @@ fn calculate_metrics_constant_price_has_zero_volatility() {
 #[test]
 fn calculate_metrics_monotonic_rising_has_zero_max_drawdown() {
     // 12 months of strictly increasing prices → no drawdown ever.
-    let prices = series_from_closes(
-        &(1..=12)
-            .map(|i| 100.0 + i as f64)
-            .collect::<Vec<_>>(),
-    );
+    let prices = series_from_closes(&(1..=12).map(|i| 100.0 + i as f64).collect::<Vec<_>>());
     let metrics = QuantAnalyzer::calculate_metrics("RISE", &prices);
     assert!(
         metrics.max_drawdown.abs() < 1e-6,
@@ -77,8 +76,7 @@ fn calculate_metrics_50pct_crash_max_drawdown_is_50pct() {
     // Series must be >= MIN_DATA_POINTS (14) to pass the data-guard.
     // Hand-derivation: peak = 100, trough = 50 → dd = (50-100)/100 = -0.50 → 50.0%.
     let prices = series_from_closes(&[
-        100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0,
-        75.0, 50.0, 55.0, 60.0, 65.0, 70.0,
+        100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 75.0, 50.0, 55.0, 60.0, 65.0, 70.0,
     ]);
     let metrics = QuantAnalyzer::calculate_metrics("CRASH", &prices);
     // Accept either 0..1 (0.50) or 0..100 (50.0) representation.
@@ -95,8 +93,8 @@ fn calculate_metrics_50pct_crash_max_drawdown_is_50pct() {
 fn calculate_metrics_returns_all_finite_for_realistic_series() {
     // Synthetic but plausible 24-month price series.
     let prices = series_from_closes(&[
-        100.0, 102.0, 101.0, 105.0, 107.0, 104.0, 110.0, 108.0, 112.0, 115.0, 113.0, 118.0,
-        120.0, 117.0, 122.0, 125.0, 123.0, 128.0, 130.0, 127.0, 132.0, 135.0, 133.0, 138.0,
+        100.0, 102.0, 101.0, 105.0, 107.0, 104.0, 110.0, 108.0, 112.0, 115.0, 113.0, 118.0, 120.0,
+        117.0, 122.0, 125.0, 123.0, 128.0, 130.0, 127.0, 132.0, 135.0, 133.0, 138.0,
     ]);
     let m = QuantAnalyzer::calculate_metrics("AAPL", &prices);
     for (name, val) in [
@@ -109,7 +107,10 @@ fn calculate_metrics_returns_all_finite_for_realistic_series() {
     }
     // sortino_ratio is Option<f64>; if present, it must be finite.
     if let Some(sr) = m.sortino_ratio {
-        assert!(sr.is_finite(), "sortino_ratio must be finite when present, got {sr}");
+        assert!(
+            sr.is_finite(),
+            "sortino_ratio must be finite when present, got {sr}"
+        );
     }
 }
 
@@ -135,8 +136,11 @@ fn backtest_cagr_doubling_in_one_year_is_100pct() {
     // Formula: (final/initial)^(1/years) - 1) * 100 = (20000/10000)^1 - 1) * 100 = 100.0
     let timeline = vec![snapshot(10_000.0, 1), snapshot(20_000.0, 12)];
     let m = BacktestEngine::calculate_metrics(&timeline, 12, 10_000.0, &[]);
-    assert!((m.cagr - 100.0).abs() < 1e-3,
-            "expected CAGR ≈ 100.0, got {}", m.cagr);
+    assert!(
+        (m.cagr - 100.0).abs() < 1e-3,
+        "expected CAGR ≈ 100.0, got {}",
+        m.cagr
+    );
 }
 
 #[test]
@@ -145,8 +149,11 @@ fn backtest_cagr_doubling_in_two_years_is_41_42pct() {
     // Formula: (20000/10000)^(12/24) - 1) * 100 = sqrt(2) - 1) * 100 ≈ 41.4214
     let timeline = vec![snapshot(10_000.0, 1), snapshot(20_000.0, 12)];
     let m = BacktestEngine::calculate_metrics(&timeline, 24, 10_000.0, &[]);
-    assert!((m.cagr - 41.4214).abs() < 1e-2,
-            "expected CAGR ≈ 41.42, got {}", m.cagr);
+    assert!(
+        (m.cagr - 41.4214).abs() < 1e-2,
+        "expected CAGR ≈ 41.42, got {}",
+        m.cagr
+    );
 }
 
 #[test]
@@ -154,8 +161,11 @@ fn backtest_total_return_is_in_percent() {
     // Invested 10k, ended at 12.5k → (12500 - 10000) / 10000 * 100 = +25%
     let timeline = vec![snapshot(10_000.0, 1), snapshot(12_500.0, 12)];
     let m = BacktestEngine::calculate_metrics(&timeline, 12, 10_000.0, &[]);
-    assert!((m.total_return - 25.0).abs() < 1e-6,
-            "expected 25.0%, got {}", m.total_return);
+    assert!(
+        (m.total_return - 25.0).abs() < 1e-6,
+        "expected 25.0%, got {}",
+        m.total_return
+    );
 }
 
 #[test]
@@ -168,8 +178,11 @@ fn backtest_max_drawdown_peak_to_trough() {
         snapshot(80.0, 12),
     ];
     let m = BacktestEngine::calculate_metrics(&timeline, 12, 100.0, &[]);
-    assert!((m.max_drawdown - 50.0).abs() < 1e-6,
-            "expected 50.0%, got {}", m.max_drawdown);
+    assert!(
+        (m.max_drawdown - 50.0).abs() < 1e-6,
+        "expected 50.0%, got {}",
+        m.max_drawdown
+    );
 }
 
 #[test]
@@ -201,10 +214,14 @@ fn equal_weight_three_symbols_no_cap_gives_thirds() {
     let alloc = PortfolioManager::equal_weight_allocation(
         vec!["A".into(), "B".into(), "C".into()],
         perm_constraints(50.0, 0.0),
-    ).unwrap();
+    )
+    .unwrap();
     for a in &alloc.allocations {
-        assert!((a.target_pct - 100.0/3.0).abs() < 1e-6,
-                "expected 33.333..%, got {}", a.target_pct);
+        assert!(
+            (a.target_pct - 100.0 / 3.0).abs() < 1e-6,
+            "expected 33.333..%, got {}",
+            a.target_pct
+        );
     }
 }
 
@@ -212,10 +229,14 @@ fn equal_weight_three_symbols_no_cap_gives_thirds() {
 fn equal_weight_with_cash_buffer_reduces_each() {
     // (100 - 10) / 5 = 18.0, under max 30 → 18.0
     let symbols: Vec<String> = (0..5).map(|i| format!("S{i}")).collect();
-    let alloc = PortfolioManager::equal_weight_allocation(symbols, perm_constraints(30.0, 10.0)).unwrap();
+    let alloc =
+        PortfolioManager::equal_weight_allocation(symbols, perm_constraints(30.0, 10.0)).unwrap();
     for a in &alloc.allocations {
-        assert!((a.target_pct - 18.0).abs() < 1e-9,
-                "expected 18.0%, got {}", a.target_pct);
+        assert!(
+            (a.target_pct - 18.0).abs() < 1e-9,
+            "expected 18.0%, got {}",
+            a.target_pct
+        );
     }
 }
 
@@ -225,14 +246,23 @@ fn equal_weight_capped_by_max_position() {
     let alloc = PortfolioManager::equal_weight_allocation(
         vec!["X".into(), "Y".into()],
         perm_constraints(20.0, 0.0),
-    ).unwrap();
+    )
+    .unwrap();
     for a in &alloc.allocations {
-        assert!((a.target_pct - 20.0).abs() < 1e-9, "expected cap 20.0%, got {}", a.target_pct);
+        assert!(
+            (a.target_pct - 20.0).abs() < 1e-9,
+            "expected cap 20.0%, got {}",
+            a.target_pct
+        );
     }
 }
 
 #[test]
 fn equal_weight_empty_symbols_is_err() {
     let result = PortfolioManager::equal_weight_allocation(vec![], perm_constraints(50.0, 5.0));
-    assert!(result.is_err(), "empty symbol list must return Err, got {:?}", result);
+    assert!(
+        result.is_err(),
+        "empty symbol list must return Err, got {:?}",
+        result
+    );
 }

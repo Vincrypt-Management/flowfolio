@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-#[allow(dead_code)]  // helpers added by later tasks
+#[allow(dead_code)] // helpers added by later tasks
 fn load_fixture(name: &str) -> String {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
@@ -38,7 +38,11 @@ fn parser_integrity_scaffold_is_loaded() {
     path.push("tests");
     path.push("fixtures");
     path.push("providers");
-    assert!(path.exists(), "fixtures/providers/ directory missing at {}", path.display());
+    assert!(
+        path.exists(),
+        "fixtures/providers/ directory missing at {}",
+        path.display()
+    );
 }
 
 // ── Alpha Vantage (Task 12) ─────────────────────────────────────────────────
@@ -58,7 +62,9 @@ fn alphavantage_ok_fixture_parses_all_fields() {
     let json = load_json("alphavantage_timeseries_ok.json");
     let entries = AlphaVantageClient::parse_time_series(&json).expect("ok fixture must parse");
     assert_eq!(entries.len(), 2, "expected 2 bars");
-    let first = entries.iter().find(|e| e.date == "2024-01-15")
+    let first = entries
+        .iter()
+        .find(|e| e.date == "2024-01-15")
         .expect("2024-01-15 bar missing");
     assert!((first.open - 185.92).abs() < 1e-9);
     assert!((first.high - 186.74).abs() < 1e-9);
@@ -82,7 +88,10 @@ fn alphavantage_malformed_fixture_errors_not_silent_zero() {
         Err(_) => true,
         Ok(v) => v.is_empty(),
     };
-    assert!(bad, "missing required 'close' must NOT produce entry with close=0.0; got: {result:?}");
+    assert!(
+        bad,
+        "missing required 'close' must NOT produce entry with close=0.0; got: {result:?}"
+    );
 }
 
 #[test]
@@ -99,8 +108,10 @@ fn yahoo_quote_ok_parses_required_fields() {
 fn yahoo_quote_malformed_errors_not_silent_zero() {
     let json = load_json("yahoo_quote_malformed.json");
     let result = free_sources::parse_yahoo_quote(&json);
-    assert!(result.is_err(),
-            "missing regularMarketPrice must NOT parse to quote{{price:0.0}}, got: {result:?}");
+    assert!(
+        result.is_err(),
+        "missing regularMarketPrice must NOT parse to quote{{price:0.0}}, got: {result:?}"
+    );
 }
 
 #[test]
@@ -122,7 +133,10 @@ fn yahoo_historical_malformed_errors_not_silent_zero() {
         Err(_) => true,
         Ok(v) => v.is_empty(),
     };
-    assert!(bad, "missing close array must NOT produce bar{{close:0.0}}, got: {result:?}");
+    assert!(
+        bad,
+        "missing close array must NOT produce bar{{close:0.0}}, got: {result:?}"
+    );
 }
 
 // ── Alpaca tests (Task 14) ──────────────────────────────────────────────────
@@ -130,8 +144,7 @@ fn yahoo_historical_malformed_errors_not_silent_zero() {
 #[test]
 fn alpaca_quote_ok_parses() {
     let json = load_json("alpaca_quote_ok.json");
-    let q = multi_source_provider::parse_alpaca_quote(&json)
-        .expect("ok fixture must parse");
+    let q = multi_source_provider::parse_alpaca_quote(&json).expect("ok fixture must parse");
     assert_eq!(q.symbol, "AAPL");
     assert!(q.price > 0.0, "price must not be 0; got {}", q.price);
     // Midpoint of bp=185.91 and ap=185.93 = 185.92
@@ -148,8 +161,7 @@ fn alpaca_quote_malformed_errors() {
 #[test]
 fn alpaca_bars_ok_parses() {
     let json = load_json("alpaca_bars_ok.json");
-    let bars = multi_source_provider::parse_alpaca_bars(&json)
-        .expect("ok fixture must parse");
+    let bars = multi_source_provider::parse_alpaca_bars(&json).expect("ok fixture must parse");
     assert_eq!(bars.len(), 1);
     assert!(bars[0].close > 0.0, "close must not be 0");
 }
@@ -158,7 +170,10 @@ fn alpaca_bars_ok_parses() {
 fn alpaca_bars_malformed_errors_or_skips() {
     let json = load_json("alpaca_bars_malformed.json");
     let result = multi_source_provider::parse_alpaca_bars(&json);
-    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
     assert!(bad, "missing close must Err or skip, got: {result:?}");
 }
 
@@ -167,8 +182,7 @@ fn alpaca_bars_malformed_errors_or_skips() {
 #[test]
 fn finnhub_quote_ok_parses() {
     let json = load_json("finnhub_quote_ok.json");
-    let q = multi_source_provider::parse_finnhub_quote(&json)
-        .expect("ok fixture must parse");
+    let q = multi_source_provider::parse_finnhub_quote(&json).expect("ok fixture must parse");
     assert!((q.price - 185.92).abs() < 1e-6);
     assert_ne!(q.price, 0.0);
 }
@@ -183,17 +197,21 @@ fn finnhub_quote_malformed_errors() {
 #[test]
 fn finnhub_candles_ok_parses() {
     let json = load_json("finnhub_candles_ok.json");
-    let bars = multi_source_provider::parse_finnhub_candles(&json)
-        .expect("ok fixture must parse");
+    let bars = multi_source_provider::parse_finnhub_candles(&json).expect("ok fixture must parse");
     assert_eq!(bars.len(), 2);
-    for bar in &bars { assert!(bar.close > 0.0); }
+    for bar in &bars {
+        assert!(bar.close > 0.0);
+    }
 }
 
 #[test]
 fn finnhub_candles_malformed_errors() {
     let json = load_json("finnhub_candles_malformed.json");
     let result = multi_source_provider::parse_finnhub_candles(&json);
-    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
     assert!(bad);
 }
 
@@ -212,15 +230,17 @@ fn fmp_quote_ok_parses() {
 #[test]
 fn fmp_quote_malformed_errors() {
     let json = load_json("fmp_quote_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_quote(&json);
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_quote(&json);
     assert!(result.is_err(), "missing price must Err, got: {result:?}");
 }
 
 #[test]
 fn fmp_historical_ok_parses() {
     let json = load_json("fmp_historical_ok.json");
-    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_historical(&json)
-        .expect("ok fixture must parse");
+    let bars =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_historical(&json)
+            .expect("ok fixture must parse");
     assert_eq!(bars.len(), 1);
     assert!((bars[0].close - 185.92).abs() < 1e-9);
     assert_ne!(bars[0].close, 0.0);
@@ -229,8 +249,12 @@ fn fmp_historical_ok_parses() {
 #[test]
 fn fmp_historical_malformed_errors() {
     let json = load_json("fmp_historical_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_historical(&json);
-    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_historical(&json);
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
     assert!(bad, "missing close must Err or skip, got: {result:?}");
 }
 
@@ -249,14 +273,18 @@ fn tiingo_quote_ok_parses() {
 #[test]
 fn tiingo_quote_malformed_errors() {
     let json = load_json("tiingo_quote_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_quote(&json);
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_quote(&json);
     assert!(result.is_err(), "missing last must Err, got: {result:?}");
 }
 
 #[test]
 fn tiingo_historical_ok_parses() {
     let json = load_json("tiingo_historical_ok.json");
-    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_historical(&json)
+    let bars =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_historical(
+            &json,
+        )
         .expect("ok fixture must parse");
     assert_eq!(bars.len(), 1);
     assert_ne!(bars[0].close, 0.0);
@@ -265,8 +293,14 @@ fn tiingo_historical_ok_parses() {
 #[test]
 fn tiingo_historical_malformed_errors() {
     let json = load_json("tiingo_historical_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_historical(&json);
-    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_historical(
+            &json,
+        );
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
     assert!(bad);
 }
 
@@ -275,8 +309,10 @@ fn tiingo_historical_malformed_errors() {
 #[test]
 fn twelve_data_quote_ok_parses() {
     let json = load_json("twelve_data_quote_ok.json");
-    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_quote(&json)
-        .expect("ok fixture must parse");
+    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_quote(
+        &json,
+    )
+    .expect("ok fixture must parse");
     assert_eq!(q.symbol, "AAPL");
     assert!((q.price - 185.92).abs() < 1e-6);
     assert_ne!(q.price, 0.0);
@@ -285,14 +321,20 @@ fn twelve_data_quote_ok_parses() {
 #[test]
 fn twelve_data_quote_malformed_errors() {
     let json = load_json("twelve_data_quote_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_quote(&json);
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_quote(
+            &json,
+        );
     assert!(result.is_err());
 }
 
 #[test]
 fn twelve_data_historical_ok_parses() {
     let json = load_json("twelve_data_historical_ok.json");
-    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_historical(&json)
+    let bars =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_historical(
+            &json,
+        )
         .expect("ok fixture must parse");
     assert_eq!(bars.len(), 1);
     assert_ne!(bars[0].close, 0.0);
@@ -301,8 +343,14 @@ fn twelve_data_historical_ok_parses() {
 #[test]
 fn twelve_data_historical_malformed_errors() {
     let json = load_json("twelve_data_historical_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_historical(&json);
-    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_twelve_data_historical(
+            &json,
+        );
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
     assert!(bad);
 }
 
@@ -311,8 +359,9 @@ fn twelve_data_historical_malformed_errors() {
 #[test]
 fn polygon_quote_ok_parses() {
     let json = load_json("polygon_quote_ok.json");
-    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_quote(&json)
-        .expect("ok fixture must parse");
+    let q =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_quote(&json)
+            .expect("ok fixture must parse");
     assert_eq!(q.symbol, "AAPL");
     assert!((q.price - 185.92).abs() < 1e-6);
     assert_ne!(q.price, 0.0);
@@ -321,23 +370,35 @@ fn polygon_quote_ok_parses() {
 #[test]
 fn polygon_quote_malformed_errors() {
     let json = load_json("polygon_quote_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_quote(&json);
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_quote(&json);
     assert!(result.is_err());
 }
 
 #[test]
 fn polygon_historical_ok_parses() {
     let json = load_json("polygon_historical_ok.json");
-    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_historical(&json)
+    let bars =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_historical(
+            &json,
+        )
         .expect("ok fixture must parse");
     assert_eq!(bars.len(), 2);
-    for b in &bars { assert_ne!(b.close, 0.0); }
+    for b in &bars {
+        assert_ne!(b.close, 0.0);
+    }
 }
 
 #[test]
 fn polygon_historical_malformed_errors() {
     let json = load_json("polygon_historical_malformed.json");
-    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_historical(&json);
-    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    let result =
+        flowfolio_lib::modules::data_provider::multi_source_provider::parse_polygon_historical(
+            &json,
+        );
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
     assert!(bad);
 }

@@ -125,8 +125,7 @@ pub async fn ai_chat_stream(
                             continue;
                         }
                         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                            if let Some(content) =
-                                parsed["choices"][0]["delta"]["content"].as_str()
+                            if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str()
                             {
                                 full_response.push_str(content);
                                 let _ = app.emit("ai-token", content);
@@ -159,7 +158,12 @@ pub async fn ai_chat_stream(
             .collect();
 
         let content = OPENROUTER_SERVICE
-            .chat(messages_converted, Some(model), Some(temperature.unwrap_or(0.7)), Some(max_tokens.unwrap_or(4096)))
+            .chat(
+                messages_converted,
+                Some(model),
+                Some(temperature.unwrap_or(0.7)),
+                Some(max_tokens.unwrap_or(4096)),
+            )
             .await?;
 
         let _ = app.emit("ai-token", &content);

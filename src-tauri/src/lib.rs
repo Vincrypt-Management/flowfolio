@@ -20,7 +20,9 @@ pub use shared_types::*;
 
 use modules::plan_compiler::VibePlanScript;
 use parking_lot::RwLock;
-use services::{AlpacaService, EnhancedMarketDataService, FundamentalDataService, OpenRouterService};
+use services::{
+    AlpacaService, EnhancedMarketDataService, FundamentalDataService, OpenRouterService,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -368,7 +370,6 @@ pub fn run() {
                         tracing::warn!("Continuing with in-memory cache only");
                     }
                 }
-
             });
 
             // Load user-configured API keys from store into runtime so data providers can use them immediately

@@ -4,15 +4,19 @@
 //! pin specific numerical outputs (that's numerical_correctness.rs); they
 //! assert invariants that must hold for ALL valid inputs.
 
-use proptest::prelude::*;
 use flowfolio_lib::modules::portfolio::{AllocationConstraints, PortfolioManager};
-use flowfolio_lib::modules::quant_analysis::{QuantAnalyzer, HistoricalPrice};
+use flowfolio_lib::modules::quant_analysis::{HistoricalPrice, QuantAnalyzer};
+use proptest::prelude::*;
 
 fn series_from_closes(closes: &[f64]) -> Vec<HistoricalPrice> {
-    closes.iter().enumerate().map(|(i, &c)| HistoricalPrice {
-        date: format!("2024-{:02}-{:02}", ((i / 28) % 12) + 1, (i % 28) + 1),
-        close: c,
-    }).collect()
+    closes
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| HistoricalPrice {
+            date: format!("2024-{:02}-{:02}", ((i / 28) % 12) + 1, (i % 28) + 1),
+            close: c,
+        })
+        .collect()
 }
 
 fn perm_constraints(max_pos: f64, cash: f64) -> AllocationConstraints {

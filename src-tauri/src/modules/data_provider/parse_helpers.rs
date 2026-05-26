@@ -27,6 +27,7 @@ pub enum ParseError {
 /// Parse a required f64 field. Accepts:
 /// - JSON number → f64
 /// - JSON string that parses to f64 (Alpha Vantage style)
+///
 /// Returns Err for missing, null, or unparseable values.
 pub fn parse_required_f64(value: &Value, field: &str, provider: &str) -> Result<f64, ParseError> {
     let v = value.get(field).ok_or_else(|| ParseError::MissingField {
@@ -40,7 +41,11 @@ pub fn parse_required_f64(value: &Value, field: &str, provider: &str) -> Result<
 /// - Ok(Some(x)) if present and parseable
 /// - Ok(None) if missing or explicitly null
 /// - Err if present but unparseable (still a bug worth surfacing)
-pub fn parse_optional_f64(value: &Value, field: &str, provider: &str) -> Result<Option<f64>, ParseError> {
+pub fn parse_optional_f64(
+    value: &Value,
+    field: &str,
+    provider: &str,
+) -> Result<Option<f64>, ParseError> {
     match value.get(field) {
         None => Ok(None),
         Some(v) if v.is_null() => Ok(None),
@@ -58,7 +63,11 @@ pub fn parse_required_i64(value: &Value, field: &str, provider: &str) -> Result<
 }
 
 /// Parse an optional i64 field.
-pub fn parse_optional_i64(value: &Value, field: &str, provider: &str) -> Result<Option<i64>, ParseError> {
+pub fn parse_optional_i64(
+    value: &Value,
+    field: &str,
+    provider: &str,
+) -> Result<Option<i64>, ParseError> {
     match value.get(field) {
         None => Ok(None),
         Some(v) if v.is_null() => Ok(None),

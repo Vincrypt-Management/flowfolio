@@ -141,7 +141,14 @@ pub async fn get_current_quotes_batch(
     Ok(raw
         .into_iter()
         .map(|(sym, (price, change, change_percent))| {
-            (sym, QuoteSnapshot { price, change, change_percent })
+            (
+                sym,
+                QuoteSnapshot {
+                    price,
+                    change,
+                    change_percent,
+                },
+            )
         })
         .collect())
 }

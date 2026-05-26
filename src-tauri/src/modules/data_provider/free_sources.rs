@@ -68,11 +68,11 @@ pub struct YahooQuote {
 /// ensuring callers never receive a quote with `price == 0.0` due to silent
 /// substitution (Bug #1).
 pub fn parse_yahoo_quote(json: &Value) -> Result<YahooQuote, ParseError> {
-    let result = json
-        .pointer("/quoteResponse/result/0")
-        .ok_or_else(|| ParseError::EmptyResponse {
-            provider: "yahoo".into(),
-        })?;
+    let result =
+        json.pointer("/quoteResponse/result/0")
+            .ok_or_else(|| ParseError::EmptyResponse {
+                provider: "yahoo".into(),
+            })?;
 
     let symbol = result
         .get("symbol")
@@ -92,9 +92,7 @@ pub fn parse_yahoo_quote(json: &Value) -> Result<YahooQuote, ParseError> {
             field: "regularMarketPrice".into(),
         })?;
 
-    let change = result
-        .get("regularMarketChange")
-        .and_then(|v| v.as_f64());
+    let change = result.get("regularMarketChange").and_then(|v| v.as_f64());
     let change_percent = result
         .get("regularMarketChangePercent")
         .and_then(|v| v.as_f64());
@@ -154,13 +152,14 @@ pub fn parse_yahoo_historical(json: &Value) -> Result<Vec<HistoricalPrice>, Pars
             provider: "yahoo".into(),
             field: "high".into(),
         })?;
-    let lows = quote
-        .get("low")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| ParseError::MissingField {
-            provider: "yahoo".into(),
-            field: "low".into(),
-        })?;
+    let lows =
+        quote
+            .get("low")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| ParseError::MissingField {
+                provider: "yahoo".into(),
+                field: "low".into(),
+            })?;
     let closes = quote
         .get("close")
         .and_then(|v| v.as_array())

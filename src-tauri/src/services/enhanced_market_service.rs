@@ -16,6 +16,9 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
+// (price, change, change_percent, fetched_at)
+type QuoteCacheEntry = (f64, f64, f64, std::time::Instant);
+
 /// Enhanced market data service with database caching and multi-source provider
 /// Industrial-grade features: circuit breaker, retry logic, health monitoring
 pub struct EnhancedMarketDataService {
@@ -28,8 +31,7 @@ pub struct EnhancedMarketDataService {
     // In-memory cache for quick access
     price_cache: Arc<RwLock<HashMap<String, (f64, std::time::Instant)>>>,
     quant_cache: Arc<RwLock<HashMap<String, (QuantMetrics, std::time::Instant)>>>,
-    // (price, change, change_percent) — populated on every provider fetch
-    quote_cache: Arc<RwLock<HashMap<String, (f64, f64, f64, std::time::Instant)>>>,
+    quote_cache: Arc<RwLock<HashMap<String, QuoteCacheEntry>>>,
     // Cache TTL settings (optimized for free tier APIs)
     price_cache_ttl: std::time::Duration,
     quant_cache_ttl: std::time::Duration,
@@ -178,7 +180,10 @@ impl EnhancedMarketDataService {
             // Update quote cache (includes change data)
             {
                 let mut qc = self.quote_cache.write().await;
-                qc.insert(symbol.clone(), (price, quote.change, quote.change_percent, now));
+                qc.insert(
+                    symbol.clone(),
+                    (price, quote.change, quote.change_percent, now),
+                );
             }
 
             // Update database cache
@@ -265,7 +270,10 @@ impl EnhancedMarketDataService {
                     // Update quote cache (includes change data)
                     {
                         let mut qc = self.quote_cache.write().await;
-                        qc.insert(symbol.clone(), (price, quote.change, quote.change_percent, now));
+                        qc.insert(
+                            symbol.clone(),
+                            (price, quote.change, quote.change_percent, now),
+                        );
                     }
 
                     // Update database cache
@@ -287,10 +295,7 @@ impl EnhancedMarketDataService {
 
     /// Batch get current quotes (price + change + change_percent).
     /// Returns cached change data when available; falls back to price-only when not.
-    pub async fn get_batch_quotes(
-        &self,
-        symbols: Vec<String>,
-    ) -> HashMap<String, (f64, f64, f64)> {
+    pub async fn get_batch_quotes(&self, symbols: Vec<String>) -> HashMap<String, (f64, f64, f64)> {
         // Ensure prices are fetched and quote_cache is populated.
         let _ = self.get_batch_prices(symbols.clone()).await;
 

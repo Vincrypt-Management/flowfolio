@@ -5,7 +5,9 @@ pub mod multi_source_provider;
 pub mod parse_helpers;
 
 pub use multi_source_provider::{HistoricalPrice, MultiSourceProvider};
-pub use parse_helpers::{ParseError, parse_required_f64, parse_required_i64, parse_optional_f64, parse_optional_i64};
+pub use parse_helpers::{
+    parse_optional_f64, parse_optional_i64, parse_required_f64, parse_required_i64, ParseError,
+};
 
 use crate::modules::rate_limiter::RateLimiter;
 use anyhow::Result;
@@ -66,19 +68,21 @@ impl AlphaVantageClient {
     /// Bars whose required fields can't be parsed are skipped (with a warn log).
     /// Returns Err if the top-level "Time Series (Daily)" key is missing.
     pub fn parse_time_series(json: &Value) -> Result<Vec<TimeSeriesDaily>, ParseError> {
-        let time_series = json
-            .get("Time Series (Daily)")
-            .ok_or_else(|| ParseError::MissingField {
+        let time_series =
+            json.get("Time Series (Daily)")
+                .ok_or_else(|| ParseError::MissingField {
+                    provider: "alphavantage".to_string(),
+                    field: "Time Series (Daily)".to_string(),
+                })?;
+
+        let series_map = time_series
+            .as_object()
+            .ok_or_else(|| ParseError::InvalidType {
                 provider: "alphavantage".to_string(),
                 field: "Time Series (Daily)".to_string(),
+                expected: "object".to_string(),
+                got: format!("{time_series}"),
             })?;
-
-        let series_map = time_series.as_object().ok_or_else(|| ParseError::InvalidType {
-            provider: "alphavantage".to_string(),
-            field: "Time Series (Daily)".to_string(),
-            expected: "object".to_string(),
-            got: format!("{time_series}"),
-        })?;
 
         let mut results = Vec::with_capacity(series_map.len());
         for (date, values) in series_map {

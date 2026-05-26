@@ -878,14 +878,18 @@ mod tests {
         let prices: HashMap<String, Vec<(NaiveDate, f64)>> = HashMap::new();
 
         // catch_unwind confirms no panic regardless of internal branching
-        let result = std::panic::catch_unwind(|| {
-            BacktestEngine::run_backtest(config, prices)
-        });
-        assert!(result.is_ok(), "run_backtest must not panic on empty price data");
+        let result = std::panic::catch_unwind(|| BacktestEngine::run_backtest(config, prices));
+        assert!(
+            result.is_ok(),
+            "run_backtest must not panic on empty price data"
+        );
 
         // Also assert the returned result is structurally valid
         let backtest = result.unwrap();
-        assert!(!backtest.timeline.is_empty(), "timeline must have at least an initial snapshot");
+        assert!(
+            !backtest.timeline.is_empty(),
+            "timeline must have at least an initial snapshot"
+        );
         assert!(backtest.metrics.final_value >= 0.0);
     }
 

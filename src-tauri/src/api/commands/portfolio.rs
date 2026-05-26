@@ -5,8 +5,8 @@ use crate::modules::{
     portfolio::{
         optimizer::OptimizationThresholds,
         review::{ReviewGenerator, YearlyReview},
-        AllocationConstraints, AllocationPlan, BuyList, Portfolio, PortfolioManager,
-        PortfolioError, PortfolioOptimizationReport, PortfolioOptimizer, RebalanceReport,
+        AllocationConstraints, AllocationPlan, BuyList, Portfolio, PortfolioError,
+        PortfolioManager, PortfolioOptimizationReport, PortfolioOptimizer, RebalanceReport,
     },
     progress::{generate_operation_id, ProgressDetail, ProgressEvent},
     quant_analysis::QuantMetrics,

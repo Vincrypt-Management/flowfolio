@@ -61,7 +61,7 @@ pub struct ProviderQuote {
 // ── Pure JSON parser functions (pub for integration tests) ───────────────────
 
 use crate::modules::data_provider::parse_helpers::{
-    ParseError, parse_optional_f64, parse_optional_i64, parse_required_f64, parse_required_i64,
+    parse_optional_f64, parse_optional_i64, parse_required_f64, parse_required_i64, ParseError,
 };
 
 /// Parse an Alpaca `/v2/stocks/{symbol}/quotes/latest` response.
@@ -106,13 +106,13 @@ pub fn parse_alpaca_quote(json: &serde_json::Value) -> Result<ProviderQuote, Par
 /// `HistoricalPrice`. Bars with a missing or bad close field are skipped
 /// (logged as warn). Returns `Err(EmptyResponse)` if no bars survive.
 pub fn parse_alpaca_bars(json: &serde_json::Value) -> Result<Vec<HistoricalPrice>, ParseError> {
-    let bars = json
-        .get("bars")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| ParseError::MissingField {
-            provider: "alpaca".into(),
-            field: "bars".into(),
-        })?;
+    let bars =
+        json.get("bars")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| ParseError::MissingField {
+                provider: "alpaca".into(),
+                field: "bars".into(),
+            })?;
     let mut out = Vec::with_capacity(bars.len());
     for (i, bar) in bars.iter().enumerate() {
         let close = match parse_required_f64(bar, "c", "alpaca") {
@@ -178,13 +178,13 @@ pub fn parse_finnhub_candles(json: &serde_json::Value) -> Result<Vec<HistoricalP
             provider: "finnhub".into(),
         });
     }
-    let closes = json
-        .get("c")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| ParseError::MissingField {
-            provider: "finnhub".into(),
-            field: "c".into(),
-        })?;
+    let closes =
+        json.get("c")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| ParseError::MissingField {
+                provider: "finnhub".into(),
+                field: "c".into(),
+            })?;
     let opens = json.get("o").and_then(|v| v.as_array());
     let highs = json.get("h").and_then(|v| v.as_array());
     let lows = json.get("l").and_then(|v| v.as_array());
@@ -216,9 +216,7 @@ pub fn parse_finnhub_candles(json: &serde_json::Value) -> Result<Vec<HistoricalP
             .and_then(|a| a.get(i))
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-        let ts = timestamps
-            .and_then(|a| a.get(i))
-            .and_then(|v| v.as_i64());
+        let ts = timestamps.and_then(|a| a.get(i)).and_then(|v| v.as_i64());
         let date = ts
             .and_then(|t| chrono::DateTime::<chrono::Utc>::from_timestamp(t, 0))
             .map(|dt| dt.format("%Y-%m-%d").to_string())
@@ -243,12 +241,12 @@ pub fn parse_finnhub_candles(json: &serde_json::Value) -> Result<Vec<HistoricalP
 /// Parse an FMP `/v3/quote/{symbol}` response (top-level array).
 /// Returns `Err` when the array is empty or the `price` field is missing.
 pub fn parse_fmp_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseError> {
-    let first = json
-        .as_array()
-        .and_then(|a| a.first())
-        .ok_or_else(|| ParseError::EmptyResponse {
-            provider: "fmp".into(),
-        })?;
+    let first =
+        json.as_array()
+            .and_then(|a| a.first())
+            .ok_or_else(|| ParseError::EmptyResponse {
+                provider: "fmp".into(),
+            })?;
     let symbol = first
         .get("symbol")
         .and_then(|v| v.as_str())
@@ -271,9 +269,7 @@ pub fn parse_fmp_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseE
 /// Parse an FMP `/v3/historical-price-full/{symbol}` response.
 /// Bars with a missing or bad `close` field are skipped (logged as warn).
 /// Returns `Err(EmptyResponse)` if no bars survive.
-pub fn parse_fmp_historical(
-    json: &serde_json::Value,
-) -> Result<Vec<HistoricalPrice>, ParseError> {
+pub fn parse_fmp_historical(json: &serde_json::Value) -> Result<Vec<HistoricalPrice>, ParseError> {
     let arr = json
         .get("historical")
         .and_then(|v| v.as_array())
@@ -319,12 +315,12 @@ pub fn parse_fmp_historical(
 /// Parse a Tiingo IEX `/iex/{symbol}` response (top-level array).
 /// Returns `Err` when the array is empty or the `last` field is missing.
 pub fn parse_tiingo_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseError> {
-    let first = json
-        .as_array()
-        .and_then(|a| a.first())
-        .ok_or_else(|| ParseError::EmptyResponse {
-            provider: "tiingo".into(),
-        })?;
+    let first =
+        json.as_array()
+            .and_then(|a| a.first())
+            .ok_or_else(|| ParseError::EmptyResponse {
+                provider: "tiingo".into(),
+            })?;
     let symbol = first
         .get("ticker")
         .and_then(|v| v.as_str())
@@ -352,14 +348,12 @@ pub fn parse_tiingo_quote(json: &serde_json::Value) -> Result<ProviderQuote, Par
 pub fn parse_tiingo_historical(
     json: &serde_json::Value,
 ) -> Result<Vec<HistoricalPrice>, ParseError> {
-    let arr = json
-        .as_array()
-        .ok_or_else(|| ParseError::InvalidType {
-            provider: "tiingo".into(),
-            field: "(root)".into(),
-            expected: "array".into(),
-            got: format!("{json}"),
-        })?;
+    let arr = json.as_array().ok_or_else(|| ParseError::InvalidType {
+        provider: "tiingo".into(),
+        field: "(root)".into(),
+        expected: "array".into(),
+        got: format!("{json}"),
+    })?;
     let mut out = Vec::with_capacity(arr.len());
     for (i, bar) in arr.iter().enumerate() {
         let close = match parse_required_f64(bar, "close", "tiingo") {
@@ -483,11 +477,9 @@ pub fn parse_polygon_quote(json: &serde_json::Value) -> Result<ProviderQuote, Pa
             provider: "polygon".into(),
             field: "results".into(),
         })?;
-    let first = results
-        .first()
-        .ok_or_else(|| ParseError::EmptyResponse {
-            provider: "polygon".into(),
-        })?;
+    let first = results.first().ok_or_else(|| ParseError::EmptyResponse {
+        provider: "polygon".into(),
+    })?;
     let price = parse_required_f64(first, "c", "polygon")?;
     let volume = parse_optional_i64(first, "v", "polygon")?;
     Ok(ProviderQuote {
@@ -837,9 +829,12 @@ impl MultiSourceProvider {
             .map_err(|e| format!("Parse error: {}", e))?;
 
         // Extract recent bars via the pure parser helper (no silent zeros)
-        let recent_bars = parse_alpaca_bars(&data)
-            .map_err(|e| format!("Alpaca bars parse error: {e}"))?;
-        let latest_bar_price = recent_bars.last().map(|b| b.close).ok_or("No recent bars")?;
+        let recent_bars =
+            parse_alpaca_bars(&data).map_err(|e| format!("Alpaca bars parse error: {e}"))?;
+        let latest_bar_price = recent_bars
+            .last()
+            .map(|b| b.close)
+            .ok_or("No recent bars")?;
         let volume = recent_bars.last().map(|b| b.volume).unwrap_or(0);
         let timestamp = recent_bars
             .last()
@@ -935,8 +930,8 @@ impl MultiSourceProvider {
             .map_err(|e| format!("Parse error: {}", e))?;
 
         // Use pure parser helper (no silent zeros for missing "c")
-        let fq = parse_finnhub_quote(&data)
-            .map_err(|e| format!("Finnhub quote parse error: {e}"))?;
+        let fq =
+            parse_finnhub_quote(&data).map_err(|e| format!("Finnhub quote parse error: {e}"))?;
         let price = fq.price;
         let change = data.get("d").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let change_percent = data.get("dp").and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -1315,8 +1310,8 @@ impl MultiSourceProvider {
             .await
             .map_err(|e| format!("Parse error: {}", e))?;
 
-        let pq = parse_polygon_quote(&data)
-            .map_err(|e| format!("Polygon quote parse error: {e}"))?;
+        let pq =
+            parse_polygon_quote(&data).map_err(|e| format!("Polygon quote parse error: {e}"))?;
         let quote = Some(StockQuote {
             symbol: symbol.to_string(),
             price: pq.price,
@@ -2108,8 +2103,17 @@ mod tests {
         assert!(aggregated.contains("alpaca"), "should name alpaca");
         assert!(aggregated.contains("finnhub"), "should name finnhub");
         assert!(aggregated.contains("yahoo"), "should name yahoo");
-        assert!(aggregated.contains("401 unauthorized"), "should include alpaca error");
-        assert!(aggregated.contains("429 rate limited"), "should include finnhub error");
-        assert!(aggregated.contains("crumb expired"), "should include yahoo error");
+        assert!(
+            aggregated.contains("401 unauthorized"),
+            "should include alpaca error"
+        );
+        assert!(
+            aggregated.contains("429 rate limited"),
+            "should include finnhub error"
+        );
+        assert!(
+            aggregated.contains("crumb expired"),
+            "should include yahoo error"
+        );
     }
 }

@@ -94,7 +94,9 @@ impl OpenRouterService {
     /// Returns Ok(content) only if choices are present, content non-empty,
     /// and finish_reason indicates successful completion (not truncated or filtered).
     fn validate_openrouter_response(response: &OpenRouterResponse) -> Result<String, String> {
-        let choice = response.choices.first()
+        let choice = response
+            .choices
+            .first()
             .ok_or_else(|| "No response from model - no choices returned".to_string())?;
 
         let content = choice.message.content.trim();
@@ -197,8 +199,10 @@ impl OpenRouterService {
 
                 let user_error = match status.as_u16() {
                     401 => "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string(),
-                    402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
-                    429 => "Rate limited after retries. Please wait a minute and try again.".to_string(),
+                    402 => "Insufficient credits. Please add credits to your OpenRouter account."
+                        .to_string(),
+                    429 => "Rate limited after retries. Please wait a minute and try again."
+                        .to_string(),
                     500..=599 => format!(
                         "OpenRouter server error ({}). The service may be temporarily unavailable.",
                         status
@@ -382,7 +386,10 @@ mod tests {
     #[test]
     fn validate_accepts_stop_finish() {
         let r = make_response("hello world", Some("stop"));
-        assert_eq!(OpenRouterService::validate_openrouter_response(&r).unwrap(), "hello world");
+        assert_eq!(
+            OpenRouterService::validate_openrouter_response(&r).unwrap(),
+            "hello world"
+        );
     }
 
     #[test]
@@ -402,7 +409,11 @@ mod tests {
     fn validate_rejects_content_filter() {
         let r = make_response("blocked", Some("content_filter"));
         let err = OpenRouterService::validate_openrouter_response(&r).unwrap_err();
-        assert!(err.to_lowercase().contains("content filter"), "got: {}", err);
+        assert!(
+            err.to_lowercase().contains("content filter"),
+            "got: {}",
+            err
+        );
     }
 
     #[test]
