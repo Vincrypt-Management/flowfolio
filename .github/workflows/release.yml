@@ -108,6 +108,37 @@ jobs:
           cp src-tauri/target/release/bundle/appimage/*.AppImage "release/FlowFolio-${VERSION}-linux-amd64.AppImage" 2>/dev/null || true
           ls -lh release/
 
+      - name: Verify artifacts present and non-trivial
+        run: |
+          set -e
+          for f in release/FlowFolio-*-linux-amd64.deb release/FlowFolio-*-linux-amd64.AppImage; do
+            [ -s "$f" ] || { echo "::error::missing or empty: $f"; exit 1; }
+            mb=$(( $(stat -c%s "$f") / 1024 / 1024 ))
+            echo "$f: ${mb}MB"
+            [ "$mb" -ge 5 ] || { echo "::error::$f suspiciously small (${mb}MB < 5MB)"; exit 1; }
+          done
+
+      - name: Smoke-test AppImage (xvfb)
+        run: |
+          set -e
+          sudo apt-get install -y xvfb libfuse2
+          APP=$(ls release/FlowFolio-*-linux-amd64.AppImage)
+          chmod +x "$APP"
+          xvfb-run -a --server-args="-screen 0 1280x800x24" "$APP" > /tmp/appimage.log 2>&1 &
+          APP_PID=$!
+          sleep 10
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "✓ AppImage stayed alive 10s; last log lines:"
+            tail -20 /tmp/appimage.log || true
+            kill -TERM $APP_PID 2>/dev/null || true
+            sleep 2
+            pkill -9 -f FlowFolio 2>/dev/null || true
+          else
+            echo "::error::AppImage exited during startup"
+            tail -50 /tmp/appimage.log || true
+            exit 1
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -160,6 +191,18 @@ jobs:
           cp src-tauri/target/release/bundle/msi/*.msi "release/FlowFolio-${VERSION}-windows-x64.msi" 2>/dev/null || true
           ls -lh release/
 
+      - name: Verify artifacts present and non-trivial
+        shell: bash
+        run: |
+          set -e
+          for f in release/FlowFolio-*-windows-x64-setup.exe release/FlowFolio-*-windows-x64.msi; do
+            [ -s "$f" ] || { echo "::error::missing or empty: $f"; exit 1; }
+            size=$(stat -c%s "$f" 2>/dev/null || wc -c < "$f")
+            mb=$(( size / 1024 / 1024 ))
+            echo "$f: ${mb}MB"
+            [ "$mb" -ge 5 ] || { echo "::error::$f suspiciously small (${mb}MB < 5MB)"; exit 1; }
+          done
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -211,6 +254,21 @@ jobs:
           mkdir -p release
           cp src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg "release/FlowFolio-${VERSION}-macos-${ARCH}.dmg" 2>/dev/null || true
           ls -lh release/
+
+      - name: Verify artifact present and non-trivial
+        run: |
+          set -e
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then ARCH="aarch64"; else ARCH="x64"; fi
+          DMG=$(ls release/FlowFolio-*-macos-${ARCH}.dmg)
+          [ -s "$DMG" ] || { echo "::error::missing or empty: $DMG"; exit 1; }
+          mb=$(( $(stat -f%z "$DMG") / 1024 / 1024 ))
+          echo "$DMG: ${mb}MB"
+          [ "$mb" -ge 5 ] || { echo "::error::$DMG suspiciously small (${mb}MB < 5MB)"; exit 1; }
+          # Verify DMG can be mounted (catches corrupt bundles)
+          MOUNT_DIR=$(hdiutil attach "$DMG" -nobrowse -noverify -mountpoint "/tmp/fl-${ARCH}" | tail -1 | awk '{print $NF}')
+          ls "$MOUNT_DIR"/*.app >/dev/null || { echo "::error::no .app inside DMG"; hdiutil detach "$MOUNT_DIR" -force; exit 1; }
+          hdiutil detach "$MOUNT_DIR" -force
+          echo "✓ DMG mounts cleanly and contains .app bundle"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -283,6 +341,32 @@ jobs:
           done
           ls -lh release/
 
+      - name: Verify APK present and inspect manifest
+        env:
+          EXPECTED_VERSION: ${{ github.ref_name }}
+        run: |
+          set -e
+          APK=$(ls release/FlowFolio-*-android.apk)
+          [ -s "$APK" ] || { echo "::error::missing or empty: $APK"; exit 1; }
+          mb=$(( $(stat -c%s "$APK") / 1024 / 1024 ))
+          echo "$APK: ${mb}MB"
+          [ "$mb" -ge 10 ] || { echo "::error::APK suspiciously small (${mb}MB < 10MB)"; exit 1; }
+          # aapt2 ships with build-tools (added to PATH by setup-android)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
+          echo "Using $AAPT"
+          BADGING=$("$AAPT" dump badging "$APK")
+          echo "$BADGING" | head -15
+          PKG=$(echo "$BADGING" | grep -oE "package: name='[^']+" | head -1 | cut -d"'" -f2)
+          VER=$(echo "$BADGING" | grep -oE "versionName='[^']+" | head -1 | cut -d"'" -f2)
+          [ -n "$PKG" ] || { echo "::error::APK has no package name"; exit 1; }
+          [ -n "$VER" ] || { echo "::error::APK has no versionName"; exit 1; }
+          echo "✓ Android APK validated: $PKG @ $VER"
+          # Cross-check version matches tag (strip leading v)
+          TAG_VER="${EXPECTED_VERSION#v}"
+          if [ -n "$TAG_VER" ] && [ "$VER" != "$TAG_VER" ]; then
+            echo "::warning::APK versionName ($VER) != git tag ($TAG_VER)"
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -293,7 +377,10 @@ jobs:
   create-release:
     needs: [build-linux, build-windows, build-macos, build-android]
     runs-on: ubuntu-latest
-    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success' || needs.build-android.result == 'success')
+    # Require ALL platform builds to succeed before publishing the release.
+    # Previously this used `||` which would publish a partial release if any
+    # single platform failed — now a single platform failure blocks publish.
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-android.result == 'success'
     steps:
       - uses: actions/checkout@v4
 
@@ -308,6 +395,38 @@ jobs:
           cp artifacts/**/* release/ 2>/dev/null || true
           cd release && shasum -a 256 FlowFolio-* > checksums-sha256.txt
           ls -lh
+
+      - name: Verify all 7 platform artifacts present
+        env:
+          EXPECTED_VERSION: ${{ github.ref_name }}
+        run: |
+          set -e
+          cd release
+          VERSION="${EXPECTED_VERSION#v}"
+          MISSING=()
+          for suffix in linux-amd64.deb linux-amd64.AppImage \
+                        windows-x64-setup.exe windows-x64.msi \
+                        macos-aarch64.dmg macos-x64.dmg \
+                        android.apk; do
+            f="FlowFolio-${VERSION}-${suffix}"
+            if [ ! -s "$f" ]; then
+              MISSING+=("$f")
+            else
+              mb=$(( $(stat -c%s "$f") / 1024 / 1024 ))
+              echo "✓ $f (${mb}MB)"
+            fi
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::Missing artifacts: ${MISSING[*]}"
+            exit 1
+          fi
+          echo "✓ All 7 platform artifacts present"
+
+      - name: Re-verify checksums (catches corruption on download/upload roundtrip)
+        run: |
+          cd release
+          shasum -a 256 -c checksums-sha256.txt
+          echo "✓ All SHA-256 checksums match"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
