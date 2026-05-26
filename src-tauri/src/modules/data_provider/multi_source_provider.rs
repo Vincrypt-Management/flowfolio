@@ -2,6 +2,7 @@
 // Aggregates data from multiple reliable sources with smart failover and caching
 
 #![allow(dead_code)]
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -1328,7 +1329,7 @@ impl MultiSourceProvider {
                 .and_then(|a| a.first())
                 .and_then(|r| r.get("t"))
                 .and_then(|t| t.as_i64())
-                .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts))
+                .and_then(chrono::DateTime::from_timestamp_millis)
                 .map(|dt| dt.format("%Y-%m-%d").to_string())
                 .unwrap_or_default(),
             source: "polygon".to_string(),
@@ -1770,6 +1771,7 @@ impl MultiSourceProvider {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

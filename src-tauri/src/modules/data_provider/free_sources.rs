@@ -17,6 +17,7 @@
 // ============================================================================
 
 #![allow(dead_code)]
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 
 use super::multi_source_provider::{HistoricalPrice, MarketDataResult, StockQuote};
 use super::parse_helpers::{parse_optional_i64, ParseError};
@@ -244,7 +245,7 @@ impl FreeDataProviders {
     pub async fn fetch_yahoo(&self, symbol: &str) -> Result<MarketDataResult, String> {
         let end_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         let start_time = end_time - (365 * 24 * 60 * 60);
 
@@ -839,7 +840,7 @@ impl FreeDataProviders {
             return Err("No data available".to_string());
         }
 
-        let last_line = lines.last().unwrap();
+        let last_line = lines.last().ok_or("No data rows available")?;
         let parts: Vec<&str> = last_line.split(',').collect();
 
         if parts.len() < 2 {
@@ -1044,6 +1045,7 @@ impl Default for FreeDataProviders {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
