@@ -5,6 +5,13 @@ pub mod review;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum PortfolioError {
+    #[error("Cannot allocate: empty symbol list")]
+    NoSymbols,
+}
 
 pub use optimizer::{PortfolioOptimizationReport, PortfolioOptimizer};
 
@@ -167,7 +174,10 @@ impl PortfolioManager {
     pub fn equal_weight_allocation(
         symbols: Vec<String>,
         constraints: AllocationConstraints,
-    ) -> AllocationPlan {
+    ) -> Result<AllocationPlan, PortfolioError> {
+        if symbols.is_empty() {
+            return Err(PortfolioError::NoSymbols);
+        }
         let num_symbols = symbols.len() as f64;
         let equal_pct =
             ((100.0 - constraints.cash_buffer_pct) / num_symbols).min(constraints.max_position_pct);
@@ -182,18 +192,18 @@ impl PortfolioManager {
             })
             .collect();
 
-        AllocationPlan {
+        Ok(AllocationPlan {
             method: "equal_weight".to_string(),
             allocations,
             constraints,
-        }
+        })
     }
 
     /// Generate score-weighted allocation
     pub fn score_weighted_allocation(
         symbols_with_scores: Vec<(String, f64)>,
         constraints: AllocationConstraints,
-    ) -> AllocationPlan {
+    ) -> Result<AllocationPlan, PortfolioError> {
         let total_score: f64 = symbols_with_scores.iter().map(|(_, score)| score).sum();
 
         if total_score == 0.0 {
@@ -223,11 +233,11 @@ impl PortfolioManager {
             })
             .collect();
 
-        AllocationPlan {
+        Ok(AllocationPlan {
             method: "score_weighted".to_string(),
             allocations,
             constraints,
-        }
+        })
     }
 
     /// Generate monthly buy list
@@ -367,7 +377,8 @@ mod tests {
             cash_buffer_pct: 5.0,
         };
 
-        let plan = PortfolioManager::equal_weight_allocation(symbols, constraints);
+        let plan = PortfolioManager::equal_weight_allocation(symbols, constraints)
+            .expect("3 symbols should succeed");
 
         assert_eq!(plan.method, "equal_weight");
         assert_eq!(plan.allocations.len(), 3);
@@ -539,7 +550,8 @@ mod tests {
             max_sector_pct: None,
             cash_buffer_pct: 10.0,
         };
-        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints);
+        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints)
+            .expect("2 symbols with scores should succeed");
         assert_eq!(plan.method, "score_weighted");
         assert_eq!(plan.allocations.len(), 2);
         // AAPL: 80/100 * 90 = 72 -> clamped to max 50
@@ -557,7 +569,8 @@ mod tests {
             max_sector_pct: None,
             cash_buffer_pct: 5.0,
         };
-        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints);
+        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints)
+            .expect("zero-score fallback with 2 symbols should succeed");
         // Falls back to equal weight
         assert_eq!(plan.method, "equal_weight");
     }
@@ -571,7 +584,8 @@ mod tests {
             max_sector_pct: None,
             cash_buffer_pct: 0.0,
         };
-        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints);
+        let plan = PortfolioManager::score_weighted_allocation(symbols, constraints)
+            .expect("2 symbols should succeed");
         // B raw = 1/100*100 = 1% -> clamped to min 5%
         assert!(plan.allocations[1].target_pct >= 5.0);
     }
@@ -722,10 +736,57 @@ mod tests {
             max_sector_pct: None,
             cash_buffer_pct: 0.0,
         };
-        let plan = PortfolioManager::equal_weight_allocation(symbols, constraints);
+        let plan = PortfolioManager::equal_weight_allocation(symbols, constraints)
+            .expect("2 symbols should succeed");
         // equal = 100/2 = 50, but capped at 20
         for alloc in &plan.allocations {
             assert!((alloc.target_pct - 20.0).abs() < f64::EPSILON);
+        }
+    }
+
+    // ===== Bug #2 regression: empty-symbols Infinity =====
+
+    fn default_constraints() -> AllocationConstraints {
+        AllocationConstraints {
+            max_position_pct: 25.0,
+            min_position_pct: 1.0,
+            max_sector_pct: None,
+            cash_buffer_pct: 5.0,
+        }
+    }
+
+    #[test]
+    fn equal_weight_with_empty_symbols_returns_err_not_infinity() {
+        let result = PortfolioManager::equal_weight_allocation(vec![], default_constraints());
+        assert!(
+            matches!(result, Err(PortfolioError::NoSymbols)),
+            "expected Err(NoSymbols), got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn equal_weight_with_two_symbols_capped_at_25_pct() {
+        // (100 - 5) / 2 = 47.5%, capped by max_position_pct=25 → 25
+        let result = PortfolioManager::equal_weight_allocation(
+            vec!["AAPL".into(), "MSFT".into()],
+            default_constraints(),
+        ).expect("should succeed with 2 symbols");
+        for alloc in &result.allocations {
+            assert!((alloc.target_pct - 25.0).abs() < 1e-9,
+                    "expected 25.0% per symbol (capped), got {}", alloc.target_pct);
+        }
+    }
+
+    #[test]
+    fn equal_weight_with_five_symbols_gives_each_19_pct() {
+        // (100 - 5) / 5 = 19.0%, under max 25 → 19
+        let symbols: Vec<String> = (0..5).map(|i| format!("S{i}")).collect();
+        let result = PortfolioManager::equal_weight_allocation(symbols, default_constraints())
+            .expect("should succeed with 5 symbols");
+        for alloc in &result.allocations {
+            assert!((alloc.target_pct - 19.0).abs() < 1e-9,
+                    "expected 19.0%, got {}", alloc.target_pct);
         }
     }
 

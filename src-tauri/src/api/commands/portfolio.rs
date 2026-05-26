@@ -6,7 +6,7 @@ use crate::modules::{
         optimizer::OptimizationThresholds,
         review::{ReviewGenerator, YearlyReview},
         AllocationConstraints, AllocationPlan, BuyList, Portfolio, PortfolioManager,
-        PortfolioOptimizationReport, PortfolioOptimizer, RebalanceReport,
+        PortfolioError, PortfolioOptimizationReport, PortfolioOptimizer, RebalanceReport,
     },
     progress::{generate_operation_id, ProgressDetail, ProgressEvent},
     quant_analysis::QuantMetrics,
@@ -31,10 +31,8 @@ pub fn create_equal_weight_allocation(
         cash_buffer_pct,
     };
 
-    Ok(PortfolioManager::equal_weight_allocation(
-        symbols,
-        constraints,
-    ))
+    PortfolioManager::equal_weight_allocation(symbols, constraints)
+        .map_err(|e: PortfolioError| e.to_string())
 }
 
 /// Create score-weighted allocation plan
@@ -56,10 +54,8 @@ pub fn create_score_weighted_allocation(
         cash_buffer_pct,
     };
 
-    Ok(PortfolioManager::score_weighted_allocation(
-        symbols_with_scores,
-        constraints,
-    ))
+    PortfolioManager::score_weighted_allocation(symbols_with_scores, constraints)
+        .map_err(|e: PortfolioError| e.to_string())
 }
 
 /// Generate monthly buy list
