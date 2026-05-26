@@ -239,6 +239,161 @@ pub fn parse_finnhub_candles(json: &serde_json::Value) -> Result<Vec<HistoricalP
     Ok(out)
 }
 
+/// Parse an FMP `/v3/quote/{symbol}` response (top-level array).
+/// Returns `Err` when the array is empty or the `price` field is missing.
+pub fn parse_fmp_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseError> {
+    let first = json
+        .as_array()
+        .and_then(|a| a.first())
+        .ok_or_else(|| ParseError::EmptyResponse {
+            provider: "fmp".into(),
+        })?;
+    let symbol = first
+        .get("symbol")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "fmp".into(),
+            field: "symbol".into(),
+        })?
+        .to_string();
+    let price = parse_required_f64(first, "price", "fmp")?;
+    let volume = parse_optional_i64(first, "volume", "fmp")?;
+    Ok(ProviderQuote {
+        symbol,
+        price,
+        bid: None,
+        ask: None,
+        volume,
+    })
+}
+
+/// Parse an FMP `/v3/historical-price-full/{symbol}` response.
+/// Bars with a missing or bad `close` field are skipped (logged as warn).
+/// Returns `Err(EmptyResponse)` if no bars survive.
+pub fn parse_fmp_historical(
+    json: &serde_json::Value,
+) -> Result<Vec<HistoricalPrice>, ParseError> {
+    let arr = json
+        .get("historical")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "fmp".into(),
+            field: "historical".into(),
+        })?;
+    let mut out = Vec::with_capacity(arr.len());
+    for (i, bar) in arr.iter().enumerate() {
+        let close = match parse_required_f64(bar, "close", "fmp") {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(idx = i, err = %e, "fmp: skip bar (missing close)");
+                continue;
+            }
+        };
+        let open = parse_required_f64(bar, "open", "fmp").unwrap_or(close);
+        let high = parse_required_f64(bar, "high", "fmp").unwrap_or(close);
+        let low = parse_required_f64(bar, "low", "fmp").unwrap_or(close);
+        let volume = parse_required_i64(bar, "volume", "fmp").unwrap_or(0);
+        let date = bar
+            .get("date")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        out.push(HistoricalPrice {
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        });
+    }
+    if out.is_empty() {
+        return Err(ParseError::EmptyResponse {
+            provider: "fmp".into(),
+        });
+    }
+    Ok(out)
+}
+
+/// Parse a Tiingo IEX `/iex/{symbol}` response (top-level array).
+/// Returns `Err` when the array is empty or the `last` field is missing.
+pub fn parse_tiingo_quote(json: &serde_json::Value) -> Result<ProviderQuote, ParseError> {
+    let first = json
+        .as_array()
+        .and_then(|a| a.first())
+        .ok_or_else(|| ParseError::EmptyResponse {
+            provider: "tiingo".into(),
+        })?;
+    let symbol = first
+        .get("ticker")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "tiingo".into(),
+            field: "ticker".into(),
+        })?
+        .to_string();
+    let price = parse_required_f64(first, "last", "tiingo")?;
+    let volume = parse_optional_i64(first, "volume", "tiingo")?;
+    let bid = parse_optional_f64(first, "bidPrice", "tiingo")?;
+    let ask = parse_optional_f64(first, "askPrice", "tiingo")?;
+    Ok(ProviderQuote {
+        symbol,
+        price,
+        bid,
+        ask,
+        volume,
+    })
+}
+
+/// Parse a Tiingo `/tiingo/daily/{symbol}/prices` response (top-level array).
+/// Bars with a missing or bad `close` field are skipped (logged as warn).
+/// Returns `Err(EmptyResponse)` if no bars survive.
+pub fn parse_tiingo_historical(
+    json: &serde_json::Value,
+) -> Result<Vec<HistoricalPrice>, ParseError> {
+    let arr = json
+        .as_array()
+        .ok_or_else(|| ParseError::InvalidType {
+            provider: "tiingo".into(),
+            field: "(root)".into(),
+            expected: "array".into(),
+            got: format!("{json}"),
+        })?;
+    let mut out = Vec::with_capacity(arr.len());
+    for (i, bar) in arr.iter().enumerate() {
+        let close = match parse_required_f64(bar, "close", "tiingo") {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(idx = i, err = %e, "tiingo: skip bar (missing close)");
+                continue;
+            }
+        };
+        let open = parse_required_f64(bar, "open", "tiingo").unwrap_or(close);
+        let high = parse_required_f64(bar, "high", "tiingo").unwrap_or(close);
+        let low = parse_required_f64(bar, "low", "tiingo").unwrap_or(close);
+        let volume = parse_required_i64(bar, "volume", "tiingo").unwrap_or(0);
+        let date = bar
+            .get("date")
+            .and_then(|v| v.as_str())
+            .map(|s| s[..10.min(s.len())].to_string())
+            .unwrap_or_else(|| format!("idx:{i}"));
+        out.push(HistoricalPrice {
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        });
+    }
+    if out.is_empty() {
+        return Err(ParseError::EmptyResponse {
+            provider: "tiingo".into(),
+        });
+    }
+    Ok(out)
+}
+
 /// Provider priority and configuration
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
@@ -712,20 +867,36 @@ impl MultiSourceProvider {
             .json()
             .await
             .map_err(|e| format!("Parse error: {}", e))?;
-        let quote_data = data.as_array().and_then(|a| a.first());
 
-        let quote = quote_data.map(|q| StockQuote {
-            symbol: symbol.to_string(),
-            price: q.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            change: q.get("change").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            change_percent: q
-                .get("changesPercentage")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0),
-            volume: q.get("volume").and_then(|v| v.as_i64()).unwrap_or(0),
-            timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-            source: "fmp".to_string(),
-        });
+        let quote = match parse_fmp_quote(&data) {
+            Ok(pq) => {
+                let change = data
+                    .as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|q| q.get("change"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let change_percent = data
+                    .as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|q| q.get("changesPercentage"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                Some(StockQuote {
+                    symbol: symbol.to_string(),
+                    price: pq.price,
+                    change,
+                    change_percent,
+                    volume: pq.volume.unwrap_or(0),
+                    timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                    source: "fmp".to_string(),
+                })
+            }
+            Err(e) => {
+                tracing::warn!(err = %e, "fmp: quote parse failed, returning None quote");
+                None
+            }
+        };
 
         // Fetch historical prices
         let hist_url = format!(
@@ -737,25 +908,11 @@ impl MultiSourceProvider {
         let hist_response = crate::HTTP_CLIENT.get(&hist_url).send().await;
         let historical = if let Ok(resp) = hist_response {
             if let Ok(hist_data) = resp.json::<Value>().await {
-                hist_data
-                    .get("historical")
-                    .and_then(|h| h.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .take(365)
-                            .filter_map(|bar| {
-                                Some(HistoricalPrice {
-                                    date: bar.get("date")?.as_str()?.to_string(),
-                                    open: bar.get("open")?.as_f64()?,
-                                    high: bar.get("high")?.as_f64()?,
-                                    low: bar.get("low")?.as_f64()?,
-                                    close: bar.get("close")?.as_f64()?,
-                                    volume: bar.get("volume")?.as_i64()?,
-                                })
-                            })
-                            .collect()
-                    })
+                parse_fmp_historical(&hist_data)
                     .unwrap_or_default()
+                    .into_iter()
+                    .take(365)
+                    .collect()
             } else {
                 vec![]
             }
@@ -803,28 +960,44 @@ impl MultiSourceProvider {
             .json()
             .await
             .map_err(|e| format!("Parse error: {}", e))?;
-        let quote_data = data.as_array().and_then(|a| a.first());
 
-        let quote = quote_data.map(|q| StockQuote {
-            symbol: symbol.to_string(),
-            price: q.get("last").and_then(|v| v.as_f64()).unwrap_or(0.0),
-            change: 0.0,
-            change_percent: q
-                .get("prevClose")
-                .and_then(|prev| {
-                    let prev = prev.as_f64()?;
-                    let last = q.get("last")?.as_f64()?;
-                    Some(((last - prev) / prev) * 100.0)
+        let quote = match parse_tiingo_quote(&data) {
+            Ok(pq) => {
+                let change_percent = data
+                    .as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|q| {
+                        let prev = q.get("prevClose")?.as_f64()?;
+                        let last = pq.price;
+                        if prev != 0.0 {
+                            Some(((last - prev) / prev) * 100.0)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0.0);
+                let timestamp = data
+                    .as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|q| q.get("timestamp"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                Some(StockQuote {
+                    symbol: symbol.to_string(),
+                    price: pq.price,
+                    change: 0.0,
+                    change_percent,
+                    volume: pq.volume.unwrap_or(0),
+                    timestamp,
+                    source: "tiingo".to_string(),
                 })
-                .unwrap_or(0.0),
-            volume: q.get("volume").and_then(|v| v.as_i64()).unwrap_or(0),
-            timestamp: q
-                .get("timestamp")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string(),
-            source: "tiingo".to_string(),
-        });
+            }
+            Err(e) => {
+                tracing::warn!(err = %e, "tiingo: quote parse failed, returning None quote");
+                None
+            }
+        };
 
         // Fetch historical data
         let end_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
@@ -845,23 +1018,7 @@ impl MultiSourceProvider {
 
         let historical = if let Ok(resp) = hist_response {
             if let Ok(hist_data) = resp.json::<Value>().await {
-                hist_data
-                    .as_array()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|bar| {
-                                Some(HistoricalPrice {
-                                    date: bar.get("date")?.as_str()?.split('T').next()?.to_string(),
-                                    open: bar.get("open")?.as_f64()?,
-                                    high: bar.get("high")?.as_f64()?,
-                                    low: bar.get("low")?.as_f64()?,
-                                    close: bar.get("close")?.as_f64()?,
-                                    volume: bar.get("volume")?.as_i64()?,
-                                })
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default()
+                parse_tiingo_historical(&hist_data).unwrap_or_default()
             } else {
                 vec![]
             }

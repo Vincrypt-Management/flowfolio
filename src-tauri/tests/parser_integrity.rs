@@ -196,3 +196,76 @@ fn finnhub_candles_malformed_errors() {
     let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
     assert!(bad);
 }
+
+// ── FMP tests (Task 15) ─────────────────────────────────────────────────────
+
+#[test]
+fn fmp_quote_ok_parses() {
+    let json = load_json("fmp_quote_ok.json");
+    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_quote(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(q.symbol, "AAPL");
+    assert!((q.price - 185.92).abs() < 1e-6);
+    assert_ne!(q.price, 0.0);
+}
+
+#[test]
+fn fmp_quote_malformed_errors() {
+    let json = load_json("fmp_quote_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_quote(&json);
+    assert!(result.is_err(), "missing price must Err, got: {result:?}");
+}
+
+#[test]
+fn fmp_historical_ok_parses() {
+    let json = load_json("fmp_historical_ok.json");
+    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_historical(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(bars.len(), 1);
+    assert!((bars[0].close - 185.92).abs() < 1e-9);
+    assert_ne!(bars[0].close, 0.0);
+}
+
+#[test]
+fn fmp_historical_malformed_errors() {
+    let json = load_json("fmp_historical_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_fmp_historical(&json);
+    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    assert!(bad, "missing close must Err or skip, got: {result:?}");
+}
+
+// ── Tiingo tests (Task 15) ───────────────────────────────────────────────────
+
+#[test]
+fn tiingo_quote_ok_parses() {
+    let json = load_json("tiingo_quote_ok.json");
+    let q = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_quote(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(q.symbol, "AAPL");
+    assert!((q.price - 185.92).abs() < 1e-6);
+    assert_ne!(q.price, 0.0);
+}
+
+#[test]
+fn tiingo_quote_malformed_errors() {
+    let json = load_json("tiingo_quote_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_quote(&json);
+    assert!(result.is_err(), "missing last must Err, got: {result:?}");
+}
+
+#[test]
+fn tiingo_historical_ok_parses() {
+    let json = load_json("tiingo_historical_ok.json");
+    let bars = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_historical(&json)
+        .expect("ok fixture must parse");
+    assert_eq!(bars.len(), 1);
+    assert_ne!(bars[0].close, 0.0);
+}
+
+#[test]
+fn tiingo_historical_malformed_errors() {
+    let json = load_json("tiingo_historical_malformed.json");
+    let result = flowfolio_lib::modules::data_provider::multi_source_provider::parse_tiingo_historical(&json);
+    let bad = match &result { Err(_) => true, Ok(v) => v.is_empty() };
+    assert!(bad);
+}
