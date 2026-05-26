@@ -54,6 +54,8 @@ jobs:
       - run: cd src-tauri && cargo fmt --check
       - run: cd src-tauri && cargo clippy -- -D warnings
       - run: cd src-tauri && cargo test
+      - name: Verify launcher icons are not Tauri defaults
+        run: bash scripts/verify-icons.sh
 
   build-linux:
     needs: preflight
@@ -126,18 +128,27 @@ jobs:
           chmod +x "$APP"
           xvfb-run -a --server-args="-screen 0 1280x800x24" "$APP" > /tmp/appimage.log 2>&1 &
           APP_PID=$!
-          sleep 10
-          if kill -0 $APP_PID 2>/dev/null; then
-            echo "✓ AppImage stayed alive 10s; last log lines:"
-            tail -20 /tmp/appimage.log || true
-            kill -TERM $APP_PID 2>/dev/null || true
-            sleep 2
-            pkill -9 -f FlowFolio 2>/dev/null || true
-          else
+          sleep 12
+          if ! kill -0 $APP_PID 2>/dev/null; then
             echo "::error::AppImage exited during startup"
-            tail -50 /tmp/appimage.log || true
+            tail -100 /tmp/appimage.log || true
             exit 1
           fi
+          # Process is alive — now confirm it's actually FlowFolio, not a hung shell.
+          # Our Rust app emits "FlowFolio starting" via tracing on every launch.
+          if grep -qi "flowfolio" /tmp/appimage.log; then
+            echo "✓ AppImage launched cleanly and emitted FlowFolio startup signal"
+            tail -20 /tmp/appimage.log
+          else
+            echo "::error::AppImage process is alive but produced no FlowFolio output —"
+            echo "::error::the binary may have stalled before the Rust app initialized."
+            tail -50 /tmp/appimage.log
+            kill -9 $APP_PID 2>/dev/null || true
+            exit 1
+          fi
+          kill -TERM $APP_PID 2>/dev/null || true
+          sleep 2
+          pkill -9 -f FlowFolio 2>/dev/null || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -255,7 +266,9 @@ jobs:
           cp src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg "release/FlowFolio-${VERSION}-macos-${ARCH}.dmg" 2>/dev/null || true
           ls -lh release/
 
-      - name: Verify artifact present and non-trivial
+      - name: Verify artifact present, mountable, version-matched, signed
+        env:
+          EXPECTED_TAG: ${{ github.ref_name }}
         run: |
           set -e
           if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then ARCH="aarch64"; else ARCH="x64"; fi
@@ -264,11 +277,31 @@ jobs:
           mb=$(( $(stat -f%z "$DMG") / 1024 / 1024 ))
           echo "$DMG: ${mb}MB"
           [ "$mb" -ge 5 ] || { echo "::error::$DMG suspiciously small (${mb}MB < 5MB)"; exit 1; }
-          # Verify DMG can be mounted (catches corrupt bundles)
+          # Mount the DMG, find the .app, verify version + structure
           MOUNT_DIR=$(hdiutil attach "$DMG" -nobrowse -noverify -mountpoint "/tmp/fl-${ARCH}" | tail -1 | awk '{print $NF}')
-          ls "$MOUNT_DIR"/*.app >/dev/null || { echo "::error::no .app inside DMG"; hdiutil detach "$MOUNT_DIR" -force; exit 1; }
-          hdiutil detach "$MOUNT_DIR" -force
-          echo "✓ DMG mounts cleanly and contains .app bundle"
+          trap 'hdiutil detach "$MOUNT_DIR" -force 2>/dev/null || true' EXIT
+          APP_PATH=$(ls -d "$MOUNT_DIR"/*.app 2>/dev/null | head -1)
+          [ -n "$APP_PATH" ] || { echo "::error::no .app inside DMG"; exit 1; }
+          PLIST="$APP_PATH/Contents/Info.plist"
+          [ -f "$PLIST" ] || { echo "::error::missing Info.plist"; exit 1; }
+          # CFBundleShortVersionString should match the tag (stripped of leading v).
+          VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+          TAG_VER="${EXPECTED_TAG#v}"
+          if [ -n "$TAG_VER" ] && [ "$VER" != "$TAG_VER" ]; then
+            echo "::error::macOS bundle version ($VER) != git tag ($TAG_VER)"
+            exit 1
+          fi
+          # Confirm bundle ID looks like ours (not a default placeholder).
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
+          echo "Bundle: $BUNDLE_ID @ $VER"
+          [ "$BUNDLE_ID" != "com.tauri.dev" ] || { echo "::error::default tauri bundle id leaked"; exit 1; }
+          # Confirm the FE asset bundle made it in (catches "build succeeded
+          # but FE wasn't included" failure mode).
+          [ -d "$APP_PATH/Contents/Resources" ] || { echo "::error::no Resources dir"; exit 1; }
+          # codesign --verify: best-effort (we use ad-hoc signing in CI; just confirm
+          # the signature blob is well-formed, not that it's notarized).
+          codesign --verify --verbose=2 "$APP_PATH" 2>&1 | head -5 || echo "::warning::codesign verify failed (acceptable for ad-hoc-signed CI builds)"
+          echo "✓ DMG mounts, version matches tag, bundle structure intact"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -341,7 +374,7 @@ jobs:
           done
           ls -lh release/
 
-      - name: Verify APK present and inspect manifest
+      - name: Verify APK manifest, signature, and launcher icon
         env:
           EXPECTED_VERSION: ${{ github.ref_name }}
         run: |
@@ -351,21 +384,43 @@ jobs:
           mb=$(( $(stat -c%s "$APK") / 1024 / 1024 ))
           echo "$APK: ${mb}MB"
           [ "$mb" -ge 10 ] || { echo "::error::APK suspiciously small (${mb}MB < 10MB)"; exit 1; }
-          # aapt2 ships with build-tools (added to PATH by setup-android)
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
-          echo "Using $AAPT"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          echo "Using $AAPT, $APKSIGNER"
           BADGING=$("$AAPT" dump badging "$APK")
           echo "$BADGING" | head -15
           PKG=$(echo "$BADGING" | grep -oE "package: name='[^']+" | head -1 | cut -d"'" -f2)
           VER=$(echo "$BADGING" | grep -oE "versionName='[^']+" | head -1 | cut -d"'" -f2)
           [ -n "$PKG" ] || { echo "::error::APK has no package name"; exit 1; }
           [ -n "$VER" ] || { echo "::error::APK has no versionName"; exit 1; }
-          echo "✓ Android APK validated: $PKG @ $VER"
-          # Cross-check version matches tag (strip leading v)
+          # Tag-version match — STRICT (was warning; promoted to error so the
+          # build can't ship with a mismatched advertised version).
           TAG_VER="${EXPECTED_VERSION#v}"
           if [ -n "$TAG_VER" ] && [ "$VER" != "$TAG_VER" ]; then
-            echo "::warning::APK versionName ($VER) != git tag ($TAG_VER)"
+            echo "::error::APK versionName ($VER) != git tag ($TAG_VER) — fix android version before tagging"
+            exit 1
           fi
+          # APK must be signed.
+          "$APKSIGNER" verify --print-certs "$APK" | head -8 || { echo "::error::apksigner verify failed"; exit 1; }
+          # Extract launcher icon and confirm it's NOT the default Tauri claw.
+          # The icon resource name lives in BADGING as application-icon-NNN: '<path>'.
+          ICON_INSIDE=$(echo "$BADGING" | grep -oE "application-icon-[0-9]+:'[^']+'" | tail -1 | cut -d"'" -f2)
+          if [ -n "$ICON_INSIDE" ]; then
+            mkdir -p /tmp/apk-extract
+            unzip -o -q "$APK" "$ICON_INSIDE" -d /tmp/apk-extract
+            ICON_HASH=$(sha256sum "/tmp/apk-extract/$ICON_INSIDE" | awk '{print $1}')
+            echo "Launcher icon hash: $ICON_HASH ($ICON_INSIDE)"
+            # Known default Tauri claw hashes from a fresh tauri android init.
+            case "$ICON_HASH" in
+              dae1ff05b101efea50e4b622fe6a3af8ba8f761162fa7c4fd864adc7cb39eeac|\
+              320e552422179b81dae014ee6cc00561bd6e7455767b28f5518b8862a8c7987c)
+                echo "::error::APK launcher icon is the DEFAULT TAURI ICON"
+                echo "::error::Run 'npx tauri icon src-tauri/icons/icon.png' and commit the result"
+                exit 1
+                ;;
+            esac
+          fi
+          echo "✓ APK validated: $PKG @ $VER, signed, custom launcher icon"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
