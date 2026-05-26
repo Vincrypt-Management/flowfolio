@@ -19,6 +19,7 @@
 #![allow(dead_code)]
 
 use super::multi_source_provider::{HistoricalPrice, MarketDataResult, StockQuote};
+use super::parse_helpers::{parse_optional_i64, ParseError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -47,6 +48,171 @@ pub struct EconomicIndicator {
     pub date: String,
     pub unit: String,
     pub source: String,
+}
+
+/// Parsed Yahoo Finance quote. Returned by [`parse_yahoo_quote`].
+#[derive(Debug, Clone)]
+pub struct YahooQuote {
+    pub symbol: String,
+    pub price: f64,
+    pub change: Option<f64>,
+    pub change_percent: Option<f64>,
+    pub volume: Option<i64>,
+    pub previous_close: Option<f64>,
+}
+
+/// Parse a Yahoo Finance `/v7/finance/quote` JSON response.
+///
+/// Returns `Err(ParseError::MissingField)` when `regularMarketPrice` is absent,
+/// ensuring callers never receive a quote with `price == 0.0` due to silent
+/// substitution (Bug #1).
+pub fn parse_yahoo_quote(json: &Value) -> Result<YahooQuote, ParseError> {
+    let result = json
+        .pointer("/quoteResponse/result/0")
+        .ok_or_else(|| ParseError::EmptyResponse {
+            provider: "yahoo".into(),
+        })?;
+
+    let symbol = result
+        .get("symbol")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "symbol".into(),
+        })?
+        .to_string();
+
+    // Required — fail loudly if missing (Bug #1 fix).
+    let price = result
+        .get("regularMarketPrice")
+        .and_then(|v| v.as_f64())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "regularMarketPrice".into(),
+        })?;
+
+    let change = result
+        .get("regularMarketChange")
+        .and_then(|v| v.as_f64());
+    let change_percent = result
+        .get("regularMarketChangePercent")
+        .and_then(|v| v.as_f64());
+    let previous_close = result
+        .get("regularMarketPreviousClose")
+        .and_then(|v| v.as_f64());
+    let volume = parse_optional_i64(result, "regularMarketVolume", "yahoo")?;
+
+    Ok(YahooQuote {
+        symbol,
+        price,
+        change,
+        change_percent,
+        volume,
+        previous_close,
+    })
+}
+
+/// Parse a Yahoo Finance `/v8/finance/chart` JSON response into OHLCV bars.
+///
+/// Missing `close` values for a bar cause that bar to be **skipped** (with a
+/// warn log) rather than emitted with `close == 0.0` (Bug #1 fix).
+/// If no bars survive, returns `Err(ParseError::EmptyResponse)`.
+pub fn parse_yahoo_historical(json: &Value) -> Result<Vec<HistoricalPrice>, ParseError> {
+    let result = json
+        .pointer("/chart/result/0")
+        .ok_or_else(|| ParseError::EmptyResponse {
+            provider: "yahoo".into(),
+        })?;
+
+    let timestamps = result
+        .pointer("/timestamp")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "timestamp".into(),
+        })?;
+
+    let quote = result
+        .pointer("/indicators/quote/0")
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "indicators.quote[0]".into(),
+        })?;
+
+    let opens = quote
+        .get("open")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "open".into(),
+        })?;
+    let highs = quote
+        .get("high")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "high".into(),
+        })?;
+    let lows = quote
+        .get("low")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "low".into(),
+        })?;
+    let closes = quote
+        .get("close")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| ParseError::MissingField {
+            provider: "yahoo".into(),
+            field: "close".into(),
+        })?;
+    let volumes = quote.get("volume").and_then(|v| v.as_array());
+
+    let mut bars = Vec::with_capacity(timestamps.len());
+    for (i, ts) in timestamps.iter().enumerate() {
+        let ts_i = match ts.as_i64() {
+            Some(t) => t,
+            None => {
+                tracing::warn!(idx = i, "yahoo: bad timestamp value, skipping bar");
+                continue;
+            }
+        };
+        let close = match closes.get(i).and_then(|v| v.as_f64()) {
+            Some(c) => c,
+            None => {
+                tracing::warn!(idx = i, "yahoo: missing close value, skipping bar");
+                continue;
+            }
+        };
+        let open = opens.get(i).and_then(|v| v.as_f64()).unwrap_or(close);
+        let high = highs.get(i).and_then(|v| v.as_f64()).unwrap_or(close);
+        let low = lows.get(i).and_then(|v| v.as_f64()).unwrap_or(close);
+        let volume = volumes
+            .and_then(|a| a.get(i))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+
+        let date = chrono::DateTime::from_timestamp(ts_i, 0)
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| format!("ts:{ts_i}"));
+
+        bars.push(HistoricalPrice {
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        });
+    }
+
+    if bars.is_empty() {
+        return Err(ParseError::EmptyResponse {
+            provider: "yahoo".into(),
+        });
+    }
+    Ok(bars)
 }
 
 /// Free data sources that don't require API keys
@@ -102,6 +268,8 @@ impl FreeDataProviders {
             .await
             .map_err(|e| format!("Parse error: {}", e))?;
 
+        // Extract quote from the /v8/chart meta block.
+        // Use parse_yahoo_historical (module-level) for the OHLCV bars.
         let result = data
             .get("chart")
             .and_then(|c| c.get("result"))
@@ -110,17 +278,14 @@ impl FreeDataProviders {
             .ok_or("Invalid Yahoo response")?;
 
         let meta = result.get("meta");
-        let quote = meta.map(|m| {
-            let price = m
-                .get("regularMarketPrice")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+        let quote = meta.and_then(|m| {
+            let price = m.get("regularMarketPrice").and_then(|v| v.as_f64())?;
             let prev = m
                 .get("previousClose")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(price);
 
-            StockQuote {
+            Some(StockQuote {
                 symbol: symbol.to_string(),
                 price,
                 change: price - prev,
@@ -136,25 +301,17 @@ impl FreeDataProviders {
                 timestamp: m
                     .get("regularMarketTime")
                     .and_then(|t| t.as_i64())
-                    .map(|ts| {
+                    .and_then(|ts| {
                         chrono::DateTime::from_timestamp(ts, 0)
                             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                            .unwrap_or_default()
                     })
                     .unwrap_or_default(),
                 source: "yahoo".to_string(),
-            }
+            })
         });
 
-        // Parse historical data
-        let timestamps = result.get("timestamp").and_then(|t| t.as_array());
-        let indicators = result
-            .get("indicators")
-            .and_then(|i| i.get("quote"))
-            .and_then(|q| q.as_array())
-            .and_then(|a| a.first());
-
-        let historical = Self::parse_yahoo_historical(timestamps, indicators);
+        // Parse historical bars using the new module-level parser (no silent zeros).
+        let historical = parse_yahoo_historical(&data).unwrap_or_default();
 
         Ok(MarketDataResult {
             quote,
@@ -162,41 +319,6 @@ impl FreeDataProviders {
             source: "yahoo".to_string(),
             cached: false,
         })
-    }
-
-    fn parse_yahoo_historical(
-        timestamps: Option<&Vec<Value>>,
-        indicators: Option<&Value>,
-    ) -> Vec<HistoricalPrice> {
-        if let (Some(ts), Some(ind)) = (timestamps, indicators) {
-            let opens = ind.get("open").and_then(|o| o.as_array());
-            let highs = ind.get("high").and_then(|h| h.as_array());
-            let lows = ind.get("low").and_then(|l| l.as_array());
-            let closes = ind.get("close").and_then(|c| c.as_array());
-            let volumes = ind.get("volume").and_then(|v| v.as_array());
-
-            if let (Some(o), Some(h), Some(l), Some(c), Some(v)) =
-                (opens, highs, lows, closes, volumes)
-            {
-                return ts
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, t)| {
-                        Some(HistoricalPrice {
-                            date: chrono::DateTime::from_timestamp(t.as_i64()?, 0)?
-                                .format("%Y-%m-%d")
-                                .to_string(),
-                            open: o.get(i)?.as_f64()?,
-                            high: h.get(i)?.as_f64()?,
-                            low: l.get(i)?.as_f64()?,
-                            close: c.get(i)?.as_f64()?,
-                            volume: v.get(i)?.as_i64()?,
-                        })
-                    })
-                    .collect();
-            }
-        }
-        vec![]
     }
 
     // ================== GOOGLE FINANCE (NO KEY) ==================

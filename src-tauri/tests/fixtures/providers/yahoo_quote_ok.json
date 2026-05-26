@@ -1,0 +1,17 @@
+{
+  "quoteResponse": {
+    "result": [
+      {
+        "symbol": "AAPL",
+        "regularMarketPrice": 185.92,
+        "regularMarketChange": -1.45,
+        "regularMarketChangePercent": -0.7741,
+        "regularMarketVolume": 47471400,
+        "regularMarketPreviousClose": 187.37,
+        "marketCap": 2890000000000,
+        "currency": "USD"
+      }
+    ],
+    "error": null
+  }
+}

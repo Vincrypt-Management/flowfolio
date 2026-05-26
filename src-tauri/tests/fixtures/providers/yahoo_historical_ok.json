@@ -1,0 +1,29 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "symbol": "AAPL",
+          "regularMarketPrice": 185.92,
+          "currency": "USD"
+        },
+        "timestamp": [1705276800, 1705363200],
+        "indicators": {
+          "quote": [
+            {
+              "open": [185.59, 185.92],
+              "high": [186.74, 186.74],
+              "low": [184.30, 185.19],
+              "close": [185.92, 185.59],
+              "volume": [47471400, 40427000]
+            }
+          ],
+          "adjclose": [
+            { "adjclose": [185.92, 185.59] }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

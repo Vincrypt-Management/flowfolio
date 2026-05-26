@@ -45,6 +45,10 @@ fn parser_integrity_scaffold_is_loaded() {
 
 use flowfolio_lib::modules::data_provider::AlphaVantageClient;
 
+// ── Yahoo Finance (Task 13) ─────────────────────────────────────────────────
+
+use flowfolio_lib::modules::data_provider::free_sources;
+
 #[test]
 fn alphavantage_ok_fixture_parses_all_fields() {
     let json = load_json("alphavantage_timeseries_ok.json");
@@ -75,4 +79,44 @@ fn alphavantage_malformed_fixture_errors_not_silent_zero() {
         Ok(v) => v.is_empty(),
     };
     assert!(bad, "missing required 'close' must NOT produce entry with close=0.0; got: {result:?}");
+}
+
+#[test]
+fn yahoo_quote_ok_parses_required_fields() {
+    let json = load_json("yahoo_quote_ok.json");
+    let quote = free_sources::parse_yahoo_quote(&json).expect("ok fixture must parse");
+    assert_eq!(quote.symbol, "AAPL");
+    assert!((quote.price - 185.92).abs() < 1e-9);
+    assert_ne!(quote.price, 0.0, "price must not be silently 0");
+    assert_eq!(quote.volume, Some(47_471_400));
+}
+
+#[test]
+fn yahoo_quote_malformed_errors_not_silent_zero() {
+    let json = load_json("yahoo_quote_malformed.json");
+    let result = free_sources::parse_yahoo_quote(&json);
+    assert!(result.is_err(),
+            "missing regularMarketPrice must NOT parse to quote{{price:0.0}}, got: {result:?}");
+}
+
+#[test]
+fn yahoo_historical_ok_parses_all_bars() {
+    let json = load_json("yahoo_historical_ok.json");
+    let bars = free_sources::parse_yahoo_historical(&json).expect("ok fixture must parse");
+    assert_eq!(bars.len(), 2);
+    for bar in &bars {
+        assert_ne!(bar.close, 0.0, "close must not be silently 0");
+        assert_ne!(bar.open, 0.0, "open must not be silently 0");
+    }
+}
+
+#[test]
+fn yahoo_historical_malformed_errors_not_silent_zero() {
+    let json = load_json("yahoo_historical_malformed.json");
+    let result = free_sources::parse_yahoo_historical(&json);
+    let bad = match &result {
+        Err(_) => true,
+        Ok(v) => v.is_empty(),
+    };
+    assert!(bad, "missing close array must NOT produce bar{{close:0.0}}, got: {result:?}");
 }

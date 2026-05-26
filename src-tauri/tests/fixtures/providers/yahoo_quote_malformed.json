@@ -1,0 +1,10 @@
+{
+  "quoteResponse": {
+    "result": [
+      {
+        "symbol": "AAPL",
+        "regularMarketVolume": 47471400
+      }
+    ]
+  }
+}
