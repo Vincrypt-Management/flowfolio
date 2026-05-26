@@ -172,7 +172,7 @@ function RebalanceScheduler({
   useEffect(() => {
     let mounted = true;
     invokeWithResilience<RebalanceSchedule[]>('list_schedules')
-      .then(data => { if (mounted) setSchedules(data); })
+      .then(data => { if (mounted) setSchedules(data ?? []); })
       .catch((err: unknown) => {
         if (!mounted) return;
         const msg = err instanceof Error ? err.message : String(err);
@@ -195,7 +195,7 @@ function RebalanceScheduler({
             localStorage.removeItem(LEGACY_STORAGE_KEY);
             return invokeWithResilience<RebalanceSchedule[]>('list_schedules');
           })
-          .then(data => { if (mounted) setSchedules(data); })
+          .then(data => { if (mounted) setSchedules(data ?? []); })
           .catch((err: unknown) => {
             if (mounted) log.warn('Legacy schedule migration failed', String(err));
           });
@@ -307,7 +307,7 @@ function RebalanceScheduler({
 
   const refreshSchedules = useCallback(() => {
     invokeWithResilience<RebalanceSchedule[]>('list_schedules')
-      .then(setSchedules)
+      .then(data => setSchedules(data ?? []))
       .catch((err: unknown) => log.warn('Failed to refresh schedules', String(err)));
   }, []);
 

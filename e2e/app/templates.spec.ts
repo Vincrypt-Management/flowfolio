@@ -41,6 +41,25 @@ test.describe('Templates tab', () => {
     await expect(page.locator('h3', { hasText: 'Momentum' }).first()).toBeVisible({ timeout: 8000 });
   });
 
+  test('mock template Balanced is listed', async ({ page }) => {
+    await expect(page.locator('h3', { hasText: 'Balanced' }).first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('exactly 5 template cards render matching fixture', async ({ page }) => {
+    // list_templates fixture returns 5 items: Growth, Dividend, Value, Momentum, Balanced
+    const grid = page.locator('.template-grid').first();
+    await expect(grid).toBeVisible({ timeout: 10000 });
+    const cards = grid.locator('.template-card');
+    await expect(cards).toHaveCount(5, { timeout: 8000 });
+  });
+
+  test('all fixture template names appear in template grid', async ({ page }) => {
+    const expectedNames = ['Growth', 'Dividend', 'Value', 'Momentum', 'Balanced'];
+    for (const name of expectedNames) {
+      await expect(page.locator('.template-card h3', { hasText: name }).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
+
   test('Use This Template button is present for each template', async ({ page }) => {
     const loadBtns = page.locator('button.btn-primary', { hasText: /load template/i });
     const count = await loadBtns.count();

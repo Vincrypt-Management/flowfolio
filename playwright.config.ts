@@ -31,7 +31,7 @@ export default defineConfig({
         },
     {
       command: 'npm run dev:landing',
-      url: 'http://localhost:3000/flowfolio/landing.html',
+      url: 'http://localhost:3100/flowfolio/landing.html',
       reuseExistingServer: !isCI,
       timeout: 30000,
     },
@@ -41,7 +41,7 @@ export default defineConfig({
     {
       name: 'landing',
       testDir: './e2e/landing',
-      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3000' },
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3100' },
     },
     {
       name: 'app',
@@ -53,7 +53,7 @@ export default defineConfig({
           {
             name: 'firefox-landing',
             testDir: './e2e/landing',
-            use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:3000' },
+            use: { ...devices['Desktop Firefox'], baseURL: 'http://localhost:3100' },
           },
           {
             name: 'firefox-app',
@@ -63,7 +63,7 @@ export default defineConfig({
           {
             name: 'webkit-landing',
             testDir: './e2e/landing',
-            use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:3000' },
+            use: { ...devices['Desktop Safari'], baseURL: 'http://localhost:3100' },
           },
           {
             name: 'webkit-app',

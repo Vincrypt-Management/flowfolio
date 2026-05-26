@@ -54,11 +54,36 @@ test.describe('Rankings tab', () => {
     await expect(scoreBtn).not.toBeDisabled({ timeout: 5000 });
   });
 
+  test('Default Plan name from fixture is displayed on page', async ({ page }) => {
+    // get_default_plan fixture: name: 'Default Plan'
+    await expect(page.locator('text=Default Plan').first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('factor weights from fixture are shown', async ({ page }) => {
+    // get_default_plan fixture: factor_weights with momentum, value, quality, growth
+    // Rankings page shows the active plan's factor weights somewhere in the UI
+    const mainContent = page.locator('main#main-content');
+    await expect(mainContent).toBeVisible({ timeout: 10000 });
+    // At least one of the factor names should appear in the plan display
+    const factorNames = ['momentum', 'value', 'quality', 'growth'];
+    let found = false;
+    for (const factor of factorNames) {
+      const el = page.locator(`text=${factor}`).first();
+      const count = await el.count();
+      if (count > 0) { found = true; break; }
+    }
+    expect(found).toBe(true);
+  });
+
   test('Score Symbols button triggers scoring invoke', async ({ page }) => {
     let scoringCalled = false;
     await page.evaluate(() => {
       (window as unknown as { __INVOKE_HOOK__?: (cmd: string) => unknown }).__INVOKE_HOOK__ = (cmd: string) => {
-        if (cmd === 'run_scoring') {
+        // App calls get_scoring_config then score_symbols_batch
+        if (cmd === 'get_scoring_config') {
+          return { factor_weights: { momentum: 0.3, value: 0.3, quality: 0.2, growth: 0.2 } };
+        }
+        if (cmd === 'score_symbols_batch') {
           (window as unknown as { _scoringCalled?: boolean })._scoringCalled = true;
           return [];
         }
@@ -79,10 +104,13 @@ test.describe('Rankings tab', () => {
   test('results table appears after scoring', async ({ page }) => {
     await page.evaluate(() => {
       (window as unknown as { __INVOKE_HOOK__?: (cmd: string) => unknown }).__INVOKE_HOOK__ = (cmd: string) => {
-        if (cmd === 'run_scoring') {
+        if (cmd === 'get_scoring_config') {
+          return { factor_weights: { momentum: 0.3, value: 0.3, quality: 0.2, growth: 0.2 } };
+        }
+        if (cmd === 'score_symbols_batch') {
           return [
-            { symbol: 'AAPL', total_score: 82.5, factors: [{ name: 'momentum', normalized_value: 85, raw_value: 0.85, weight: 0.3, weighted_value: 25.5 }], explanation: 'Strong momentum' },
-            { symbol: 'MSFT', total_score: 78.0, factors: [{ name: 'momentum', normalized_value: 78, raw_value: 0.78, weight: 0.3, weighted_value: 23.4 }], explanation: 'Solid fundamentals' },
+            { symbol: 'AAPL', total_score: 82.5, factors: [{ name: 'momentum', normalized_value: 85, raw_value: 0.85, weight: 0.3, contribution: 25.5 }], explanation: 'Strong momentum' },
+            { symbol: 'MSFT', total_score: 78.0, factors: [{ name: 'momentum', normalized_value: 78, raw_value: 0.78, weight: 0.3, contribution: 23.4 }], explanation: 'Solid fundamentals' },
           ];
         }
         return undefined;
@@ -102,7 +130,10 @@ test.describe('Rankings tab', () => {
   test('results count header shows symbol count after scoring', async ({ page }) => {
     await page.evaluate(() => {
       (window as unknown as { __INVOKE_HOOK__?: (cmd: string) => unknown }).__INVOKE_HOOK__ = (cmd: string) => {
-        if (cmd === 'run_scoring') {
+        if (cmd === 'get_scoring_config') {
+          return { factor_weights: { momentum: 0.3, value: 0.3, quality: 0.2, growth: 0.2 } };
+        }
+        if (cmd === 'score_symbols_batch') {
           return [
             { symbol: 'AAPL', total_score: 82.5, factors: [], explanation: '' },
           ];

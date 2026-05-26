@@ -74,6 +74,27 @@ const MOCK_RESPONSES: Record<string, unknown> = {
 
   // Catch-all for commands not explicitly listed above
   get_current_prices_batch: {},
+
+  get_current_quotes_batch: {
+    AAPL:  { price: 308.82, change:  1.23, changePercent:  0.40 },
+    MSFT:  { price: 418.57, change:  2.11, changePercent:  0.51 },
+    GOOGL: { price: 382.97, change: -0.89, changePercent: -0.23 },
+    AMZN:  { price: 266.32, change: -1.44, changePercent: -0.54 },
+    META:  { price: 610.26, change: -3.12, changePercent: -0.51 },
+    NVDA:  { price: 137.45, change:  4.56, changePercent:  3.43 },
+    TSLA:  { price: 248.10, change: -2.30, changePercent: -0.92 },
+    JPM:   { price: 248.75, change:  0.65, changePercent:  0.26 },
+    V:     { price: 356.90, change:  1.05, changePercent:  0.29 },
+    JNJ:   { price: 147.20, change: -0.30, changePercent: -0.20 },
+  },
+
+  // Minimal ticker data so TickerAnalysis renders .ta-content instead of empty state
+  get_detailed_ticker_analysis: {
+    symbol: 'AAPL',
+    timestamp: '2024-01-15T10:00:00Z',
+    currentPrice: 180.0,
+    assetType: 'stock',
+  },
 };
 
 /**

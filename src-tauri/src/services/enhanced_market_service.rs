@@ -28,6 +28,8 @@ pub struct EnhancedMarketDataService {
     // In-memory cache for quick access
     price_cache: Arc<RwLock<HashMap<String, (f64, std::time::Instant)>>>,
     quant_cache: Arc<RwLock<HashMap<String, (QuantMetrics, std::time::Instant)>>>,
+    // (price, change, change_percent) — populated on every provider fetch
+    quote_cache: Arc<RwLock<HashMap<String, (f64, f64, f64, std::time::Instant)>>>,
     // Cache TTL settings (optimized for free tier APIs)
     price_cache_ttl: std::time::Duration,
     quant_cache_ttl: std::time::Duration,
@@ -54,6 +56,7 @@ impl EnhancedMarketDataService {
             retry_executor: Arc::new(RetryExecutor::new(RetryConfig::network())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             quant_cache: Arc::new(RwLock::new(HashMap::new())),
+            quote_cache: Arc::new(RwLock::new(HashMap::new())),
             price_cache_ttl: std::time::Duration::from_secs(120), // 2 minutes (optimized)
             quant_cache_ttl: std::time::Duration::from_secs(7200), // 2 hours (optimized)
         }
@@ -75,6 +78,7 @@ impl EnhancedMarketDataService {
             retry_executor: Arc::new(RetryExecutor::new(RetryConfig::network())),
             price_cache: Arc::new(RwLock::new(HashMap::new())),
             quant_cache: Arc::new(RwLock::new(HashMap::new())),
+            quote_cache: Arc::new(RwLock::new(HashMap::new())),
             price_cache_ttl: std::time::Duration::from_secs(120),
             quant_cache_ttl: std::time::Duration::from_secs(7200),
         }
@@ -163,11 +167,18 @@ impl EnhancedMarketDataService {
 
         if let Some(quote) = data.quote {
             let price = quote.price;
+            let now = std::time::Instant::now();
 
             // Update memory cache
             {
                 let mut cache = self.price_cache.write().await;
-                cache.insert(symbol.clone(), (price, std::time::Instant::now()));
+                cache.insert(symbol.clone(), (price, now));
+            }
+
+            // Update quote cache (includes change data)
+            {
+                let mut qc = self.quote_cache.write().await;
+                qc.insert(symbol.clone(), (price, quote.change, quote.change_percent, now));
             }
 
             // Update database cache
@@ -242,12 +253,19 @@ impl EnhancedMarketDataService {
             for (symbol, data) in batch_data {
                 if let Some(quote) = data.quote {
                     let price = quote.price;
+                    let now = std::time::Instant::now();
                     results.insert(symbol.clone(), price);
 
                     // Update memory cache
                     {
                         let mut cache = self.price_cache.write().await;
-                        cache.insert(symbol.clone(), (price, std::time::Instant::now()));
+                        cache.insert(symbol.clone(), (price, now));
+                    }
+
+                    // Update quote cache (includes change data)
+                    {
+                        let mut qc = self.quote_cache.write().await;
+                        qc.insert(symbol.clone(), (price, quote.change, quote.change_percent, now));
                     }
 
                     // Update database cache
@@ -265,6 +283,29 @@ impl EnhancedMarketDataService {
             "Batch prices complete"
         );
         results
+    }
+
+    /// Batch get current quotes (price + change + change_percent).
+    /// Returns cached change data when available; falls back to price-only when not.
+    pub async fn get_batch_quotes(
+        &self,
+        symbols: Vec<String>,
+    ) -> HashMap<String, (f64, f64, f64)> {
+        // Ensure prices are fetched and quote_cache is populated.
+        let _ = self.get_batch_prices(symbols.clone()).await;
+
+        let qc = self.quote_cache.read().await;
+        symbols
+            .iter()
+            .map(|s| {
+                let upper = s.to_uppercase();
+                let (price, change, change_pct) = qc
+                    .get(&upper)
+                    .map(|(p, c, cp, _)| (*p, *c, *cp))
+                    .unwrap_or((0.0, 0.0, 0.0));
+                (upper, (price, change, change_pct))
+            })
+            .collect()
     }
 
     // ================== HISTORICAL DATA ==================

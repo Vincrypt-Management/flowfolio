@@ -97,15 +97,41 @@ function Dashboard({
   const [savedPlans, setSavedPlans] = useState<string[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
 
-  // ---- Build price data from marketPrices prop ----
+  // ---- Fetch full quotes (price + day change) ----
   useEffect(() => {
-    const entries = DEFAULT_SYMBOLS.map((symbol) => ({
-      symbol,
-      price: marketPrices[symbol] ?? 0,
-      change: 0,
-      changePercent: 0,
-    }));
-    setPriceData(entries);
+    let active = true;
+
+    async function fetchQuotes() {
+      // Seed immediately from the already-loaded price map so the UI isn't blank.
+      setPriceData(DEFAULT_SYMBOLS.map((symbol) => ({
+        symbol,
+        price: marketPrices[symbol] ?? 0,
+        change: 0,
+        changePercent: 0,
+      })));
+
+      try {
+        const quotes = await invokeWithResilience<Record<string, { price: number; change: number; changePercent: number }>>(
+          "get_current_quotes_batch",
+          { symbols: DEFAULT_SYMBOLS }
+        );
+        if (!active) return;
+        setPriceData(DEFAULT_SYMBOLS.map((symbol) => {
+          const q = quotes[symbol];
+          return {
+            symbol,
+            price: q?.price ?? marketPrices[symbol] ?? 0,
+            change: q?.change ?? 0,
+            changePercent: q?.changePercent ?? 0,
+          };
+        }));
+      } catch {
+        // Leave the seeded data in place — prices are shown, change stays 0.
+      }
+    }
+
+    fetchQuotes();
+    return () => { active = false; };
   }, [marketPrices]);
 
   // Journal entries are client-side only (no backend persistence)
@@ -119,7 +145,7 @@ function Dashboard({
       setIsLoadingPlans(true);
       try {
         const plans = await invokeWithResilience<string[]>("list_saved_plans");
-        if (active) setSavedPlans(plans);
+        if (active) setSavedPlans(plans ?? []);
       } catch {
         if (active) {
           logger.warn("Dashboard: failed to fetch saved plans");
@@ -155,9 +181,13 @@ function Dashboard({
     const sorted = [...priceData].sort(
       (a, b) => b.changePercent - a.changePercent
     );
+    // Only count symbols with actual moves — avoids GOOGL appearing in both lists.
+    const gainers = sorted.filter(d => d.changePercent > 0).slice(0, 3);
+    const losers = sorted.filter(d => d.changePercent < 0).slice(-3).reverse();
+    // Fallback: if no real moves yet, show top/bottom 3 sorted by price as placeholders.
     return {
-      gainers: sorted.slice(0, 3),
-      losers: sorted.slice(-3).reverse(),
+      gainers: gainers.length > 0 ? gainers : sorted.slice(0, 3),
+      losers: losers.length > 0 ? losers : sorted.slice(-3).reverse().filter(d => !gainers.includes(d)),
     };
   }, [priceData]);
 

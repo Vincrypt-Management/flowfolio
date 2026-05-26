@@ -184,7 +184,7 @@ function App() {
     try {
       const plans = await invokeWithResilience<string[]>("list_saved_plans");
       if (isMountedRef.current) {
-        dispatch(actions.setSavedPlans(plans));
+        dispatch(actions.setSavedPlans(plans ?? []));
       }
     } catch (error) {
       logger.error("Failed to load saved plans:", error);

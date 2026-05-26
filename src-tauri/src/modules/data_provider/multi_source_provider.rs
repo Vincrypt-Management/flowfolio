@@ -1103,10 +1103,10 @@ impl MultiSourceProvider {
 
         let response = crate::HTTP_CLIENT
             .get(&url)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            )
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Referer", "https://finance.yahoo.com/")
             .send()
             .await
             .map_err(|e| format!("Yahoo request failed: {}", e))?;

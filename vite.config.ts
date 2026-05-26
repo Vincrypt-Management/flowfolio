@@ -40,6 +40,7 @@ export default defineConfig({
             'vendor-charts': ['recharts'],
             'vendor-icons': ['lucide-react'],
             'vendor-pdf': ['jspdf', 'html2canvas'],
+            'vendor-virtual': ['@tanstack/react-virtual', '@tanstack/virtual-core'],
           },
         },
       },
@@ -60,6 +61,13 @@ export default defineConfig({
       entries: [
         'index.html',
         'src/**/*.tsx',
+      ],
+      // Explicitly pre-bundle packages used by lazy-loaded tabs so Vite never
+      // re-optimises mid-session (which causes 504 / "Importing a module script
+      // failed" in Tauri's WKWebView on first tab visit).
+      include: [
+        '@tanstack/react-virtual',
+        '@tanstack/virtual-core',
       ],
     },
 

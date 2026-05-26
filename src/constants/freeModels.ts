@@ -8,11 +8,17 @@ export interface FreeModel {
 
 export const FREE_MODELS: FreeModel[] = [
   {
+    id: 'openrouter/owl-alpha',
+    name: 'OWL Alpha',
+    description: "OpenRouter's auto-routing model — picks the best available free provider for each request.",
+    contextWindow: 131072,
+    recommended: true,
+  },
+  {
     id: 'meta-llama/llama-3.3-70b-instruct:free',
     name: 'Llama 3.3 70B',
     description: "Meta's flagship open model. Best balance of quality and reliability.",
     contextWindow: 131072,
-    recommended: true,
   },
   {
     id: 'google/gemini-2.0-flash-exp:free',
@@ -58,7 +64,7 @@ export const FREE_MODELS: FreeModel[] = [
   },
 ];
 
-export const DEFAULT_FREE_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+export const DEFAULT_FREE_MODEL = 'openrouter/owl-alpha';
 
 export function isValidFreeModel(id: string): boolean {
   return FREE_MODELS.some(m => m.id === id);

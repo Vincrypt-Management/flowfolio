@@ -49,11 +49,36 @@ test.describe('Rebalance Scheduler tab', () => {
     await expect(planLabel).toBeVisible({ timeout: 10000 });
   });
 
-  test('Plan Name input accepts text', async ({ page }) => {
-    const planInput = page.locator('.form-input[placeholder*="plan name" i]').first();
-    await expect(planInput).toBeVisible({ timeout: 10000 });
-    await planInput.fill('Q1 Rebalance');
-    await expect(planInput).toHaveValue('Q1 Rebalance');
+  test('Plan Name select has plan options from fixture', async ({ page }) => {
+    // When list_saved_plans returns plans, Plan Name renders as a <select>
+    const planSelect = page.locator('.form-select').first();
+    await expect(planSelect).toBeVisible({ timeout: 10000 });
+    const options = await planSelect.locator('option').allTextContents();
+    expect(options.length).toBeGreaterThan(0);
+  });
+
+  test('Plan Name select contains My Growth Strategy from fixture', async ({ page }) => {
+    const planSelect = page.locator('.form-select').first();
+    await expect(planSelect).toBeVisible({ timeout: 10000 });
+    const options = await planSelect.locator('option').allTextContents();
+    expect(options.some(t => t.includes('My Growth Strategy'))).toBe(true);
+  });
+
+  test('Plan Name select contains Dividend Income from fixture', async ({ page }) => {
+    const planSelect = page.locator('.form-select').first();
+    await expect(planSelect).toBeVisible({ timeout: 10000 });
+    const options = await planSelect.locator('option').allTextContents();
+    expect(options.some(t => t.includes('Dividend Income'))).toBe(true);
+  });
+
+  test('Plan Name select has exactly 2 options matching fixture', async ({ page }) => {
+    // list_saved_plans returns ['My Growth Strategy', 'Dividend Income']
+    const planSelect = page.locator('.form-select').first();
+    await expect(planSelect).toBeVisible({ timeout: 10000 });
+    const options = await planSelect.locator('option').allTextContents();
+    // May include a placeholder option — at minimum 2 plan names present
+    const planOptions = options.filter(t => t.includes('My Growth Strategy') || t.includes('Dividend Income'));
+    expect(planOptions.length).toBe(2);
   });
 
   test('Frequency dropdown is present', async ({ page }) => {
@@ -91,16 +116,20 @@ test.describe('Rebalance Scheduler tab', () => {
     let createCalled = false;
     await page.evaluate(() => {
       (window as unknown as { __INVOKE_HOOK__?: (cmd: string) => unknown }).__INVOKE_HOOK__ = (cmd: string) => {
-        if (cmd === 'create_schedule') {
+        // The scheduler calls save_schedule (not create_schedule)
+        if (cmd === 'save_schedule') {
           (window as unknown as { _createCalled?: boolean })._createCalled = true;
-          return { id: 'sched-1' };
+          return null;
         }
         return undefined;
       };
     });
 
-    const planInput = page.locator('.form-input[placeholder*="plan name" i]').first();
-    await planInput.fill('Test Schedule');
+    // When list_saved_plans has results, Plan Name shows as a select — pick the first option
+    const planSelect = page.locator('.create-form .form-select').first();
+    await expect(planSelect).toBeVisible({ timeout: 10000 });
+    await planSelect.selectOption({ index: 0 });
+
     const createBtn = page.locator('.create-form button.btn-primary').first();
     await createBtn.click();
     await page.waitForTimeout(500);

@@ -5,7 +5,16 @@ use crate::core::validation::{validate_symbol, validate_symbols};
 use crate::modules::quant_analysis::{DashboardData, QuantAnalyzer, QuantMetrics};
 use crate::services::enhanced_market_service::CacheStats;
 use crate::{DB_INITIALIZED, ENHANCED_MARKET_SERVICE, FUNDAMENTAL_SERVICE};
+use serde::Serialize;
 use std::collections::HashMap;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuoteSnapshot {
+    pub price: f64,
+    pub change: f64,
+    pub change_percent: f64,
+}
 
 /// Health check command
 #[tauri::command]
@@ -119,6 +128,22 @@ pub async fn get_current_prices_batch(
 ) -> Result<HashMap<String, f64>, String> {
     validate_symbols(&symbols)?;
     Ok(ENHANCED_MARKET_SERVICE.get_batch_prices(symbols).await)
+}
+
+/// Get current quotes (price + day change + change %) for multiple symbols.
+/// Used by the Dashboard for the Gainers/Losers panel.
+#[tauri::command]
+pub async fn get_current_quotes_batch(
+    symbols: Vec<String>,
+) -> Result<HashMap<String, QuoteSnapshot>, String> {
+    validate_symbols(&symbols)?;
+    let raw = ENHANCED_MARKET_SERVICE.get_batch_quotes(symbols).await;
+    Ok(raw
+        .into_iter()
+        .map(|(sym, (price, change, change_percent))| {
+            (sym, QuoteSnapshot { price, change, change_percent })
+        })
+        .collect())
 }
 
 /// Get single symbol current price

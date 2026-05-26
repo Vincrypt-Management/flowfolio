@@ -88,8 +88,8 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
       const sum = await invokeWithResilience<OptionsSummary>('get_options_summary', {
         portfolioName,
       });
-      setPositions(list);
-      setSummary(sum);
+      setPositions(list ?? []);
+      setSummary(sum ?? null);
     } catch (err) {
       log.error('failed to load options', err);
       addToast('Failed to load options', 'error');
@@ -108,8 +108,8 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           portfolioName,
         });
         if (cancelled) return;
-        setPositions(list);
-        setSummary(sum);
+        setPositions(list ?? []);
+        setSummary(sum ?? null);
       })
       .catch((err) => {
         if (!cancelled) {

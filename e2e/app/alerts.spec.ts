@@ -64,6 +64,29 @@ test.describe('Alerts tab', () => {
     expect(options.length).toBeGreaterThan(0);
   });
 
+  test('condition dropdown contains above option', async ({ page }) => {
+    const conditionSelect = page.locator('select.alerts-select').first();
+    await expect(conditionSelect).toBeVisible({ timeout: 10000 });
+    const options = await conditionSelect.locator('option').allTextContents();
+    const lowerOptions = options.map(t => t.toLowerCase());
+    expect(lowerOptions.some(t => t.includes('above'))).toBe(true);
+  });
+
+  test('condition dropdown contains below option', async ({ page }) => {
+    const conditionSelect = page.locator('select.alerts-select').first();
+    await expect(conditionSelect).toBeVisible({ timeout: 10000 });
+    const options = await conditionSelect.locator('option').allTextContents();
+    const lowerOptions = options.map(t => t.toLowerCase());
+    expect(lowerOptions.some(t => t.includes('below'))).toBe(true);
+  });
+
+  test('no alert cards shown when list_alerts returns empty', async ({ page }) => {
+    // list_alerts fixture returns [] — so no alert rows should be rendered
+    const alertCards = page.locator('.alert-card, .alert-item, .alert-row');
+    const count = await alertCards.count();
+    expect(count).toBe(0);
+  });
+
   test('threshold price input is present', async ({ page }) => {
     const thresholdInput = page.locator('input.alerts-input[placeholder*="Price" i], input.alerts-input[placeholder*="Threshold" i]').first();
     await expect(thresholdInput).toBeVisible({ timeout: 10000 });

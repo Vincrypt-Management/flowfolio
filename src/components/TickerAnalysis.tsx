@@ -190,11 +190,13 @@ export default function TickerAnalysis({
     loadTickerData();
   }, [symbol]);
 
-  // Auto-generate report when data is loaded
+  // Auto-generate report when data is loaded — only if AI (OpenRouter) is configured
   useEffect(() => {
     if (data && autoGenerateReport && !reportGeneratedRef.current && !report && !isReportLoading) {
       reportGeneratedRef.current = true;
-      handleGenerateReport();
+      invokeWithResilience<boolean>('ai_is_configured')
+        .then(configured => { if (configured) handleGenerateReport(); })
+        .catch(() => {});
     }
   }, [data, autoGenerateReport, report, isReportLoading]);
 
@@ -435,7 +437,7 @@ export default function TickerAnalysis({
           </div>
         )}
 
-        {reportError && (
+        {reportError && !reportError.includes('not configured') && !reportError.includes('not available') && (
           <div className="ta-error">
             <AlertTriangle size={16} />
             <span>{reportError}</span>

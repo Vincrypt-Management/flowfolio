@@ -2,24 +2,24 @@
 // Extracted from lib.rs
 
 use crate::services::openrouter_service::OpenRouterMessage;
-use crate::{get_user_tier, LOCAL_AI_SERVICE, OPENROUTER_SERVICE};
+use crate::{get_user_tier, OPENROUTER_SERVICE};
 use tauri::{AppHandle, Emitter};
 
-const DEFAULT_FREE_MODEL: &str = "meta-llama/llama-3.3-70b-instruct:free";
+const DEFAULT_FREE_MODEL: &str = "openrouter/owl-alpha";
 
-/// Check if AI service is configured (OpenRouter or local model)
+/// Check if AI service is configured (OpenRouter key present)
 #[tauri::command]
 pub fn ai_is_configured() -> bool {
-    OPENROUTER_SERVICE.is_configured() || LOCAL_AI_SERVICE.is_ready()
+    OPENROUTER_SERVICE.is_configured()
 }
 
-/// Check if local AI model is downloaded and ready
+/// Local AI is no longer supported — always returns false
 #[tauri::command]
 pub fn ai_local_is_ready() -> bool {
-    LOCAL_AI_SERVICE.is_ready()
+    false
 }
 
-/// Chat with AI assistant (proxied through backend)
+/// Chat with AI assistant (proxied through OpenRouter)
 #[tauri::command]
 pub async fn ai_chat(
     messages: Vec<OpenRouterMessage>,
@@ -31,16 +31,9 @@ pub async fn ai_chat(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    match OPENROUTER_SERVICE
-        .chat(messages.clone(), model, temperature, max_tokens)
+    OPENROUTER_SERVICE
+        .chat(messages, model, temperature, max_tokens)
         .await
-    {
-        Ok(r) => Ok(r),
-        Err(e) => {
-            tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
-            LOCAL_AI_SERVICE.chat(messages).await
-        }
-    }
 }
 
 /// Generate portfolio insight using AI
@@ -53,23 +46,9 @@ pub async fn ai_generate_portfolio_insight(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    match OPENROUTER_SERVICE
-        .generate_portfolio_insight(portfolio_data.clone(), model)
+    OPENROUTER_SERVICE
+        .generate_portfolio_insight(portfolio_data, model)
         .await
-    {
-        Ok(r) => Ok(r),
-        Err(e) => {
-            tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
-            let msg = crate::services::openrouter_service::OpenRouterMessage {
-                role: "user".to_string(),
-                content: format!(
-                    "Analyze this portfolio and provide insights:\n{}",
-                    serde_json::to_string_pretty(&portfolio_data).unwrap_or_default()
-                ),
-            };
-            LOCAL_AI_SERVICE.chat(vec![msg]).await
-        }
-    }
 }
 
 /// Chat with AI assistant (simple conversation)
@@ -83,21 +62,9 @@ pub async fn ai_chat_assistant(
     if tier != "ai" && tier != "pro" {
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
-    match OPENROUTER_SERVICE
-        .chat_with_assistant(message.clone(), history.clone(), model)
+    OPENROUTER_SERVICE
+        .chat_with_assistant(message, history, model)
         .await
-    {
-        Ok(r) => Ok(r),
-        Err(e) => {
-            tracing::warn!(error = %e, "OpenRouter failed, falling back to local model");
-            let mut messages = history;
-            messages.push(crate::services::openrouter_service::OpenRouterMessage {
-                role: "user".to_string(),
-                content: message,
-            });
-            LOCAL_AI_SERVICE.chat(messages).await
-        }
-    }
 }
 
 /// AI streaming chat
@@ -148,22 +115,55 @@ pub async fn ai_chat_stream(
     use futures::StreamExt;
     let mut stream = response.bytes_stream();
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
-        let text = String::from_utf8_lossy(&chunk);
-        for line in text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                if data.trim() == "[DONE]" {
-                    continue;
-                }
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                    if let Some(content) = parsed["choices"][0]["delta"]["content"].as_str() {
-                        full_response.push_str(content);
-                        let _ = app.emit("ai-token", content);
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result {
+            Ok(chunk) => {
+                let text = String::from_utf8_lossy(&chunk);
+                for line in text.lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        if data.trim() == "[DONE]" {
+                            continue;
+                        }
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+                            if let Some(content) =
+                                parsed["choices"][0]["delta"]["content"].as_str()
+                            {
+                                full_response.push_str(content);
+                                let _ = app.emit("ai-token", content);
+                            }
+                        }
                     }
                 }
             }
+            Err(e) => {
+                // A single bad chunk should not abort the whole request.
+                // Log and stop reading; return whatever we collected so far.
+                tracing::warn!(error = %e, "Stream chunk error — stopping early");
+                break;
+            }
         }
+    }
+
+    // If the stream produced nothing (e.g. model doesn't support SSE),
+    // fall back to a plain non-streaming request so the user still gets a response.
+    if full_response.is_empty() {
+        tracing::info!("Stream returned no content — falling back to non-streaming request");
+        let messages_converted: Vec<OpenRouterMessage> = messages
+            .iter()
+            .filter_map(|m| {
+                Some(OpenRouterMessage {
+                    role: m["role"].as_str()?.to_string(),
+                    content: m["content"].as_str()?.to_string(),
+                })
+            })
+            .collect();
+
+        let content = OPENROUTER_SERVICE
+            .chat(messages_converted, Some(model), Some(temperature.unwrap_or(0.7)), Some(max_tokens.unwrap_or(4096)))
+            .await?;
+
+        let _ = app.emit("ai-token", &content);
+        return Ok(content);
     }
 
     Ok(full_response)

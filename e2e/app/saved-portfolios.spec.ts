@@ -114,11 +114,13 @@ test.describe('Saved Portfolios tab', () => {
     await expect(deleteBtn).toBeVisible({ timeout: 8000 });
   });
 
-  test('clicking Load button shows portfolio preview', async ({ page }) => {
+  test('clicking Load button loads portfolio and navigates to Vibe Studio', async ({ page }) => {
+    // onLoadPortfolio dispatches setActiveTab('vibe-studio') in App.tsx
     const loadBtn = page.locator('.btn-action.primary').first();
     await expect(loadBtn).toBeVisible({ timeout: 8000 });
     await loadBtn.click();
-    const preview = page.locator('.portfolio-preview').first();
-    await expect(preview).toBeVisible({ timeout: 5000 });
+    // After loading, the app navigates to Vibe Studio tab
+    const vibeStudioNav = page.locator('aside .nav-item', { hasText: 'Vibe Studio' });
+    await expect(vibeStudioNav).toHaveAttribute('aria-current', 'page', { timeout: 8000 });
   });
 });

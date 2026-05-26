@@ -59,7 +59,7 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
     try {
       const result = await invokeWithResilience<SavedPortfolioInfo[]>('list_saved_portfolios');
       if (isMountedRef.current) {
-        setPortfolios(result);
+        setPortfolios(result ?? []);
       }
     } catch (err) {
       if (isMountedRef.current) {

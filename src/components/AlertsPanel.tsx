@@ -147,7 +147,7 @@ function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
   // Load alerts from SQLite on mount
   useEffect(() => {
     invokeWithResilience<PriceAlert[]>('list_alerts')
-      .then(setAlerts)
+      .then(data => setAlerts(data ?? []))
       .catch(() => {});
   }, []);
 
@@ -164,7 +164,7 @@ function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
             localStorage.removeItem(LEGACY_KEY);
             return invokeWithResilience<PriceAlert[]>('list_alerts');
           })
-          .then(updated => { if (mounted) setAlerts(updated); })
+          .then(updated => { if (mounted) setAlerts(updated ?? []); })
           .catch(err => { if (mounted) log.error('Migration failed', err); });
       } catch { /* ignore */ }
     }

@@ -64,7 +64,7 @@ impl OpenRouterService {
         let api_url = crate::core::encrypted_env::get_env_var("OPENROUTER_API_URL")
             .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
         let default_model = crate::core::encrypted_env::get_env_var("DEFAULT_LLM_MODEL")
-            .unwrap_or_else(|| "meta-llama/llama-3.3-70b-instruct:free".to_string());
+            .unwrap_or_else(|| "openrouter/owl-alpha".to_string());
 
         // Debug: Log API key status
         tracing::debug!(configured = api_key.is_some(), "OpenRouter API key status");
@@ -78,12 +78,20 @@ impl OpenRouterService {
         }
     }
 
-    /// Check if service is configured
+    /// Check if service is configured — checks RUNTIME_KEYS so Settings changes take effect immediately.
     pub fn is_configured(&self) -> bool {
-        self.api_key.is_some()
+        self.api_key.is_some() || crate::get_api_key("OPENROUTER_API_KEY").is_some()
     }
 
-    /// Send chat completion request
+    /// Resolve API key: struct field first (set at init), then live RUNTIME_KEYS lookup.
+    fn resolve_api_key(&self) -> Option<String> {
+        self.api_key
+            .clone()
+            .or_else(|| crate::get_api_key("OPENROUTER_API_KEY"))
+    }
+
+    /// Send chat completion request — retries up to 2× on upstream 429s,
+    /// honouring the `retry_after_seconds` field in the OpenRouter error body.
     pub async fn chat(
         &self,
         messages: Vec<OpenRouterMessage>,
@@ -91,11 +99,10 @@ impl OpenRouterService {
         temperature: Option<f64>,
         max_tokens: Option<u32>,
     ) -> Result<String, String> {
-        let api_key = self.api_key.as_ref().ok_or_else(|| {
+        let api_key = self.resolve_api_key().ok_or_else(|| {
             "OpenRouter API key not configured. Add it in Settings → API Keys.".to_string()
         })?;
 
-        // Validate API key format (should start with sk-)
         if !api_key.starts_with("sk-") {
             tracing::warn!("OpenRouter API key may be invalid (doesn't start with sk-)");
         }
@@ -112,62 +119,84 @@ impl OpenRouterService {
 
         tracing::info!(model = %model_name, max_tokens = ?request.max_tokens, "Sending chat request");
 
-        let response = crate::HTTP_CLIENT
-            .post(format!("{}/chat/completions", self.api_url))
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .header("HTTP-Referer", "https://flowfolio.app")
-            .header("X-Title", "FlowFolio")
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "OpenRouter request failed");
-                format!("Request failed: {}. Check your internet connection.", e)
-            })?;
+        const MAX_RETRIES: u32 = 2;
+        let mut attempt = 0u32;
 
-        let status = response.status();
-        if !status.is_success() {
-            let error_text = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %error_text, "OpenRouter API error");
+        loop {
+            attempt += 1;
 
-            // Provide more helpful error messages
-            let user_error = match status.as_u16() {
-                401 => "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string(),
-                402 => "Insufficient credits. Please add credits to your OpenRouter account."
-                    .to_string(),
-                429 => "Rate limited. Please wait a moment and try again.".to_string(),
-                500..=599 => format!(
-                    "OpenRouter server error ({}). The service may be temporarily unavailable.",
-                    status
-                ),
-                _ => format!("OpenRouter API error {}: {}", status, error_text),
-            };
-            return Err(user_error);
-        }
+            let response = crate::HTTP_CLIENT
+                .post(format!("{}/chat/completions", self.api_url))
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .header("HTTP-Referer", "https://flowfolio.app")
+                .header("X-Title", "FlowFolio")
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "OpenRouter request failed");
+                    format!("Request failed: {}. Check your internet connection.", e)
+                })?;
 
-        let result: OpenRouterResponse = response.json().await.map_err(|e| {
-            tracing::error!(error = %e, "Failed to parse OpenRouter response");
-            format!("Failed to parse AI response: {}", e)
-        })?;
+            let status = response.status();
 
-        if let Some(choice) = result.choices.first() {
-            let content = choice.message.content.clone();
-
-            // Check for empty content
-            if content.trim().is_empty() {
-                tracing::warn!(finish_reason = ?choice.finish_reason, "Model returned empty content");
-                return Err(format!(
-                    "Model returned empty response. Finish reason: {:?}. This may indicate the model refused the request or hit a content filter.",
-                    choice.finish_reason
-                ));
+            // Retry on upstream 429 (rate-limited free model pool).
+            if status.as_u16() == 429 && attempt <= MAX_RETRIES {
+                let body: serde_json::Value =
+                    response.json().await.unwrap_or(serde_json::Value::Null);
+                let wait_secs = body
+                    .pointer("/error/metadata/retry_after_seconds")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(20.0)
+                    .clamp(5.0, 60.0);
+                tracing::warn!(
+                    attempt,
+                    wait_secs,
+                    model = %model_name,
+                    "Rate-limited by upstream provider — retrying after delay"
+                );
+                tokio::time::sleep(std::time::Duration::from_secs_f64(wait_secs)).await;
+                continue;
             }
 
-            tracing::info!(tokens = ?result.usage, content_len = content.len(), "OpenRouter response received");
-            Ok(content)
-        } else {
-            tracing::error!(response = ?result, "No choices in OpenRouter response");
-            Err("No response from model - no choices returned".to_string())
+            if !status.is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                tracing::error!(status = %status, body = %error_text, "OpenRouter API error");
+
+                let user_error = match status.as_u16() {
+                    401 => "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string(),
+                    402 => "Insufficient credits. Please add credits to your OpenRouter account.".to_string(),
+                    429 => "Rate limited after retries. Please wait a minute and try again.".to_string(),
+                    500..=599 => format!(
+                        "OpenRouter server error ({}). The service may be temporarily unavailable.",
+                        status
+                    ),
+                    _ => format!("OpenRouter API error {}: {}", status, error_text),
+                };
+                return Err(user_error);
+            }
+
+            let result: OpenRouterResponse = response.json().await.map_err(|e| {
+                tracing::error!(error = %e, "Failed to parse OpenRouter response");
+                format!("Failed to parse AI response: {}", e)
+            })?;
+
+            if let Some(choice) = result.choices.first() {
+                let content = choice.message.content.clone();
+                if content.trim().is_empty() {
+                    tracing::warn!(finish_reason = ?choice.finish_reason, "Model returned empty content");
+                    return Err(format!(
+                        "Model returned empty response. Finish reason: {:?}.",
+                        choice.finish_reason
+                    ));
+                }
+                tracing::info!(tokens = ?result.usage, content_len = content.len(), "OpenRouter response received");
+                return Ok(content);
+            } else {
+                tracing::error!(response = ?result, "No choices in OpenRouter response");
+                return Err("No response from model - no choices returned".to_string());
+            }
         }
     }
 
@@ -325,7 +354,7 @@ mod tests {
     fn default_model_is_free_tier() {
         std::env::remove_var("DEFAULT_LLM_MODEL");
         let svc = OpenRouterService::new();
-        assert_eq!(svc.default_model, "meta-llama/llama-3.3-70b-instruct:free");
+        assert_eq!(svc.default_model, "openrouter/owl-alpha");
     }
 
     #[test]

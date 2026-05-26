@@ -25,24 +25,26 @@ test.describe('Universe tab', () => {
   });
 
   test('universe name input is present', async ({ page }) => {
-    const nameInput = page.locator('input[placeholder*="universe name" i], input[placeholder*="name" i]').first();
+    // Actual placeholder: "e.g., Tech Leaders"
+    const nameInput = page.locator('input[placeholder*="Tech Leaders" i]').first();
     await expect(nameInput).toBeVisible({ timeout: 10000 });
   });
 
   test('universe name input accepts text', async ({ page }) => {
-    const nameInput = page.locator('input[placeholder*="universe name" i], input[placeholder*="name" i]').first();
+    const nameInput = page.locator('input[placeholder*="Tech Leaders" i]').first();
     await expect(nameInput).toBeVisible({ timeout: 10000 });
     await nameInput.fill('My Tech Universe');
     await expect(nameInput).toHaveValue('My Tech Universe');
   });
 
   test('symbols input is present in Create Universe form', async ({ page }) => {
-    const symbolInput = page.locator('input[placeholder*="symbol" i], input[placeholder*="comma" i]').first();
+    // Actual placeholder: "e.g., AAPL, MSFT, GOOGL"
+    const symbolInput = page.locator('input[placeholder*="AAPL" i]').first();
     await expect(symbolInput).toBeVisible({ timeout: 10000 });
   });
 
   test('symbols input accepts comma-separated values', async ({ page }) => {
-    const symbolInput = page.locator('input[placeholder*="symbol" i], input[placeholder*="comma" i]').first();
+    const symbolInput = page.locator('input[placeholder*="AAPL" i]').first();
     await expect(symbolInput).toBeVisible({ timeout: 10000 });
     await symbolInput.fill('AAPL, MSFT, GOOGL');
     await expect(symbolInput).toHaveValue('AAPL, MSFT, GOOGL');
@@ -77,6 +79,29 @@ test.describe('Universe tab', () => {
     await expect(page.locator('h4', { hasText: 'S&P 500 Core' }).first()).toBeVisible({ timeout: 8000 });
   });
 
+  test('mock universe shows symbol count from fixture', async ({ page }) => {
+    // list_universes fixture has 5 symbols; component renders "{n} symbols" count text
+    const universeItem = page.locator('.universe-item').first();
+    await expect(universeItem).toBeVisible({ timeout: 8000 });
+    await expect(universeItem).toContainText('5 symbols');
+  });
+
+  test('mock universe symbols render as tags including AAPL', async ({ page }) => {
+    // list_universes fixture: symbols: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
+    // Universe item renders each symbol as <span class="tag">
+    const universeItem = page.locator('.universe-item').first();
+    await expect(universeItem).toBeVisible({ timeout: 8000 });
+    await expect(universeItem.locator('.tag', { hasText: 'AAPL' }).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('mock universe shows all 5 symbols as tags from fixture', async ({ page }) => {
+    const universeItem = page.locator('.universe-item').first();
+    await expect(universeItem).toBeVisible({ timeout: 8000 });
+    for (const sym of ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']) {
+      await expect(universeItem.locator('.tag', { hasText: sym }).first()).toBeVisible({ timeout: 5000 });
+    }
+  });
+
   test('Use in Rankings button is visible for listed universe', async ({ page }) => {
     const useBtn = page.locator('.btn-small', { hasText: /use in rankings/i }).first();
     await expect(useBtn).toBeVisible({ timeout: 8000 });
@@ -94,5 +119,20 @@ test.describe('Universe tab', () => {
 
   test('mock saved plans are listed', async ({ page }) => {
     await expect(page.locator('.saved-plan-card').first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('mock saved plan My Growth Strategy name is visible', async ({ page }) => {
+    // list_saved_plans fixture returns ['My Growth Strategy', 'Dividend Income']
+    await expect(page.locator('.saved-plan-card', { hasText: 'My Growth Strategy' }).first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('mock saved plan Dividend Income name is visible', async ({ page }) => {
+    await expect(page.locator('.saved-plan-card', { hasText: 'Dividend Income' }).first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('exactly 2 saved plan cards render matching fixture', async ({ page }) => {
+    // list_saved_plans returns 2 plans
+    const planCards = page.locator('.saved-plan-card');
+    await expect(planCards).toHaveCount(2, { timeout: 8000 });
   });
 });

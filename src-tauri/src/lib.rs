@@ -20,10 +20,7 @@ pub use shared_types::*;
 
 use modules::plan_compiler::VibePlanScript;
 use parking_lot::RwLock;
-use services::{
-    AlpacaService, EnhancedMarketDataService, FundamentalDataService, LocalAiService,
-    OpenRouterService,
-};
+use services::{AlpacaService, EnhancedMarketDataService, FundamentalDataService, OpenRouterService};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -40,9 +37,6 @@ pub(crate) static ENHANCED_MARKET_SERVICE: Lazy<Arc<EnhancedMarketDataService>> 
 
 pub(crate) static OPENROUTER_SERVICE: Lazy<Arc<OpenRouterService>> =
     Lazy::new(|| Arc::new(OpenRouterService::new()));
-
-pub(crate) static LOCAL_AI_SERVICE: Lazy<Arc<LocalAiService>> =
-    Lazy::new(|| Arc::new(LocalAiService::new()));
 
 pub(crate) static ALPACA_SERVICE: Lazy<Arc<AlpacaService>> =
     Lazy::new(|| Arc::new(AlpacaService::new()));
@@ -233,6 +227,7 @@ pub fn run() {
             get_quant_metrics_batch,
             get_dashboard_data,
             get_current_prices_batch,
+            get_current_quotes_batch,
             get_quant_metrics_single,
             get_current_price_single,
             get_cache_stats,
@@ -374,16 +369,6 @@ pub fn run() {
                     }
                 }
 
-                // Kick off local model load/download in background.
-                // Prefer the copy bundled inside the app resources (installed with the app).
-                // Fall back to downloading into the app data directory on first run.
-                let download_dir = data_dir.join("models");
-                let bundled_model = app_handle
-                    .path()
-                    .resource_dir()
-                    .ok()
-                    .map(|r| r.join("models").join("Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"));
-                LOCAL_AI_SERVICE.init_in_background(bundled_model, download_dir);
             });
 
             // Load user-configured API keys from store into runtime so data providers can use them immediately

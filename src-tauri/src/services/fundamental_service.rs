@@ -62,11 +62,15 @@ struct CacheEntry {
     timestamp: Instant,
 }
 
+const YAHOO_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 /// Fundamental Data Service
 pub struct FundamentalDataService {
     alpha_vantage_key: Option<String>,
     cache: Arc<RwLock<HashMap<String, CacheEntry>>>,
     cache_ttl: Duration,
+    /// Cookie-aware HTTP client used exclusively for Yahoo Finance requests.
+    yahoo_client: reqwest::Client,
 }
 
 impl FundamentalDataService {
@@ -74,10 +78,17 @@ impl FundamentalDataService {
     pub fn new() -> Self {
         let alpha_vantage_key = crate::get_api_key("ALPHA_VANTAGE_API_KEY");
 
+        let yahoo_client = reqwest::Client::builder()
+            .cookie_store(true)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_default();
+
         Self {
             alpha_vantage_key,
             cache: Arc::new(RwLock::new(HashMap::new())),
             cache_ttl: Duration::from_secs(48 * 60 * 60), // 48 hours
+            yahoo_client,
         }
     }
 
@@ -144,24 +155,77 @@ impl FundamentalDataService {
         Err(format!("Failed to fetch fundamentals for {}", symbol))
     }
 
+    /// Obtain a Yahoo Finance session crumb using the cookie-aware client.
+    /// Sets `A3` session cookie then fetches the crumb token.
+    async fn yahoo_crumb(&self) -> Option<String> {
+        // Warm up the cookie jar by hitting the consent endpoint.
+        let _ = self
+            .yahoo_client
+            .get("https://fc.yahoo.com")
+            .header("User-Agent", YAHOO_UA)
+            .send()
+            .await;
+
+        let resp = self
+            .yahoo_client
+            .get("https://query1.finance.yahoo.com/v1/test/getcrumb")
+            .header("User-Agent", YAHOO_UA)
+            .header("Referer", "https://finance.yahoo.com/")
+            .send()
+            .await
+            .ok()?;
+
+        if resp.status().is_success() {
+            let crumb = resp.text().await.ok()?;
+            if !crumb.is_empty() && crumb != "null" {
+                return Some(crumb);
+            }
+        }
+        None
+    }
+
     /// Fetch from Yahoo Finance
     async fn fetch_from_yahoo(&self, symbol: &str) -> Result<FundamentalMetrics, String> {
-        let url = format!(
-            "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=defaultKeyStatistics,financialData,summaryDetail,price",
+        tracing::debug!(symbol = %symbol, "Fetching fundamentals from Yahoo Finance");
+
+        // Try query2 first (often works without crumb for public symbols).
+        let url_q2 = format!(
+            "https://query2.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=defaultKeyStatistics%2CfinancialData%2CsummaryDetail%2Cprice&formatted=false&lang=en-US&region=US",
             symbol
         );
 
-        tracing::debug!(symbol = %symbol, "Fetching fundamentals from Yahoo Finance");
-
-        let response = crate::HTTP_CLIENT
-            .get(&url)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-            )
+        let resp2 = self
+            .yahoo_client
+            .get(&url_q2)
+            .header("User-Agent", YAHOO_UA)
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Referer", "https://finance.yahoo.com/")
+            .header("Origin", "https://finance.yahoo.com")
             .send()
-            .await
-            .map_err(|e| format!("Request failed: {}", e))?;
+            .await;
+
+        let response = match resp2 {
+            Ok(r) if r.status().is_success() => r,
+            _ => {
+                // Fallback: get a crumb then try query1.
+                let crumb = self.yahoo_crumb().await.unwrap_or_default();
+                let url_q1 = format!(
+                    "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{}?modules=defaultKeyStatistics%2CfinancialData%2CsummaryDetail%2Cprice&formatted=false&crumb={}",
+                    symbol,
+                    urlencoding::encode(&crumb)
+                );
+                self.yahoo_client
+                    .get(&url_q1)
+                    .header("User-Agent", YAHOO_UA)
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Referer", "https://finance.yahoo.com/")
+                    .send()
+                    .await
+                    .map_err(|e| format!("Request failed: {}", e))?
+            }
+        };
 
         if !response.status().is_success() {
             return Err(format!(

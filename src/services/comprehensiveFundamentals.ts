@@ -11,6 +11,7 @@
 
 import { openRouterService, OpenRouterMessage } from './openrouter';
 import { createLogger } from '../core/logger';
+import { DEFAULT_FREE_MODEL } from '../constants/freeModels';
 
 const log = createLogger('comprehensive-fundamentals');
 
@@ -286,7 +287,7 @@ export interface ComprehensiveFundamentalAnalysis {
 
 class ComprehensiveFundamentalsService {
   private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-  private readonly analysisModel = 'meta-llama/llama-3.3-70b-instruct:free';
+  private readonly analysisModel = DEFAULT_FREE_MODEL;
   private readonly CACHE_PREFIX = 'flowfolio_fundamentals_';
   
   /**

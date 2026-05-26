@@ -34,12 +34,11 @@ test.describe('AI Model settings', () => {
     expect(count).toBeGreaterThanOrEqual(4);
   });
 
-  test('AI model default is Llama 3.3 70B (recommended)', async ({ page }) => {
-    // load_setting mock returns 'true' (not a valid model id) so the service
-    // falls back to DEFAULT_FREE_MODEL = meta-llama/llama-3.3-70b-instruct:free
+  test('AI model default is OWL Alpha (recommended)', async ({ page }) => {
+    // load_setting mock returns null so the service falls back to DEFAULT_FREE_MODEL = openrouter/owl-alpha
     const select = page.locator('#ai-model');
     await expect(select).toBeVisible({ timeout: 10000 });
-    await expect(select).toHaveValue('meta-llama/llama-3.3-70b-instruct:free');
+    await expect(select).toHaveValue('openrouter/owl-alpha');
   });
 
   test('model description updates when selection changes', async ({ page }) => {

@@ -35,4 +35,21 @@ test.describe('Data Sources tab', () => {
     const statsSection = page.locator('[class*="cache"], [class*="stat"]').first();
     await expect(statsSection).toBeVisible({ timeout: 10000 });
   });
+
+  test('stat cards show zero values from fixture', async ({ page }) => {
+    // get_cache_stats fixture: all counts = 0; component renders .stat-card with .stat-value
+    // The first two stat cards show memory_prices and memory_quant — both 0 via fallback
+    const statCard = page.locator('.stat-card').first();
+    await expect(statCard).toBeVisible({ timeout: 10000 });
+    await expect(statCard.locator('.stat-value').first()).toContainText('0');
+  });
+
+  test('provider items with not-configured class are present', async ({ page }) => {
+    // get_api_key_statuses fixture: all keys are false; component adds class "not-configured"
+    // to providers whose key is false (except Yahoo Finance which is always configured)
+    const notConfiguredItems = page.locator('.not-configured');
+    await expect(notConfiguredItems.first()).toBeVisible({ timeout: 10000 });
+    const count = await notConfiguredItems.count();
+    expect(count).toBeGreaterThan(0);
+  });
 });
