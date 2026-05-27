@@ -16,11 +16,12 @@ import {
   Legend,
 } from 'recharts';
 import { TouchableChart } from './TouchableChart';
-import { TrendingUp, Loader2 } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
 import { formatCurrency } from '../shared/utils';
+import { Spinner, EmptyState, Select, Checkbox } from '@flowfolio/ui';
 import './PortfolioPerformanceChart.css';
 
 const log = createLogger('PortfolioPerformanceChart');
@@ -295,27 +296,20 @@ export function PortfolioPerformanceChart({
 
         {/* Benchmark controls */}
         <div className="perf-chart__benchmark-controls">
-          <label className="perf-chart__benchmark-toggle">
-            <input
-              type="checkbox"
-              checked={showBenchmark}
-              onChange={(e) => setShowBenchmark(e.target.checked)}
-            />
-            <span>Show benchmark</span>
-          </label>
+          <Checkbox
+            label="Show benchmark"
+            checked={showBenchmark}
+            onChange={(e) => setShowBenchmark(e.target.checked)}
+          />
 
           {showBenchmark && (
-            <select
-              className="perf-chart__benchmark-select"
-              value={benchmark}
-              onChange={(e) => setBenchmark(e.target.value as BenchmarkSymbol)}
-            >
-              {BENCHMARK_OPTIONS.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
+            <div style={{ minWidth: 100 }}>
+              <Select
+                value={benchmark}
+                onChange={(v) => setBenchmark(v as BenchmarkSymbol)}
+                options={BENCHMARK_OPTIONS.map((b) => ({ value: b, label: b }))}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -324,22 +318,20 @@ export function PortfolioPerformanceChart({
       <div className="perf-chart__body">
         {loading ? (
           <div className="perf-chart__loading">
-            <Loader2 size={24} className="perf-chart__spinner" />
+            <Spinner size="lg" color="muted" />
             <span>Loading performance data…</span>
           </div>
         ) : !hasEnoughData ? (
-          <div className="perf-chart__empty">
-            <TrendingUp size={40} />
-            <p>Not enough data yet.</p>
-            <p className="perf-chart__empty-sub">
-              Portfolio snapshots are taken daily. Check back after a few days.
-            </p>
-          </div>
+          <EmptyState
+            icon={<TrendingUp size={20} />}
+            title="Not enough data yet"
+            description="Portfolio snapshots are taken daily. Check back after a few days."
+          />
         ) : (
           <div className="perf-chart__chart-wrap">
             {benchmarkLoading && showBenchmark && (
               <div className="perf-chart__benchmark-loading">
-                <Loader2 size={14} className="perf-chart__spinner" />
+                <Spinner size="sm" color="muted" />
                 <span>Loading {benchmark}…</span>
               </div>
             )}
@@ -349,12 +341,12 @@ export function PortfolioPerformanceChart({
                   <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="5%"
-                      stopColor={isPositive ? 'var(--accent)' : '#ef4444'}
+                      stopColor={isPositive ? 'var(--primary)' : 'var(--error)'}
                       stopOpacity={0.25}
                     />
                     <stop
                       offset="95%"
-                      stopColor={isPositive ? 'var(--accent)' : '#ef4444'}
+                      stopColor={isPositive ? 'var(--primary)' : 'var(--error)'}
                       stopOpacity={0}
                     />
                   </linearGradient>
@@ -390,7 +382,7 @@ export function PortfolioPerformanceChart({
                   type="monotone"
                   dataKey="portfolioPct"
                   name="Portfolio"
-                  stroke={isPositive ? 'var(--accent)' : '#ef4444'}
+                  stroke={isPositive ? 'var(--primary)' : 'var(--error)'}
                   strokeWidth={2}
                   fill="url(#portfolioGradient)"
                   dot={false}
@@ -402,7 +394,7 @@ export function PortfolioPerformanceChart({
                     type="monotone"
                     dataKey="benchmarkPct"
                     name={benchmark}
-                    stroke="#3b82f6"
+                    stroke="var(--chart-2)"
                     strokeWidth={1.5}
                     strokeDasharray="5 3"
                     dot={false}

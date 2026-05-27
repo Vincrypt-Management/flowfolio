@@ -23,7 +23,6 @@ import {
   BarChart3,
   Target,
   AlertTriangle,
-  Loader2,
   RefreshCw,
   Shield,
   Zap,
@@ -33,6 +32,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { IconButton, Spinner, Tooltip, Button, Alert } from '@flowfolio/ui';
 import './TickerAnalysis.css';
 import { useAnalysisReport } from '../hooks/useAnalysisReport';
 import type { TickerAnalysisData } from '../services/analysisReport';
@@ -392,30 +392,38 @@ export default function TickerAnalysis({
           <div className="ta-header-right">
             {report && (
               <>
-                <button className="ta-btn-icon" onClick={handleCopyReport} title="Copy Report" aria-label="Copy report">
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                </button>
-                <button className="ta-btn-icon" onClick={handleDownloadReport} title="Download" aria-label="Download report">
-                  <Download size={16} />
-                </button>
+                <Tooltip content={copied ? 'Copied!' : 'Copy report'} side="bottom">
+                  <IconButton variant="ghost" size="sm" onClick={handleCopyReport} aria-label="Copy report">
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content="Download report" side="bottom">
+                  <IconButton variant="ghost" size="sm" onClick={handleDownloadReport} aria-label="Download report">
+                    <Download size={14} />
+                  </IconButton>
+                </Tooltip>
               </>
             )}
-            <button 
-              className="ta-btn-icon" 
-              onClick={() => {
-                reportGeneratedRef.current = false;
-                loadTickerData();
-              }} 
-              disabled={isLoading || isReportLoading}
-              title="Refresh"
-              aria-label="Refresh data"
-            >
-              <RefreshCw size={16} className={isLoading || isReportLoading ? 'spinning' : ''} />
-            </button>
+            <Tooltip content="Refresh" side="bottom">
+              <IconButton
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  reportGeneratedRef.current = false;
+                  loadTickerData();
+                }}
+                disabled={isLoading || isReportLoading}
+                aria-label="Refresh data"
+              >
+                <RefreshCw size={14} className={isLoading || isReportLoading ? 'spinning' : ''} />
+              </IconButton>
+            </Tooltip>
             {!inline && (
-              <button className="ta-btn-close" onClick={onClose} aria-label="Close">
-                <X size={20} />
-              </button>
+              <Tooltip content="Close" side="bottom">
+                <IconButton variant="ghost" size="md" onClick={onClose} aria-label="Close">
+                  <X size={16} />
+                </IconButton>
+              </Tooltip>
             )}
           </div>
         </div>
@@ -423,26 +431,32 @@ export default function TickerAnalysis({
         {/* Loading */}
         {(isLoading || isReportLoading) && (
           <div className="ta-loading">
-            <Loader2 size={24} className="spinning" />
+            <Spinner size="lg" color="muted" />
             <span>{isLoading ? `Loading ${symbol}...` : reportProgress || 'Generating report...'}</span>
           </div>
         )}
 
         {/* Error */}
         {error && !isLoading && (
-          <div className="ta-error">
-            <AlertTriangle size={20} />
-            <span>{error}</span>
-            <button onClick={loadTickerData}>Retry</button>
-          </div>
+          <Alert
+            variant="error"
+            title="Failed to load ticker"
+            description={error}
+          />
+        )}
+        {error && !isLoading && (
+          <Button variant="secondary" size="sm" onClick={loadTickerData} style={{ alignSelf: 'flex-start' }}>
+            Retry
+          </Button>
         )}
 
         {reportError && !reportError.includes('not configured') && !reportError.includes('not available') && (
-          <div className="ta-error">
-            <AlertTriangle size={16} />
-            <span>{reportError}</span>
-            <button onClick={handleGenerateReport}>Retry</button>
-          </div>
+          <>
+            <Alert variant="error" title="Report generation failed" description={reportError} />
+            <Button variant="secondary" size="sm" onClick={handleGenerateReport} style={{ alignSelf: 'flex-start' }}>
+              Retry
+            </Button>
+          </>
         )}
 
         {/* Content */}
