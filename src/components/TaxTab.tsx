@@ -3,6 +3,7 @@ import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { useToast } from './Toast';
 import { findReplacementPeers } from '../services/replacementPeers';
+import { Button, EmptyState } from '@flowfolio/ui';
 
 const log = createLogger('TaxTab');
 
@@ -127,19 +128,19 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
             value={rate}
             onChange={(e) => setRate(parseFloat(e.target.value))}
           />
-          <button type="button" onClick={onSaveRateAsDefault}>
+          <Button type="button" variant="secondary" size="sm" onClick={onSaveRateAsDefault}>
             Save as default
-          </button>
+          </Button>
         </div>
       </header>
 
       {loading ? (
         <p>Loading…</p>
       ) : opportunities.length === 0 ? (
-        <p className="empty-state">
-          No unrealized losses found. Tax-loss harvesting only flags positions
-          where current price is below cost basis.
-        </p>
+        <EmptyState
+          title="No tax-loss opportunities"
+          description="Tax-loss harvesting only flags positions where current price is below cost basis."
+        />
       ) : (
         <>
           <p className="tax-tab__summary">
@@ -179,9 +180,9 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
                     <td>${o.tax_benefit_estimate.toFixed(0)}</td>
                     <td>{replacement}</td>
                     <td>
-                      <button type="button" onClick={() => onMarkHarvested(o)}>
+                      <Button type="button" variant="secondary" size="sm" onClick={() => onMarkHarvested(o)}>
                         Mark Harvested
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 );

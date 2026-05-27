@@ -4,6 +4,7 @@ import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
 import { useUserMode } from './contexts/UserModeContext';
+import { Button } from "@flowfolio/ui";
 
 interface JournalEntry {
   id: string;
@@ -163,9 +164,9 @@ export function JournalTab() {
         <p className="subtitle">Track decisions, learnings, and strategy evolution</p>
         <div className="header-actions">
           {isAdvanced && (
-            <button className="btn-secondary" onClick={exportToMarkdown}>
+            <Button variant="secondary" size="sm" onClick={exportToMarkdown}>
               Export to Markdown
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -373,9 +374,9 @@ export function JournalTab() {
               </div>
             )}
 
-            <button className="btn-primary" onClick={addEntry}>
+            <Button variant="primary" onClick={addEntry}>
               Create Entry
-            </button>
+            </Button>
           </div>
         </div>
       )}

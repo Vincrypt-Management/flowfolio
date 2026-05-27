@@ -1,5 +1,6 @@
 import { useState, useReducer, useEffect, useCallback, useMemo, useRef } from "react";
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Button, EmptyState } from "@flowfolio/ui";
 import { useIsMounted } from './hooks/useIsMounted';
 import { useWashSaleStatus } from './hooks/useWashSaleStatus';
 import { invokeWithResilience } from './services/apiClient';
@@ -779,9 +780,9 @@ export function PortfolioTab({
                 placeholder="20"
               />
             </div>
-            <button className="btn-primary" onClick={addHolding} disabled={isLoading}>
+            <Button variant="primary" onClick={addHolding} loading={isLoading}>
               {isLoading ? "Adding..." : "Add Holding"}
-            </button>
+            </Button>
           </div>
           <div className="form-row mt-md">
             <div className="form-group">
@@ -793,12 +794,12 @@ export function PortfolioTab({
                 placeholder="Enter cash amount"
               />
             </div>
-            <button className="btn-secondary" onClick={updateCash} disabled={isLoading}>
+            <Button variant="secondary" onClick={updateCash} disabled={isLoading}>
               Update Cash
-            </button>
-            <button className="btn-secondary" onClick={updatePrices} disabled={isLoading || portfolio.holdings.length === 0}>
+            </Button>
+            <Button variant="secondary" onClick={updatePrices} disabled={isLoading || portfolio.holdings.length === 0}>
               Refresh Prices
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -916,19 +917,20 @@ export function PortfolioTab({
                         <option value="score_weighted">Score Weighted (requires Rankings)</option>
                       </select>
                     </div>
-                    <button className="btn-secondary" onClick={createAllocation} disabled={isLoading}>
+                    <Button variant="secondary" onClick={createAllocation} disabled={isLoading}>
                       Create Allocation Plan
-                    </button>
-                    <button className="btn-secondary" onClick={checkRebalance} disabled={isLoading}>
+                    </Button>
+                    <Button variant="secondary" onClick={checkRebalance} disabled={isLoading}>
                       Check Rebalance
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>
             ) : (
-              <p className="empty-state">
-                No holdings yet. Add your first holding above to get started.
-              </p>
+              <EmptyState
+                title="No holdings yet"
+                description="Add your first holding above to get started."
+              />
             )}
           </div>
 
@@ -961,9 +963,9 @@ export function PortfolioTab({
                       className="contribution-input"
                     />
                   </div>
-                  <button className="btn-primary" onClick={generateBuyList} disabled={isLoading}>
+                  <Button variant="primary" onClick={generateBuyList} loading={isLoading}>
                     {isLoading ? "Generating..." : "Generate Buy List"}
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@ import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
+import { Button } from "@flowfolio/ui";
 import { formatCurrency } from './shared/utils';
 import { AiInlinePanel } from './components/AiInlinePanel';
 import { buildBacktestPrompt } from './services/agentSurfaces';
@@ -262,9 +263,14 @@ export function BacktestTab() {
           </div>
         </div>
         {result && (
-          <button className="btn-reset" onClick={() => setResult(null)}>
-            <RefreshCw size={16} /> New Test
-          </button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setResult(null)}
+            leftIcon={<RefreshCw size={14} />}
+          >
+            New Test
+          </Button>
         )}
       </header>
 
@@ -405,23 +411,17 @@ export function BacktestTab() {
         )}
 
         {/* Run Button */}
-        <button 
-          className={`btn-run-backtest ${isRunning ? 'running' : ''}`}
+        <Button
+          variant="primary"
+          size="lg"
+          className="btn-run-backtest"
           onClick={runBacktest}
-          disabled={isRunning || config.symbols.length === 0}
+          loading={isRunning}
+          disabled={config.symbols.length === 0}
+          leftIcon={!isRunning ? <Play size={16} /> : undefined}
         >
-          {isRunning ? (
-            <>
-              <div className="spinner"></div>
-              Running Simulation...
-            </>
-          ) : (
-            <>
-              <Play size={18} />
-              Run Backtest
-            </>
-          )}
-        </button>
+          {isRunning ? 'Running Simulation...' : 'Run Backtest'}
+        </Button>
       </div>
 
       {/* Results placeholder before first run */}

@@ -6,6 +6,7 @@ import {
   OptionsCloseEarlyModal,
   type OptionsCloseEarlyPosition,
 } from './OptionsCloseEarlyModal';
+import { Button, Input, Select } from '@flowfolio/ui';
 
 const log = createLogger('OptionsTab');
 
@@ -220,15 +221,25 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           </div>
         )}
         <div className="options-tab__view-toggle">
-          <button type="button" aria-pressed={view === 'open'} onClick={() => setView('open')}>
+          <Button
+            variant={view === 'open' ? 'primary' : 'secondary'}
+            size="sm"
+            aria-pressed={view === 'open'}
+            onClick={() => setView('open')}
+          >
             Open Positions
-          </button>
-          <button type="button" aria-pressed={view === 'history'} onClick={() => setView('history')}>
+          </Button>
+          <Button
+            variant={view === 'history' ? 'primary' : 'secondary'}
+            size="sm"
+            aria-pressed={view === 'history'}
+            onClick={() => setView('history')}
+          >
             History
-          </button>
-          <button type="button" onClick={() => setShowAdd(true)}>
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
             Add Position
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -237,19 +248,20 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           <h3>Add Position</h3>
           <label>
             Strategy
-            <select
+            <Select
               value={form.strategy}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, strategy: e.target.value as AddPositionForm['strategy'] }))
+              onChange={(v) =>
+                setForm((f) => ({ ...f, strategy: v as AddPositionForm['strategy'] }))
               }
-            >
-              <option value="covered_call">Covered Call</option>
-              <option value="cash_secured_put">Cash-Secured Put</option>
-            </select>
+              options={[
+                { value: 'covered_call', label: 'Covered Call' },
+                { value: 'cash_secured_put', label: 'Cash-Secured Put' },
+              ]}
+            />
           </label>
           <label>
             Symbol
-            <input
+            <Input
               type="text"
               value={form.symbol}
               onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value }))}
@@ -257,7 +269,7 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           </label>
           <label>
             Strike
-            <input
+            <Input
               type="number"
               step="0.01"
               value={form.strike}
@@ -266,7 +278,7 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           </label>
           <label>
             Expiration
-            <input
+            <Input
               type="date"
               value={form.expiration}
               onChange={(e) => setForm((f) => ({ ...f, expiration: e.target.value }))}
@@ -274,7 +286,7 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           </label>
           <label>
             Contracts
-            <input
+            <Input
               type="number"
               min={1}
               step={1}
@@ -284,7 +296,7 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           </label>
           <label>
             Premium per contract
-            <input
+            <Input
               type="number"
               step="0.01"
               value={form.premiumPerContract}
@@ -292,10 +304,10 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
             />
           </label>
           <div className="options-tab__modal-actions">
-            <button type="button" onClick={submitAdd}>Create</button>
-            <button type="button" onClick={() => { setShowAdd(false); setForm(EMPTY_FORM); }}>
+            <Button type="button" variant="primary" onClick={submitAdd}>Create</Button>
+            <Button type="button" variant="secondary" onClick={() => { setShowAdd(false); setForm(EMPTY_FORM); }}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -341,14 +353,16 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
                 <td>
                   {p.status === 'open' && (
                     <>
-                      <button type="button" onClick={() => transition(p.id, 'expired')}>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => transition(p.id, 'expired')}>
                         Mark Expired
-                      </button>
-                      <button type="button" onClick={() => transition(p.id, 'assigned')}>
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => transition(p.id, 'assigned')}>
                         Mark Assigned
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="secondary"
+                        size="sm"
                         onClick={() =>
                           setCloseTarget({
                             id: p.id,
@@ -361,12 +375,12 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
                         }
                       >
                         Close Early
-                      </button>
+                      </Button>
                     </>
                   )}
-                  <button type="button" onClick={() => deletePosition(p.id)}>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => deletePosition(p.id)}>
                     Delete
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}

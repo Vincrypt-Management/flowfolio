@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DividendCalendar } from './DividendCalendar';
+import { EmptyState } from '@flowfolio/ui';
 import {
   fetchUpcomingDividends,
   fetchProjectedIncome,
@@ -88,9 +89,10 @@ export function DividendsTab({ portfolioName, heldSymbols }: DividendsTabProps) 
       </header>
 
       {dividends.length === 0 && view !== 'income' && (
-        <p className="empty-state">
-          No upcoming dividends in the next 90 days for held symbols.
-        </p>
+        <EmptyState
+          title="No upcoming dividends"
+          description="No ex-dates within the next 90 days for held symbols."
+        />
       )}
 
       {view === 'calendar' && dividends.length > 0 && (
