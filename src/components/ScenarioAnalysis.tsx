@@ -20,7 +20,7 @@ import { FlaskConical, ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
-import { Button, SegmentedControl } from '@flowfolio/ui';
+import { Button, SegmentedControl, Slider } from '@flowfolio/ui';
 import './ScenarioAnalysis.css';
 
 const log = createLogger('scenario-analysis');
@@ -566,19 +566,17 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
                 Overall Market
               </label>
               <div className="scenario-custom-slider-wrap" style={{ touchAction: 'pan-y' }}>
-                <input
-                  type="range"
+                <Slider
                   min={-50}
                   max={50}
                   step={1}
                   value={custom.overallFactor}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setCustom((prev) => ({
                       ...prev,
-                      overallFactor: Number(e.target.value),
+                      overallFactor: value,
                     }))
                   }
-                  className="scenario-slider"
                 />
                 <span
                   className="scenario-custom-value font-mono"
@@ -606,16 +604,12 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
                   {sector}
                 </label>
                 <div className="scenario-custom-slider-wrap" style={{ touchAction: 'pan-y' }}>
-                  <input
-                    type="range"
+                  <Slider
                     min={-50}
                     max={50}
                     step={1}
                     value={pct}
-                    onChange={(e) =>
-                      handleSectorOverrideChange(sector, Number(e.target.value))
-                    }
-                    className="scenario-slider"
+                    onChange={(value) => handleSectorOverrideChange(sector, value)}
                   />
                   <span
                     className="scenario-custom-value font-mono"

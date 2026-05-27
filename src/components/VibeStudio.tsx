@@ -1,5 +1,5 @@
 import { useReducer, useRef, useEffect, useMemo, memo, useState } from "react";
-import { Spinner } from "@flowfolio/ui";
+import { Spinner, Textarea, BarChart as UiBarChart, DonutChart } from "@flowfolio/ui";
 import { useIsMounted } from '../hooks/useIsMounted';
 import { saveFile } from '../shared/utils/fileSystem';
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
@@ -40,19 +40,6 @@ import {
   Eye,
   Share2
 } from "lucide-react";
-import { 
-  PieChart as RechartsPie, 
-  Pie, 
-  Cell, 
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  CartesianGrid
-} from 'recharts';
 import QuantDashboard from "./charts/QuantDashboard";
 import TickerAnalysis from "./TickerAnalysis";
 import { PrivacyDisclosure } from "./PrivacyDisclosure";
@@ -808,29 +795,17 @@ Be conversational but professional. Cite specific data points from the portfolio
     const data = generatedPortfolio.assets.map((asset, index) => ({
       name: asset.symbol,
       value: asset.allocation,
-      fill: CHART_COLORS[index % CHART_COLORS.length]
+      color: CHART_COLORS[index % CHART_COLORS.length],
     }));
 
     return (
-      <ResponsiveContainer width="100%" height={300}>
-        <RechartsPie>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            label={({ name, value }) => `${name}: ${value.toFixed(1)}%`}
-            outerRadius={100}
-            fill="#8884d8"
-            dataKey="value"
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.fill} />
-            ))}
-          </Pie>
-          <Tooltip />
-        </RechartsPie>
-      </ResponsiveContainer>
+      <DonutChart
+        data={data}
+        height={300}
+        innerRadius={0}
+        outerRadius={100}
+        showLabels
+      />
     );
   };
 
@@ -840,26 +815,16 @@ Be conversational but professional. Cite specific data points from the portfolio
     const data = generatedPortfolio.assets.map((asset) => ({
       symbol: asset.symbol,
       allocation: asset.allocation,
-      sector: asset.sector || 'Other'
+      sector: asset.sector || 'Other',
     }));
 
     return (
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="symbol" stroke="var(--text-muted)" />
-          <YAxis stroke="var(--text-muted)" />
-          <Tooltip 
-            contentStyle={{ 
-              backgroundColor: 'var(--bg-card)', 
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)'
-            }}
-          />
-          <Legend />
-          <Bar dataKey="allocation" fill="var(--primary)" name="Allocation %" />
-        </BarChart>
-      </ResponsiveContainer>
+      <UiBarChart
+        data={data}
+        xKey="symbol"
+        series={[{ key: 'allocation', name: 'Allocation %', color: 'var(--primary)' }]}
+        height={300}
+      />
     );
   };
 
@@ -1890,7 +1855,7 @@ Be conversational but professional. Cite specific data points from the portfolio
 
       <div className="input-section">
         <div className="input-container">
-          <textarea
+          <Textarea
             className="prompt-input"
             placeholder="Describe your investment goals... (e.g., 'Create a growth-focused tech portfolio with quarterly rebalancing and moderate risk tolerance')"
             value={prompt}

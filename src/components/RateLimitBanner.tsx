@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { Alert } from '@flowfolio/ui';
 import { apiClient } from '../services/apiClient';
 
 export const RateLimitBanner: React.FC = () => {
@@ -15,9 +15,10 @@ export const RateLimitBanner: React.FC = () => {
   if (!info) return null;
 
   return (
-    <div className="rate-limit-banner">
-      <AlertTriangle size={16} />
-      <span>Data may be delayed — rate limit reached. Refreshing in {info.retryAfterSeconds}s</span>
-    </div>
+    <Alert
+      variant="warning"
+      className="rate-limit-banner"
+      description={`Data may be delayed — rate limit reached. Refreshing in ${info.retryAfterSeconds}s`}
+    />
   );
 };

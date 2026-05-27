@@ -4,6 +4,7 @@ import {
   Save, FileText, TrendingUp, BookOpen, Eye, Bell, GitCompare,
   Shield, Clock, Newspaper, ClipboardCheck, Globe, Database,
 } from 'lucide-react';
+import { Drawer } from '@flowfolio/ui';
 import './MobileNav.css';
 
 interface MobileNavProps {
@@ -51,24 +52,13 @@ export function MobileNav({ activeTab, onNavigate }: MobileNavProps) {
 
   return (
     <>
-      {/* Backdrop */}
-      {drawerOpen && (
-        <div
-          className="mobile-nav-backdrop"
-          onClick={() => setDrawerOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* More drawer */}
-      <div
-        className={`mobile-nav-drawer ${drawerOpen ? 'open' : ''}`}
-        role="dialog"
-        aria-label="More navigation options"
-        aria-hidden={!drawerOpen}
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        side="bottom"
+        size="auto"
+        title="More"
       >
-        <div className="mobile-nav-drawer-handle" />
-        <div className="mobile-nav-drawer-title">More</div>
         <div className="mobile-nav-grid">
           {DRAWER_TABS.map(({ key, label, Icon }) => (
             <button
@@ -83,7 +73,7 @@ export function MobileNav({ activeTab, onNavigate }: MobileNavProps) {
             </button>
           ))}
         </div>
-      </div>
+      </Drawer>
 
       {/* Bottom bar */}
       <nav className="mobile-nav" aria-label="Primary navigation">

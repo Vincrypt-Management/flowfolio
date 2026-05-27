@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invokeWithResilience } from '../services/apiClient';
 import { ShieldAlert } from 'lucide-react';
-import { Button } from '@flowfolio/ui';
+import { Button, Modal } from '@flowfolio/ui';
 import './PrivacyDisclosure.css';
 
 interface Props {
@@ -49,13 +49,11 @@ export function PrivacyDisclosure({ featureName, onAccept, onDecline }: Props) {
   if (!checked) return null;
 
   return (
-    <div className="privacy-disclosure-overlay" role="dialog" aria-modal="true" aria-labelledby="privacy-disclosure-heading">
+    <Modal open onClose={onDecline} title="Privacy Notice" size="md" closeOnOverlay={false}>
       <div className="privacy-disclosure-modal">
         <div className="privacy-disclosure-icon">
           <ShieldAlert size={40} />
         </div>
-
-        <h2 id="privacy-disclosure-heading">Privacy Notice</h2>
 
         <div className="privacy-disclosure-body">
           <p>
@@ -101,6 +99,6 @@ export function PrivacyDisclosure({ featureName, onAccept, onDecline }: Props) {
           </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -3,7 +3,7 @@
  * Displays AI-generated analysis reports with export functionality
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   FileText,
   Download,
@@ -11,15 +11,13 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  ChevronDown,
-  ChevronUp,
   Clock,
   Shield,
   Target,
   X,
 } from 'lucide-react';
 import type { AnalysisReport, ActionItem } from '../services/analysisReport';
-import { Button, IconButton, Tooltip, CopyButton } from '@flowfolio/ui';
+import { Button, IconButton, Tooltip, CopyButton, Accordion, type AccordionItem } from '@flowfolio/ui';
 import './ReportViewer.css';
 
 interface ReportViewerProps {
@@ -35,28 +33,19 @@ export default function ReportViewer({
   onExportMarkdown, 
   onExportJSON 
 }: ReportViewerProps) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['Executive Summary']));
+  const [expandedSections, setExpandedSections] = useState<string[]>(['Executive Summary']);
 
-  const toggleSection = (title: string) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(title)) {
-        next.delete(title);
-      } else {
-        next.add(title);
-      }
-      return next;
-    });
-  };
+  const allSectionIds = useMemo(() => {
+    const ids = ['Executive Summary', ...report.sections.map(s => s.title)];
+    if (report.keyTakeaways.length > 0) ids.push('Key Takeaways');
+    if (report.actionItems.length > 0) ids.push('Action Items');
+    if (report.riskWarnings.length > 0) ids.push('Risk Warnings');
+    if (report.marketContext) ids.push('Market Context');
+    return ids;
+  }, [report]);
 
-  const expandAll = () => {
-    const allTitles = report.sections.map(s => s.title);
-    setExpandedSections(new Set(['Executive Summary', ...allTitles]));
-  };
-
-  const collapseAll = () => {
-    setExpandedSections(new Set());
-  };
+  const expandAll = () => setExpandedSections(allSectionIds);
+  const collapseAll = () => setExpandedSections([]);
 
   const handleDownloadMarkdown = () => {
     if (onExportMarkdown) {
@@ -173,207 +162,169 @@ export default function ReportViewer({
         </span>
       </div>
 
-      {/* Executive Summary */}
-      <div className="report-section executive-summary">
-        <div 
-          className="section-header"
-          onClick={() => toggleSection('Executive Summary')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Executive Summary'); } }}
-        >
-          <div className="section-title">
-            <Target size={18} />
-            <h3>Executive Summary</h3>
-          </div>
-          {expandedSections.has('Executive Summary') ? 
-            <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </div>
-        {expandedSections.has('Executive Summary') && (
-          <div className="section-content">
-            <div className="summary-text">{report.executiveSummary}</div>
-          </div>
-        )}
-      </div>
+      <Accordion
+        className="report-accordion"
+        allowMultiple
+        openIds={expandedSections}
+        onOpenChange={setExpandedSections}
+        items={(() => {
+          const items: AccordionItem[] = [];
 
-      {/* Main Sections */}
-      {report.sections.map((section, index) => (
-        <div key={index} className="report-section">
-          <div 
-            className="section-header"
-            onClick={() => toggleSection(section.title)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection(section.title); } }}
-          >
-            <div className="section-title">
-              {getSentimentIcon(section.sentiment)}
-              <h3>{section.title}</h3>
-            </div>
-            {expandedSections.has(section.title) ? 
-              <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-          {expandedSections.has(section.title) && (
-            <div className="section-content">
-              <div className="section-text">{section.content}</div>
-              
-              {section.highlights && section.highlights.length > 0 && (
-                <div className="section-highlights">
-                  <h4>Key Points</h4>
-                  <ul>
-                    {section.highlights.map((h, i) => (
-                      <li key={i}>{h}</li>
+          items.push({
+            id: 'Executive Summary',
+            title: (
+              <span className="section-title">
+                <Target size={18} />
+                <h3>Executive Summary</h3>
+              </span>
+            ),
+            content: (
+              <div className="section-content executive-summary">
+                <div className="summary-text">{report.executiveSummary}</div>
+              </div>
+            ),
+          });
+
+          report.sections.forEach((section, index) => {
+            items.push({
+              id: section.title,
+              title: (
+                <span className="section-title">
+                  {getSentimentIcon(section.sentiment)}
+                  <h3>{section.title}</h3>
+                </span>
+              ),
+              content: (
+                <div key={index} className="section-content">
+                  <div className="section-text">{section.content}</div>
+                  {section.highlights && section.highlights.length > 0 && (
+                    <div className="section-highlights">
+                      <h4>Key Points</h4>
+                      <ul>
+                        {section.highlights.map((h, i) => (
+                          <li key={i}>{h}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {section.metrics && Object.keys(section.metrics).length > 0 && (
+                    <div className="section-metrics">
+                      {Object.entries(section.metrics).map(([key, value]) => (
+                        <div key={key} className="metric-item">
+                          <span className="metric-label">{key}</span>
+                          <span className="metric-value">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ),
+            });
+          });
+
+          if (report.keyTakeaways.length > 0) {
+            items.push({
+              id: 'Key Takeaways',
+              title: (
+                <span className="section-title">
+                  <Target size={18} />
+                  <h3>Key Takeaways</h3>
+                </span>
+              ),
+              content: (
+                <div className="section-content takeaways-section">
+                  <ul className="takeaways-list">
+                    {report.keyTakeaways.map((takeaway, index) => (
+                      <li key={index}>{takeaway}</li>
                     ))}
                   </ul>
                 </div>
-              )}
-              
-              {section.metrics && Object.keys(section.metrics).length > 0 && (
-                <div className="section-metrics">
-                  {Object.entries(section.metrics).map(([key, value]) => (
-                    <div key={key} className="metric-item">
-                      <span className="metric-label">{key}</span>
-                      <span className="metric-value">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
+              ),
+            });
+          }
 
-      {/* Key Takeaways */}
-      {report.keyTakeaways.length > 0 && (
-        <div className="report-section takeaways-section">
-          <div 
-            className="section-header"
-            onClick={() => toggleSection('Key Takeaways')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Key Takeaways'); } }}
-          >
-            <div className="section-title">
-              <Target size={18} />
-              <h3>Key Takeaways</h3>
-            </div>
-            {expandedSections.has('Key Takeaways') ? 
-              <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-          {expandedSections.has('Key Takeaways') && (
-            <div className="section-content">
-              <ul className="takeaways-list">
-                {report.keyTakeaways.map((takeaway, index) => (
-                  <li key={index}>{takeaway}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Action Items */}
-      {report.actionItems.length > 0 && (
-        <div className="report-section actions-section">
-          <div 
-            className="section-header"
-            onClick={() => toggleSection('Action Items')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Action Items'); } }}
-          >
-            <div className="section-title">
-              <Target size={18} />
-              <h3>Action Items</h3>
-              <span className="action-count">{report.actionItems.length}</span>
-            </div>
-            {expandedSections.has('Action Items') ? 
-              <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-          {expandedSections.has('Action Items') && (
-            <div className="section-content">
-              <div className="action-items-grid">
-                {report.actionItems.map((item, index) => (
-                  <div key={index} className={`action-item ${getPriorityClass(item.priority)}`}>
-                    <div className="action-header">
-                      <span className={`priority-badge ${item.priority}`}>
-                        {item.priority.toUpperCase()}
-                      </span>
-                      <span className="action-timeline">{item.timeline}</span>
-                    </div>
-                    <p className="action-text">{item.action}</p>
-                    {item.rationale && (
-                      <p className="action-rationale">{item.rationale}</p>
-                    )}
-                    {item.expectedImpact && (
-                      <p className="action-impact">
-                        <strong>Expected Impact:</strong> {item.expectedImpact}
-                      </p>
-                    )}
+          if (report.actionItems.length > 0) {
+            items.push({
+              id: 'Action Items',
+              title: (
+                <span className="section-title">
+                  <Target size={18} />
+                  <h3>Action Items</h3>
+                  <span className="action-count">{report.actionItems.length}</span>
+                </span>
+              ),
+              content: (
+                <div className="section-content actions-section">
+                  <div className="action-items-grid">
+                    {report.actionItems.map((item, index) => (
+                      <div key={index} className={`action-item ${getPriorityClass(item.priority)}`}>
+                        <div className="action-header">
+                          <span className={`priority-badge ${item.priority}`}>
+                            {item.priority.toUpperCase()}
+                          </span>
+                          <span className="action-timeline">{item.timeline}</span>
+                        </div>
+                        <p className="action-text">{item.action}</p>
+                        {item.rationale && (
+                          <p className="action-rationale">{item.rationale}</p>
+                        )}
+                        {item.expectedImpact && (
+                          <p className="action-impact">
+                            <strong>Expected Impact:</strong> {item.expectedImpact}
+                          </p>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+                </div>
+              ),
+            });
+          }
 
-      {/* Risk Warnings */}
-      {report.riskWarnings.length > 0 && (
-        <div className="report-section risk-section">
-          <div 
-            className="section-header"
-            onClick={() => toggleSection('Risk Warnings')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Risk Warnings'); } }}
-          >
-            <div className="section-title">
-              <Shield size={18} />
-              <h3>Risk Warnings</h3>
-            </div>
-            {expandedSections.has('Risk Warnings') ? 
-              <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-          {expandedSections.has('Risk Warnings') && (
-            <div className="section-content">
-              <ul className="risk-list">
-                {report.riskWarnings.map((warning, index) => (
-                  <li key={index}>
-                    <AlertTriangle size={14} />
-                    {warning}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+          if (report.riskWarnings.length > 0) {
+            items.push({
+              id: 'Risk Warnings',
+              title: (
+                <span className="section-title">
+                  <Shield size={18} />
+                  <h3>Risk Warnings</h3>
+                </span>
+              ),
+              content: (
+                <div className="section-content risk-section">
+                  <ul className="risk-list">
+                    {report.riskWarnings.map((warning, index) => (
+                      <li key={index}>
+                        <AlertTriangle size={14} />
+                        {warning}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+            });
+          }
 
-      {/* Market Context */}
-      {report.marketContext && (
-        <div className="report-section context-section">
-          <div 
-            className="section-header"
-            onClick={() => toggleSection('Market Context')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection('Market Context'); } }}
-          >
-            <div className="section-title">
-              <TrendingUp size={18} />
-              <h3>Market Context</h3>
-            </div>
-            {expandedSections.has('Market Context') ? 
-              <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </div>
-          {expandedSections.has('Market Context') && (
-            <div className="section-content">
-              <p>{report.marketContext}</p>
-            </div>
-          )}
-        </div>
-      )}
+          if (report.marketContext) {
+            items.push({
+              id: 'Market Context',
+              title: (
+                <span className="section-title">
+                  <TrendingUp size={18} />
+                  <h3>Market Context</h3>
+                </span>
+              ),
+              content: (
+                <div className="section-content context-section">
+                  <p>{report.marketContext}</p>
+                </div>
+              ),
+            });
+          }
+
+          return items;
+        })()}
+      />
 
       {/* Disclaimer */}
       <div className="report-disclaimer">

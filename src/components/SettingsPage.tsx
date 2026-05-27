@@ -20,7 +20,7 @@ const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }>
   { key: 'alpha_vantage_key', label: 'Alpha Vantage Key', placeholder: 'Enter key…' },
   { key: 'openrouter_key',    label: 'OpenRouter Key',    placeholder: 'Enter key…' },
 ];
-import { Button, PasswordInput, Alert } from '@flowfolio/ui';
+import { Button, PasswordInput, Alert, Textarea } from '@flowfolio/ui';
 import './SettingsPage.css';
 import { FREE_MODELS, DEFAULT_FREE_MODEL } from '../constants/freeModels';
 import { getSelectedModel, setSelectedModel } from '../services/aiModel';
@@ -388,7 +388,7 @@ export function SettingsPage() {
             </div>
             <div className="form-group">
               <label htmlFor="bio">Bio</label>
-              <textarea
+              <Textarea
                 id="bio"
                 value={form.bio}
                 onChange={e => handleChange('bio', e.target.value)}

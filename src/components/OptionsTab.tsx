@@ -6,7 +6,7 @@ import {
   OptionsCloseEarlyModal,
   type OptionsCloseEarlyPosition,
 } from './OptionsCloseEarlyModal';
-import { Button, Input, Select, SegmentedControl } from '@flowfolio/ui';
+import { Button, Input, Select, SegmentedControl, Modal } from '@flowfolio/ui';
 
 const log = createLogger('OptionsTab');
 
@@ -236,9 +236,13 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
         </div>
       </header>
 
-      {showAdd && (
-        <div className="options-tab__modal" role="dialog" aria-label="Add option position">
-          <h3>Add Position</h3>
+      <Modal
+        open={showAdd}
+        onClose={() => { setShowAdd(false); setForm(EMPTY_FORM); }}
+        title="Add Position"
+        size="sm"
+      >
+        <div className="options-tab__modal">
           <label>
             Strategy
             <Select
@@ -303,7 +307,7 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
             </Button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {closeTarget && (
         <OptionsCloseEarlyModal

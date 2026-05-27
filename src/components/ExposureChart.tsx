@@ -6,18 +6,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { AlertTriangle, Globe } from 'lucide-react';
-import { Spinner } from '@flowfolio/ui';
+import { Spinner, DonutChart, type DonutSlice } from '@flowfolio/ui';
 import './ExposureChart.css';
 
 const log = createLogger('ExposureChart');
@@ -56,51 +48,6 @@ const SECTOR_COLORS = [
 ];
 
 const UNKNOWN_SECTOR = 'Unknown';
-
-// --- Custom Tooltip ---
-
-interface TooltipPayloadEntry {
-  name: string;
-  value: number;
-  payload: SectorSlice;
-}
-
-interface SectorTooltipProps {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
-}
-
-function SectorTooltip({ active, payload }: SectorTooltipProps) {
-  if (!active || !payload || payload.length === 0) return null;
-
-  const entry = payload[0];
-  const slice = entry.payload;
-
-  return (
-    <div
-      style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '8px 12px',
-        fontSize: '0.8rem',
-        color: 'var(--text-main)',
-        minWidth: 160,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{slice.name}</div>
-      <div style={{ color: 'var(--text-muted)' }}>
-        {slice.percentage.toFixed(1)}% allocation
-      </div>
-      <div style={{ color: 'var(--text-muted)' }}>
-        ${slice.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-      </div>
-      <div style={{ color: 'var(--text-dim)', marginTop: 4, fontSize: '0.75rem' }}>
-        {slice.symbols.join(', ')}
-      </div>
-    </div>
-  );
-}
 
 // --- Main Component ---
 
@@ -207,38 +154,23 @@ export function ExposureChart({ holdings }: ExposureChartProps) {
     );
   }
 
+  const donutSlices: DonutSlice[] = sectors.map((slice, idx) => ({
+    name: slice.name,
+    value: slice.percentage,
+    color: SECTOR_COLORS[idx % SECTOR_COLORS.length],
+  }));
+
   return (
     <div className="exposure-chart">
       {/* Pie chart */}
       <div className="exposure-chart-pie">
-        <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie
-              data={sectors as unknown as Array<Record<string, unknown>>}
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={100}
-              paddingAngle={2}
-              dataKey="percentage"
-              nameKey="name"
-              stroke="none"
-            >
-              {sectors.map((_, idx) => (
-                <Cell
-                  key={idx}
-                  fill={SECTOR_COLORS[idx % SECTOR_COLORS.length]}
-                />
-              ))}
-            </Pie>
-            <Tooltip content={<SectorTooltip />} />
-            <Legend
-              iconType="circle"
-              iconSize={10}
-              wrapperStyle={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        <DonutChart
+          data={donutSlices}
+          height={260}
+          innerRadius={60}
+          outerRadius={100}
+          showLegend={false}
+        />
       </div>
 
       {/* Breakdown table */}

@@ -1,4 +1,5 @@
 import { useState, useMemo, memo } from "react";
+import { Checkbox } from "@flowfolio/ui";
 import { useIsMounted } from '../hooks/useIsMounted';
 import { invokeWithResilience } from "../services/apiClient";
 import { formatCurrency } from '../shared/utils';
@@ -372,14 +373,11 @@ export function PortfolioOptimizerComponent({ holdings, portfolioName }: Portfol
             />
           </div>
           <div className="setting-item">
-            <label className="toggle-label">
-              <input
-                type="checkbox"
-                checked={useLiveMode}
-                onChange={(e) => setUseLiveMode(e.target.checked)}
-              />
-              <span>Enable Live Updates</span>
-            </label>
+            <Checkbox
+              label="Enable Live Updates"
+              checked={useLiveMode}
+              onChange={(e) => setUseLiveMode(e.target.checked)}
+            />
             <span className="setting-hint">See real-time progress and partial results</span>
           </div>
         </div>

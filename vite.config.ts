@@ -71,6 +71,14 @@ export default defineConfig({
       ],
     },
 
+    // Deduplicate React across the app and the vendored @flowfolio/ui package —
+    // without this, the library's own node_modules/react gets resolved alongside
+    // the app's copy, breaking hooks ("Invalid hook call") in any library
+    // component that uses useState / useEffect / useId / etc.
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+    },
+
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
     //
     // 1. prevent Vite from obscuring rust errors

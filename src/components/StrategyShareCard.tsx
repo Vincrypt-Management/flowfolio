@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
-import { X, Download, Copy, TrendingUp } from "lucide-react";
+import { Download, Copy, TrendingUp } from "lucide-react";
 import { useToast } from "./Toast";
-import { Button, IconButton, Tooltip } from "@flowfolio/ui";
+import { Button, Modal } from "@flowfolio/ui";
 import "./StrategyShareCard.css";
 
 interface Factor {
@@ -325,26 +325,18 @@ export function StrategyShareCard({
   const displayFactors = factors.slice(0, 10);
 
   return (
-    <div className="share-card-overlay" onClick={onClose}>
-      <div
-        className="share-card-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Share Strategy Card"
-      >
-        <div className="share-card-modal-header">
-          <h3>
-            <TrendingUp size={18} />
-            Share Strategy
-          </h3>
-          <Tooltip content="Close" side="bottom">
-            <IconButton variant="ghost" size="md" onClick={onClose} aria-label="Close">
-              <X size={16} />
-            </IconButton>
-          </Tooltip>
-        </div>
-
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={
+        <span className="share-card-modal-title">
+          <TrendingUp size={18} />
+          Share Strategy
+        </span>
+      }
+    >
+      <div className="share-card-modal">
         {/* Preview card */}
         <div className="share-card-preview" ref={previewRef}>
           <div className="share-card">
@@ -462,6 +454,6 @@ export function StrategyShareCard({
           No personal data, holdings, or portfolio values are included.
         </p>
       </div>
-    </div>
+    </Modal>
   );
 }

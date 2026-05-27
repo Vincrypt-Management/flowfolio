@@ -3,7 +3,7 @@ import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { useToast } from './Toast';
 import { findReplacementPeers } from '../services/replacementPeers';
-import { Button, EmptyState } from '@flowfolio/ui';
+import { Button, EmptyState, Slider } from '@flowfolio/ui';
 
 const log = createLogger('TaxTab');
 
@@ -115,18 +115,13 @@ export function TaxTab({ portfolioName, currentPrices }: TaxTabProps) {
       <header className="tax-tab__header">
         <h2>Tax-Loss Harvesting</h2>
         <div className="tax-tab__rate-control">
-          <label htmlFor="marginal-rate">
-            Marginal tax rate: {(rate * 100).toFixed(0)}%
-          </label>
-          <input
-            id="marginal-rate"
-            aria-label="marginal tax rate"
-            type="range"
-            min="0"
-            max="0.6"
-            step="0.01"
+          <Slider
+            label={`Marginal tax rate: ${(rate * 100).toFixed(0)}%`}
+            min={0}
+            max={0.6}
+            step={0.01}
             value={rate}
-            onChange={(e) => setRate(parseFloat(e.target.value))}
+            onChange={setRate}
           />
           <Button type="button" variant="secondary" size="sm" onClick={onSaveRateAsDefault}>
             Save as default

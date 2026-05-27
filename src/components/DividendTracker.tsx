@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useReducer } from 'react';
 import { DollarSign, Plus, X, RefreshCw } from 'lucide-react';
-import { Spinner, EmptyState, Button } from '@flowfolio/ui';
+import { Spinner, EmptyState, Button, Checkbox } from '@flowfolio/ui';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
@@ -287,16 +287,13 @@ export function DividendTracker({ portfolioName }: DividendTrackerProps) {
               />
             </div>
             <div className="div-tracker__form-field div-tracker__form-field--toggle">
-              <label className="div-tracker__reinvest-label">
-                <input
-                  type="checkbox"
-                  checked={form.reinvested}
-                  onChange={(e) =>
-                    dispatch({ type: 'SET_FIELD', field: 'reinvested', value: e.target.checked })
-                  }
-                />
-                <span>Reinvested (DRIP)</span>
-              </label>
+              <Checkbox
+                label="Reinvested (DRIP)"
+                checked={form.reinvested}
+                onChange={(e) =>
+                  dispatch({ type: 'SET_FIELD', field: 'reinvested', value: e.target.checked })
+                }
+              />
             </div>
           </div>
           <div className="div-tracker__form-actions">

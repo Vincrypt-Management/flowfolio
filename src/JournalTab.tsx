@@ -4,7 +4,7 @@ import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { logger } from "./core/logger";
 import { useUserMode } from './contexts/UserModeContext';
-import { Button } from "@flowfolio/ui";
+import { Button, Textarea } from "@flowfolio/ui";
 
 interface JournalEntry {
   id: string;
@@ -354,7 +354,7 @@ export function JournalTab() {
 
             <div className="form-group">
               <label>Content</label>
-              <textarea
+              <Textarea
                 value={newEntry.content}
                 onChange={(e) => setNewEntry({ ...newEntry, content: e.target.value })}
                 placeholder="Write your thoughts, decisions, or observations..."

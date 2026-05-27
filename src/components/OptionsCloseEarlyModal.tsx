@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Input } from '@flowfolio/ui';
+import { Button, Input, Modal } from '@flowfolio/ui';
 
 export interface OptionsCloseEarlyPosition {
   id: string;
@@ -27,65 +27,65 @@ export function OptionsCloseEarlyModal({ position, onCancel, onConfirm }: Props)
   }, [debit, position]);
 
   const strategyLabel = position.strategy === 'covered_call' ? 'CC' : 'CSP';
+  const title = `Close Early — ${position.symbol} ${strategyLabel} $${position.strike.toFixed(2)}`;
 
   return (
-    <div className="options-tab__modal" role="dialog" aria-label="Close option early">
-      <h3>
-        Close Early — {position.symbol} {strategyLabel} ${position.strike.toFixed(2)}
-      </h3>
-      <p>
-        Contracts: <strong>{position.contracts}</strong>
-        &nbsp;|&nbsp; Open premium: <strong>${position.premium_per_contract.toFixed(2)}</strong>
-      </p>
+    <Modal open onClose={onCancel} title={title} size="sm" closeOnOverlay={!submitting}>
+      <div className="options-tab__modal">
+        <p>
+          Contracts: <strong>{position.contracts}</strong>
+          &nbsp;|&nbsp; Open premium: <strong>${position.premium_per_contract.toFixed(2)}</strong>
+        </p>
 
-      <label>
-        Close debit (per contract)
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={debit}
-          aria-label="close debit"
-          onChange={(e) => setDebit(e.target.value)}
-        />
-      </label>
+        <label>
+          Close debit (per contract)
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            value={debit}
+            aria-label="close debit"
+            onChange={(e) => setDebit(e.target.value)}
+          />
+        </label>
 
-      <label>
-        Close date
-        <Input
-          type="date"
-          value={closeDate}
-          aria-label="close date"
-          onChange={(e) => setCloseDate(e.target.value)}
-        />
-      </label>
+        <label>
+          Close date
+          <Input
+            type="date"
+            value={closeDate}
+            aria-label="close date"
+            onChange={(e) => setCloseDate(e.target.value)}
+          />
+        </label>
 
-      <p>
-        Realized P&amp;L: <strong>${realized.toFixed(2)}</strong>
-      </p>
+        <p>
+          Realized P&amp;L: <strong>${realized.toFixed(2)}</strong>
+        </p>
 
-      <div className="options-tab__modal-actions">
-        <Button
-          type="button"
-          variant="primary"
-          loading={submitting}
-          onClick={async () => {
-            const d = Number.parseFloat(debit);
-            if (!Number.isFinite(d) || d < 0) return;
-            setSubmitting(true);
-            try {
-              await onConfirm(d, closeDate);
-            } finally {
-              setSubmitting(false);
-            }
-          }}
-        >
-          Confirm
-        </Button>
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
-          Cancel
-        </Button>
+        <div className="options-tab__modal-actions">
+          <Button
+            type="button"
+            variant="primary"
+            loading={submitting}
+            onClick={async () => {
+              const d = Number.parseFloat(debit);
+              if (!Number.isFinite(d) || d < 0) return;
+              setSubmitting(true);
+              try {
+                await onConfirm(d, closeDate);
+              } finally {
+                setSubmitting(false);
+              }
+            }}
+          >
+            Confirm
+          </Button>
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
+            Cancel
+          </Button>
+        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
