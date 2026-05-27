@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { invokeWithResilience } from '../../../services/apiClient';
 import { Plus } from 'lucide-react';
+import { Button, Input, Alert } from '@flowfolio/ui';
 
 const PRESETS: Record<string, string[]> = {
   'S&P 500 Sample': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'UNH'],
@@ -44,27 +45,27 @@ export function StepUniverse({ onNext, onSkip }: Props) {
       <div className="onboarding-presets">
         <span className="text-muted" style={{ fontSize: '12px' }}>Quick presets:</span>
         {Object.keys(PRESETS).map(p => (
-          <button key={p} className="btn-secondary btn-sm" onClick={() => handlePreset(p)}>{p}</button>
+          <Button key={p} variant="secondary" size="sm" onClick={() => handlePreset(p)}>{p}</Button>
         ))}
       </div>
 
       <div className="form-group">
         <label>Universe name</label>
-        <input className="form-control" value={name} onChange={e => setName(e.target.value)} placeholder="My First Universe" />
+        <Input value={name} onChange={e => setName(e.target.value)} placeholder="My First Universe" />
       </div>
       <div className="form-group">
         <label>Tickers (comma-separated)</label>
-        <input className="form-control" value={symbols} onChange={e => setSymbols(e.target.value)} placeholder="AAPL, MSFT, GOOGL" />
+        <Input value={symbols} onChange={e => setSymbols(e.target.value)} placeholder="AAPL, MSFT, GOOGL" />
       </div>
 
-      {error && <p className="text-error">{error}</p>}
-      {created && <p className="text-success">Universe created!</p>}
+      {error && <Alert variant="error" title="Could not create universe" description={error} />}
+      {created && <Alert variant="success" title="Universe created!" />}
 
       <div className="onboarding-actions">
-        <button className="btn-primary" onClick={handleCreate} disabled={created}>
-          <Plus size={14} /> Create Universe
-        </button>
-        <button className="btn-ghost" onClick={onSkip}>Skip for now</button>
+        <Button variant="primary" onClick={handleCreate} disabled={created} leftIcon={<Plus size={14} />}>
+          Create Universe
+        </Button>
+        <Button variant="ghost" onClick={onSkip}>Skip for now</Button>
       </div>
     </div>
   );

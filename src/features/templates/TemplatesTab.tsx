@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { TEMPLATE_METADATA, CATEGORY_COLORS } from "../../shared/constants/templates";
 import { VibePlan } from "../../shared/types";
+import { Button } from "@flowfolio/ui";
 
 interface TemplatesTabProps {
   templates: string[];
@@ -63,17 +64,17 @@ export function TemplatesTab({
                       </div>
                     ))}
                   </div>
-                  <button className="btn-primary" style={{ width: '100%' }} onClick={() => onLoadTemplate(template)}>
+                  <Button variant="primary" style={{ width: '100%' }} onClick={() => onLoadTemplate(template)}>
                     Load Template →
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
                   <h3>{template}</h3>
                   <p>Click to load this template configuration</p>
-                  <button className="btn-primary" style={{ width: '100%' }} onClick={() => onLoadTemplate(template)}>
+                  <Button variant="primary" style={{ width: '100%' }} onClick={() => onLoadTemplate(template)}>
                     Load Template →
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
@@ -93,9 +94,9 @@ export function TemplatesTab({
                 </li>
               ))}
             </ul>
-            <button className="btn-primary" onClick={onNavigateToDashboard}>
-              Use This Plan <ArrowRight size={16} />
-            </button>
+            <Button variant="primary" onClick={onNavigateToDashboard} rightIcon={<ArrowRight size={14} />}>
+              Use This Plan
+            </Button>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { VibePlan } from "../../shared/types";
+import { Button, IconButton } from "@flowfolio/ui";
 
 interface SymbolScore {
   symbol: string;
@@ -58,13 +59,14 @@ export function RankingsTab({
           />
         </div>
 
-        <button
-          className="btn-primary"
+        <Button
+          variant="primary"
           onClick={onScoreSymbols}
-          disabled={isScoring || !plan}
+          disabled={!plan}
+          loading={isScoring}
         >
           {isScoring ? "Scoring..." : "Score Symbols"}
-        </button>
+        </Button>
 
         {!plan && <p className="note">Please select a plan from Templates first</p>}
       </div>
@@ -103,12 +105,13 @@ export function RankingsTab({
                       <td key={i} className="font-mono">{f.normalized_value.toFixed(0)}</td>
                     ))}
                     <td>
-                      <button
-                        className="btn-small"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => onSelectScore(score)}
                       >
                         View
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -121,13 +124,15 @@ export function RankingsTab({
       {selectedScore && (
         <div className="card mt-lg relative">
           <h3>Detailed Analysis: {selectedScore.symbol}</h3>
-          <button
+          <IconButton
+            variant="ghost"
+            size="sm"
             className="btn-close"
             onClick={() => onSelectScore(null)}
             aria-label="Close"
           >
             ✕
-          </button>
+          </IconButton>
 
           <div className="explanation-box">
             <pre>{selectedScore.explanation}</pre>

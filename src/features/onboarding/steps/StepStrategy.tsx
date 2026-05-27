@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invokeWithResilience } from '../../../services/apiClient';
 import { Sparkles } from 'lucide-react';
+import { Button } from '@flowfolio/ui';
 
 interface Props { onNext: () => void; onSkip: () => void; }
 
@@ -42,10 +43,10 @@ export function StepStrategy({ onNext, onSkip }: Props) {
       </div>
 
       <div className="onboarding-actions">
-        <button className="btn-primary" onClick={handleLoad}>
+        <Button variant="primary" onClick={handleLoad}>
           {selected ? `Load "${selected}"` : 'Continue'}
-        </button>
-        <button className="btn-ghost" onClick={onSkip}>Skip for now</button>
+        </Button>
+        <Button variant="ghost" onClick={onSkip}>Skip for now</Button>
       </div>
     </div>
   );

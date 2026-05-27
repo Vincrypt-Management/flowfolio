@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { invokeWithResilience } from '../../../services/apiClient';
 import { Key, CheckCircle } from 'lucide-react';
+import { Button, Input, Alert } from '@flowfolio/ui';
 
 interface Props { onFinish: () => void; }
 
@@ -39,9 +40,8 @@ export function StepApiKeys({ onFinish }: Props) {
               <Key size={12} /> {label}
               <span className="text-muted" style={{ fontSize: '11px', marginLeft: '6px' }}>{hint}</span>
             </label>
-            <input
+            <Input
               type="password"
-              className="form-control"
               placeholder="Enter key… (optional)"
               value={keys[key] ?? ''}
               onChange={e => setKeys(prev => ({ ...prev, [key]: e.target.value }))}
@@ -50,12 +50,16 @@ export function StepApiKeys({ onFinish }: Props) {
         ))}
       </div>
 
-      {saved && <p className="text-success"><CheckCircle size={14} /> Keys saved!</p>}
+      {saved && <Alert variant="success" title="Keys saved!" />}
 
       <div className="onboarding-actions">
-        <button className="btn-primary" onClick={handleSave}>
+        <Button
+          variant="primary"
+          onClick={handleSave}
+          leftIcon={saved ? <CheckCircle size={14} /> : undefined}
+        >
           {Object.values(keys).some(v => v.trim()) ? 'Save & Get Started' : 'Get Started →'}
-        </button>
+        </Button>
       </div>
     </div>
   );

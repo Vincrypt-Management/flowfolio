@@ -1,5 +1,6 @@
 import { useUserMode } from '../../../contexts/UserModeContext';
 import { Shield, Wifi } from 'lucide-react';
+import { Button } from '@flowfolio/ui';
 
 interface Props { onNext: () => void; }
 
@@ -42,9 +43,9 @@ export function StepWelcome({ onNext }: Props) {
         </p>
       </div>
 
-      <button className="btn-primary onboarding-next-btn" onClick={onNext}>
+      <Button variant="primary" className="onboarding-next-btn" onClick={onNext}>
         Next →
-      </button>
+      </Button>
     </div>
   );
 }
