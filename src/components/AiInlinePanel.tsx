@@ -1,4 +1,5 @@
 import { useAiStream } from '../hooks/useAiStream';
+import { Button, Alert } from '@flowfolio/ui';
 
 interface AiInlinePanelProps {
   prompt: string;
@@ -26,22 +27,19 @@ export function AiInlinePanel({
     <section className="ai-inline-panel" aria-live="polite">
       <header className="ai-inline-panel__header">
         {isStreaming ? (
-          <button
-            type="button"
-            onClick={stop}
-            className="ai-inline-panel__stop"
-          >
+          <Button type="button" variant="danger" size="sm" onClick={stop}>
             Stop
-          </button>
+          </Button>
         ) : (
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             onClick={() => start(prompt)}
             disabled={triggerDisabled}
-            className="ai-inline-panel__trigger"
           >
             {buttonLabel}
-          </button>
+          </Button>
         )}
       </header>
 
@@ -54,12 +52,12 @@ export function AiInlinePanel({
       )}
 
       {isError && (
-        <div className="ai-inline-panel__error">
-          <p>AI request failed: {state.error}</p>
+        <>
+          <Alert variant="error" title="AI request failed" description={state.error ?? undefined} />
           {state.tokens && (
             <pre className="ai-inline-panel__partial muted">{state.tokens}</pre>
           )}
-        </div>
+        </>
       )}
     </section>
   );

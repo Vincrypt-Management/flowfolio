@@ -2,6 +2,7 @@ import { useState, memo } from "react";
 import { invokeWithResilience } from "../services/apiClient";
 import { useToast } from "./Toast";
 import { useUserMode } from '../contexts/UserModeContext';
+import { Button, EmptyState } from "@flowfolio/ui";
 import {
   ClipboardCheck,
   CheckCircle2,
@@ -239,21 +240,14 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
               })}
             </select>
           </div>
-          <button
-            className="btn-primary"
+          <Button
+            variant="primary"
             onClick={generateReview}
-            disabled={isLoading}
+            loading={isLoading}
+            leftIcon={!isLoading ? <RefreshCw size={14} /> : undefined}
           >
-            {isLoading ? (
-              <>
-                <RefreshCw size={16} className="spinning" /> Generating...
-              </>
-            ) : (
-              <>
-                <RefreshCw size={16} /> Generate Review
-              </>
-            )}
-          </button>
+            {isLoading ? 'Generating...' : 'Generate Review'}
+          </Button>
         </div>
       </div>
 
@@ -387,9 +381,9 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
           {/* Export Button */}
           {isAdvanced && (
             <div className="review-footer">
-              <button className="btn-secondary" onClick={exportReviewMarkdown}>
-                <Download size={16} /> Export Review to Markdown
-              </button>
+              <Button variant="secondary" onClick={exportReviewMarkdown} leftIcon={<Download size={14} />}>
+                Export Review to Markdown
+              </Button>
               <span className="review-date">
                 Generated: {new Date(review.date).toLocaleString()}
               </span>
@@ -399,17 +393,12 @@ export function YearlyReviewComponent({ portfolioName = "My Portfolio" }: Yearly
       )}
 
       {!review && !isLoading && (
-        <div className="empty-state">
-          <ClipboardCheck size={48} />
-          <h4>Start Your Yearly Review</h4>
-          <p>
-            Generate a comprehensive checklist to review your investment strategy,
-            portfolio performance, risk management, and more.
-          </p>
-          <button className="btn-primary" onClick={generateReview}>
-            <RefreshCw size={16} /> Generate {selectedYear} Review
-          </button>
-        </div>
+        <EmptyState
+          icon={<ClipboardCheck size={20} />}
+          title="Start your yearly review"
+          description="Generate a comprehensive checklist to review your investment strategy, portfolio performance, risk management, and more."
+          action={{ label: `Generate ${selectedYear} Review`, onClick: generateReview }}
+        />
       )}
     </div>
   );

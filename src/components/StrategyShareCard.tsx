@@ -1,6 +1,7 @@
 import { useRef, useCallback } from "react";
 import { X, Download, Copy, TrendingUp } from "lucide-react";
 import { useToast } from "./Toast";
+import { Button, IconButton, Tooltip } from "@flowfolio/ui";
 import "./StrategyShareCard.css";
 
 interface Factor {
@@ -337,13 +338,11 @@ export function StrategyShareCard({
             <TrendingUp size={18} />
             Share Strategy
           </h3>
-          <button
-            className="share-card-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
+          <Tooltip content="Close" side="bottom">
+            <IconButton variant="ghost" size="md" onClick={onClose} aria-label="Close">
+              <X size={16} />
+            </IconButton>
+          </Tooltip>
         </div>
 
         {/* Preview card */}
@@ -443,17 +442,20 @@ export function StrategyShareCard({
 
         {/* Action buttons */}
         <div className="share-card-actions">
-          <button className="share-btn-download" onClick={handleDownloadPNG}>
-            <Download size={16} />
-            Download PNG
-          </button>
-          <button
-            className="share-btn-copy"
-            onClick={handleCopyToClipboard}
+          <Button
+            variant="secondary"
+            onClick={handleDownloadPNG}
+            leftIcon={<Download size={14} />}
           >
-            <Copy size={16} />
+            Download PNG
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleCopyToClipboard}
+            leftIcon={<Copy size={14} />}
+          >
             Copy to Clipboard
-          </button>
+          </Button>
         </div>
 
         <p className="share-card-note">

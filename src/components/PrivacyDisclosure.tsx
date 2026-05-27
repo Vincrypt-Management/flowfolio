@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invokeWithResilience } from '../services/apiClient';
 import { ShieldAlert } from 'lucide-react';
+import { Button } from '@flowfolio/ui';
 import './PrivacyDisclosure.css';
 
 interface Props {
@@ -92,12 +93,12 @@ export function PrivacyDisclosure({ featureName, onAccept, onDecline }: Props) {
         </div>
 
         <div className="privacy-disclosure-actions">
-          <button className="btn-secondary" onClick={onDecline}>
+          <Button variant="secondary" onClick={onDecline}>
             Decline
-          </button>
-          <button className="btn-primary" onClick={handleAccept}>
+          </Button>
+          <Button variant="primary" onClick={handleAccept}>
             I Understand, Continue
-          </button>
+          </Button>
         </div>
       </div>
     </div>

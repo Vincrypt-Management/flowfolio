@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Button, Input } from '@flowfolio/ui';
 
 export interface OptionsCloseEarlyPosition {
   id: string;
@@ -39,7 +40,7 @@ export function OptionsCloseEarlyModal({ position, onCancel, onConfirm }: Props)
 
       <label>
         Close debit (per contract)
-        <input
+        <Input
           type="number"
           min="0"
           step="0.01"
@@ -51,7 +52,7 @@ export function OptionsCloseEarlyModal({ position, onCancel, onConfirm }: Props)
 
       <label>
         Close date
-        <input
+        <Input
           type="date"
           value={closeDate}
           aria-label="close date"
@@ -64,9 +65,10 @@ export function OptionsCloseEarlyModal({ position, onCancel, onConfirm }: Props)
       </p>
 
       <div className="options-tab__modal-actions">
-        <button
+        <Button
           type="button"
-          disabled={submitting}
+          variant="primary"
+          loading={submitting}
           onClick={async () => {
             const d = Number.parseFloat(debit);
             if (!Number.isFinite(d) || d < 0) return;
@@ -79,10 +81,10 @@ export function OptionsCloseEarlyModal({ position, onCancel, onConfirm }: Props)
           }}
         >
           Confirm
-        </button>
-        <button type="button" onClick={onCancel} disabled={submitting}>
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
