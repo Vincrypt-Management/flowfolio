@@ -24,9 +24,11 @@
     "android:build": "tauri android build",
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",
-    "ios:build": "tauri ios build"
+    "ios:build": "tauri ios build",
+    "setup:ui": "cd vendor/flowfolio-design-library && npm install && npm run build"
   },
   "dependencies": {
+    "@flowfolio/ui": "file:vendor/flowfolio-design-library",
     "@tanstack/react-virtual": "^3.13.6",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/plugin-deep-link": "^2.4.7",
@@ -41,7 +43,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-zoom-pan-pinch": "^3.7.0",
-    "recharts": "^3.6.0"
+    "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

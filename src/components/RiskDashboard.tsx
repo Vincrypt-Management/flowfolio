@@ -645,7 +645,7 @@ function RiskDashboard({
                     color: 'var(--text-main)',
                     fontSize: '0.8rem',
                   }}
-                  formatter={(value: number | undefined) => [`${(value ?? 0).toFixed(2)}%`, 'Drawdown']}
+                  formatter={(value) => [`${(Number(value) || 0).toFixed(2)}%`, 'Drawdown']}
                 />
                 <Area
                   type="monotone"

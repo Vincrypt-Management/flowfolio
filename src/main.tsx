@@ -1,6 +1,7 @@
 performance.mark('app-init-start');
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "@flowfolio/ui/styles";
 import App from "./App";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { UserModeProvider } from "./contexts/UserModeContext";
