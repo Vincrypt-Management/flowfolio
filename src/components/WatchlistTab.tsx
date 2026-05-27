@@ -15,7 +15,6 @@ import {
   Plus,
   Trash2,
   RefreshCw,
-  Loader2,
   ChevronDown,
   ChevronRight,
   X,
@@ -28,6 +27,7 @@ import {
   Ban,
   Clock,
 } from 'lucide-react';
+import { Spinner, Button } from '@flowfolio/ui';
 import './WatchlistTab.css';
 import { Universe } from '../hooks/useAppState';
 
@@ -98,7 +98,7 @@ function VirtualSymbolList({ symbols, prices, onRemove, onAnalyze, formatPrice }
               <span className="symbol-name">{symbol}</span>
               <span className="symbol-price">
                 {isLoadingPrice ? (
-                  <Loader2 className="spin" size={14} />
+                  <Spinner size="sm" color="muted" />
                 ) : (
                   <span className={`price-badge ${price > 0 ? 'has-price' : ''}`}>
                     {formatPrice(price)}
@@ -410,7 +410,7 @@ function WatchlistTab({ onNavigate }: WatchlistTabProps) {
     return (
       <div className="watchlist-tab">
         <div className="watchlist-loading">
-          <Loader2 className="spin" size={32} />
+          <Spinner size="lg" color="muted" />
           <span>Loading watchlists...</span>
         </div>
       </div>
@@ -490,21 +490,22 @@ function WatchlistTab({ onNavigate }: WatchlistTabProps) {
             </div>
           </div>
           <div className="watchlist-create-actions">
-            <button
-              className="btn-secondary"
+            <Button
+              variant="secondary"
               onClick={() => setShowCreateForm(false)}
               disabled={isCreating}
             >
               Cancel
-            </button>
-            <button
-              className="btn-primary"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleCreate}
-              disabled={isCreating || !createName.trim()}
+              disabled={!createName.trim()}
+              loading={isCreating}
+              leftIcon={!isCreating ? <Plus size={14} /> : undefined}
             >
-              {isCreating ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
               Create Watchlist
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -654,18 +655,15 @@ function WatchlistTab({ onNavigate }: WatchlistTabProps) {
                             if (e.key === 'Enter') handleAddSymbols(universe);
                           }}
                         />
-                        <button
-                          className="btn-primary btn-sm"
+                        <Button
+                          variant="primary"
+                          size="sm"
                           onClick={() => handleAddSymbols(universe)}
-                          disabled={addingSymbolsId === universe.id}
+                          loading={addingSymbolsId === universe.id}
+                          leftIcon={addingSymbolsId !== universe.id ? <Plus size={14} /> : undefined}
                         >
-                          {addingSymbolsId === universe.id ? (
-                            <Loader2 className="spin" size={14} />
-                          ) : (
-                            <Plus size={14} />
-                          )}
                           Add
-                        </button>
+                        </Button>
                       </div>
 
                       {/* Exclude List */}

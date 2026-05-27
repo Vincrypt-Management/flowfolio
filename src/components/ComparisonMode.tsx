@@ -14,9 +14,9 @@ import {
   Legend,
 } from 'recharts';
 import { TouchableChart } from './TouchableChart';
+import { Button } from '@flowfolio/ui';
 import {
   ArrowRightLeft,
-  Loader2,
   TrendingUp,
   TrendingDown,
   Activity,
@@ -339,20 +339,14 @@ function ComparisonMode({
               }}
             />
           </div>
-          <button
-            className="btn-primary compare-btn"
+          <Button
+            variant="primary"
+            className="compare-btn"
             onClick={handleCompare}
-            disabled={loading}
+            loading={loading}
           >
-            {loading ? (
-              <>
-                <Loader2 size={16} className="spin" />
-                Loading...
-              </>
-            ) : (
-              'Compare'
-            )}
-          </button>
+            {loading ? 'Loading...' : 'Compare'}
+          </Button>
         </div>
       </div>
 

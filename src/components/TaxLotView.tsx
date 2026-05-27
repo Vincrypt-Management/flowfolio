@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Receipt, Loader2, TrendingDown } from 'lucide-react';
+import { Receipt, TrendingDown } from 'lucide-react';
+import { Spinner } from '@flowfolio/ui';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
@@ -134,7 +135,7 @@ export function TaxLotView({ portfolioName, currentPrices }: TaxLotViewProps) {
   if (loading) {
     return (
       <div className="tax-lot-loading">
-        <Loader2 className="tax-lot-spinner" size={24} />
+        <Spinner size="lg" color="muted" />
         <span>Loading tax lots…</span>
       </div>
     );

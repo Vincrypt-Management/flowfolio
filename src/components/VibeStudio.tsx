@@ -1,4 +1,5 @@
 import { useReducer, useRef, useEffect, useMemo, memo, useState } from "react";
+import { Spinner } from "@flowfolio/ui";
 import { useIsMounted } from '../hooks/useIsMounted';
 import { saveFile } from '../shared/utils/fileSystem';
 import { portfolioAgent, GeneratedPortfolio } from "../services/portfolioAgent";
@@ -27,7 +28,6 @@ import {
   BarChart3,
   Activity,
   CheckCircle2,
-  Loader2,
   FileSpreadsheet,
   ChevronDown,
   ChevronUp,
@@ -774,7 +774,7 @@ Be conversational but professional. Cite specific data points from the portfolio
       <div className="progress-indicator">
         <div className="progress-header">
           <div>
-            <Loader2 className="progress-spinner" size={20} />
+            <Spinner size="md" color="primary" />
             <h3>Building Your Portfolio...</h3>
           </div>
           {streamingMessage && (
@@ -789,7 +789,7 @@ Be conversational but professional. Cite specific data points from the portfolio
             <div key={step.id} className={`progress-step ${step.status}`}>
               <div className="step-icon">
                 {step.status === 'completed' && <CheckCircle2 size={20} />}
-                {step.status === 'active' && <Loader2 className="spin" size={20} />}
+                {step.status === 'active' && <Spinner size="md" color="primary" />}
                 {step.status === 'error' && <AlertCircle size={20} />}
               </div>
               <div className="step-content">

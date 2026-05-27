@@ -13,11 +13,11 @@ import {
   Zap,
   BarChart3,
   Target,
-  Loader2,
   ChevronRight,
   Sparkles,
 } from "lucide-react";
 import { ProgressState, formatDuration, calculateETA } from "../hooks/useLiveProgress";
+import { Spinner } from "@flowfolio/ui";
 
 interface LiveProgressPanelProps {
   progress: ProgressState;
@@ -97,7 +97,7 @@ export function LiveProgressPanel({ progress, totalHoldings, totalCandidates }: 
         <div className="header-title">
           <div className="activity-indicator">
             {progress.isActive ? (
-              <Loader2 size={24} className="spinning" />
+              <Spinner size="lg" color="primary" />
             ) : progress.success ? (
               <CheckCircle2 size={24} />
             ) : (
@@ -238,7 +238,7 @@ export function LiveProgressPanel({ progress, totalHoldings, totalCandidates }: 
             ))}
             {phaseProgress.holdings.current === 0 && (
               <div className="empty-placeholder">
-                <Loader2 size={16} className="spinning" />
+                <Spinner size="sm" color="muted" />
                 <span>Waiting for data...</span>
               </div>
             )}
@@ -280,7 +280,7 @@ export function LiveProgressPanel({ progress, totalHoldings, totalCandidates }: 
             ))}
             {phaseProgress.candidates.current === 0 && phase !== "analyzing_holdings" && (
               <div className="empty-placeholder">
-                <Loader2 size={16} className="spinning" />
+                <Spinner size="sm" color="muted" />
                 <span>Evaluating candidates...</span>
               </div>
             )}

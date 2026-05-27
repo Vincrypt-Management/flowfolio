@@ -16,7 +16,8 @@ import {
 } from 'recharts';
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
-import { Loader2, AlertTriangle, Globe } from 'lucide-react';
+import { AlertTriangle, Globe } from 'lucide-react';
+import { Spinner } from '@flowfolio/ui';
 import './ExposureChart.css';
 
 const log = createLogger('ExposureChart');
@@ -182,7 +183,7 @@ export function ExposureChart({ holdings }: ExposureChartProps) {
   if (loading) {
     return (
       <div className="exposure-chart-loading">
-        <Loader2 size={18} className="spin" />
+        <Spinner size="sm" color="muted" />
         <span>Loading sector exposure...</span>
       </div>
     );

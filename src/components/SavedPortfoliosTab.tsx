@@ -13,16 +13,15 @@ import {
   Trash2,
   Eye,
   RefreshCw,
-  Loader2,
   Calendar,
   PieChart,
   TrendingUp,
-  AlertTriangle,
   Download,
   Search,
   SortAsc,
   SortDesc,
 } from 'lucide-react';
+import { Spinner, EmptyState, Alert, Button } from '@flowfolio/ui';
 import './SavedPortfoliosTab.css';
 import { saveFile } from '../shared/utils/fileSystem';
 
@@ -197,28 +196,29 @@ export function SavedPortfoliosTab({ onLoadPortfolio }: SavedPortfoliosTabProps)
 
       {/* Error State */}
       {error && (
-        <div className="error-banner">
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-          <button onClick={loadPortfolios} disabled={isLoading}>Retry</button>
-        </div>
+        <Alert variant="error" title="Failed to load portfolios" description={error} />
+      )}
+      {error && (
+        <Button variant="secondary" size="sm" onClick={loadPortfolios} disabled={isLoading}>
+          Retry
+        </Button>
       )}
 
       {/* Loading State */}
       {isLoading && (
         <div className="loading-state">
-          <Loader2 size={32} className="spinning" />
+          <Spinner size="lg" color="muted" />
           <span>Loading portfolios...</span>
         </div>
       )}
 
       {/* Empty State */}
       {!isLoading && portfolios.length === 0 && (
-        <div className="empty-state">
-          <FolderOpen size={48} />
-          <h3>No Saved Portfolios</h3>
-          <p>Generate a portfolio in Vibe Studio and click "Save" to save it here.</p>
-        </div>
+        <EmptyState
+          icon={<FolderOpen size={20} />}
+          title="No saved portfolios"
+          description='Generate a portfolio in Vibe Studio and click "Save" to keep it here.'
+        />
       )}
 
       {/* Portfolio List */}

@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { History, Trash2, Loader2, ChevronDown } from 'lucide-react';
+import { History, Trash2, ChevronDown } from 'lucide-react';
+import { Spinner, EmptyState, Button } from '@flowfolio/ui';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
@@ -168,22 +169,16 @@ export function TransactionHistory({ portfolioName }: TransactionHistoryProps) {
       {/* Body */}
       {loading ? (
         <div className="txn-history__loading">
-          <Loader2 size={24} className="txn-history__spinner" />
+          <Spinner size="lg" color="muted" />
           <span>Loading transactions…</span>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="txn-history__empty">
-          <History size={40} />
-          <p>No transactions found.</p>
-          {filterSymbol !== 'ALL' && (
-            <button
-              className="txn-history__clear-filter"
-              onClick={() => setFilterSymbol('ALL')}
-            >
-              Clear filter
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon={<History size={20} />}
+          title="No transactions found"
+          description={filterSymbol !== 'ALL' ? `No transactions match the "${filterSymbol}" filter.` : undefined}
+          action={filterSymbol !== 'ALL' ? { label: 'Clear filter', onClick: () => setFilterSymbol('ALL') } : undefined}
+        />
       ) : (
         <div className="txn-history__table-wrap">
           <table className="txn-history__table">
@@ -214,18 +209,16 @@ export function TransactionHistory({ portfolioName }: TransactionHistoryProps) {
                   <td className="txn-history__num">{formatCurrency(txn.total)}</td>
                   <td className="txn-history__notes">{txn.notes ?? '—'}</td>
                   <td className="txn-history__actions">
-                    <button
-                      className="txn-history__delete-btn"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => void handleDelete(txn.id)}
-                      disabled={deletingId === txn.id}
+                      loading={deletingId === txn.id}
+                      leftIcon={deletingId !== txn.id ? <Trash2 size={14} /> : undefined}
                       aria-label={`Delete transaction ${txn.id}`}
                     >
-                      {deletingId === txn.id ? (
-                        <Loader2 size={14} className="txn-history__spinner" />
-                      ) : (
-                        <Trash2 size={14} />
-                      )}
-                    </button>
+                      <span className="sr-only">Delete</span>
+                    </Button>
                   </td>
                 </tr>
               ))}

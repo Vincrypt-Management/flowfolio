@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useReducer } from 'react';
-import { DollarSign, Plus, Loader2, X, RefreshCw } from 'lucide-react';
+import { DollarSign, Plus, X, RefreshCw } from 'lucide-react';
+import { Spinner, EmptyState, Button } from '@flowfolio/ui';
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
@@ -299,23 +300,15 @@ export function DividendTracker({ portfolioName }: DividendTrackerProps) {
             </div>
           </div>
           <div className="div-tracker__form-actions">
-            <button
+            <Button
               type="submit"
-              className="div-tracker__btn div-tracker__btn--primary"
-              disabled={submitting}
+              variant="primary"
+              size="sm"
+              loading={submitting}
+              leftIcon={!submitting ? <Plus size={14} /> : undefined}
             >
-              {submitting ? (
-                <>
-                  <Loader2 size={14} className="div-tracker__spinner" />
-                  Saving…
-                </>
-              ) : (
-                <>
-                  <Plus size={14} />
-                  Save Dividend
-                </>
-              )}
-            </button>
+              {submitting ? 'Saving…' : 'Save Dividend'}
+            </Button>
           </div>
         </form>
       )}
@@ -324,17 +317,15 @@ export function DividendTracker({ portfolioName }: DividendTrackerProps) {
       <div className="div-tracker__table-section">
         {loading ? (
           <div className="div-tracker__loading">
-            <Loader2 size={24} className="div-tracker__spinner" />
+            <Spinner size="lg" color="muted" />
             <span>Loading dividends…</span>
           </div>
         ) : dividends.length === 0 ? (
-          <div className="div-tracker__empty">
-            <DollarSign size={40} />
-            <p>No dividends recorded yet.</p>
-            <p className="div-tracker__empty-sub">
-              Use the &ldquo;Add Dividend&rdquo; button to record your first dividend.
-            </p>
-          </div>
+          <EmptyState
+            icon={<DollarSign size={20} />}
+            title="No dividends recorded yet"
+            description='Use the "Add Dividend" button to record your first dividend.'
+          />
         ) : (
           <div className="div-tracker__table-wrap">
             <table className="div-tracker__table">
