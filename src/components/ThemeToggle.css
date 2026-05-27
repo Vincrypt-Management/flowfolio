@@ -1,66 +1,10 @@
 .theme-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 2px;
-  background: var(--bg-hover);
+  background: var(--bg-subtle);
   border-radius: var(--radius-md);
   padding: 3px;
   border: 1px solid var(--border);
-}
-
-.theme-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.theme-btn:hover {
-  color: var(--text-main);
-  background: var(--bg-active);
-}
-
-.theme-btn.active {
-  background: var(--primary-dim);
-  color: var(--primary);
-}
-
-/* Compact button for collapsed sidebar */
-.theme-btn-compact {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--border);
-  background: var(--bg-hover);
-  color: var(--text-muted);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.theme-btn-compact:hover {
-  color: var(--primary);
-  border-color: var(--primary);
-  background: var(--primary-dim);
-}
-
-/* Tooltip for mobile */
-@media (max-width: 480px) {
-  .theme-toggle {
-    padding: 2px;
-  }
-  
-  .theme-btn {
-    width: 32px;
-    height: 32px;
-  }
+  box-shadow: var(--shadow-xs);
 }
