@@ -11,6 +11,21 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      // Set data-theme before React mounts to avoid light/dark flash.
+      // Theme persistence in app comes from SQLite (Tauri) and is loaded
+      // asynchronously, so we use system preference for the initial paint.
+      (function () {
+        try {
+          var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+          var dark = mq && mq.matches;
+          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+          document.documentElement.classList.add(dark ? 'dark' : 'light');
+        } catch (_) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
