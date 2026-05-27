@@ -26,6 +26,7 @@ import {
   RotateCcw,
   Clock,
 } from 'lucide-react';
+import { Button, IconButton, Input, Select, Alert, Badge, Tooltip } from '@flowfolio/ui';
 import './AlertsPanel.css';
 
 // --- Types ---
@@ -384,7 +385,7 @@ function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
           <Bell size={compact ? 16 : 20} />
           <h3>Price Alerts</h3>
           {triggeredCount > 0 && (
-            <span className="alerts-badge">{triggeredCount}</span>
+            <Badge variant="error" size="sm">{triggeredCount}</Badge>
           )}
         </div>
         <div className="alerts-header-actions">
@@ -397,29 +398,36 @@ function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
               })}
             </span>
           )}
-          <button
-            className="btn-small"
+          <Button
+            variant={desktopNotifs ? 'secondary' : 'ghost'}
+            size="sm"
             onClick={toggleDesktopNotifs}
+            leftIcon={desktopNotifs ? <Bell size={14} /> : <BellOff size={14} />}
             title={desktopNotifs ? 'Disable desktop notifications' : 'Enable desktop notifications'}
           >
-            {desktopNotifs ? <Bell size={14} /> : <BellOff size={14} />}
-            {desktopNotifs ? ' Desktop On' : ' Desktop Off'}
-          </button>
-          <button
-            className="btn-small btn-secondary"
-            onClick={checkAlerts}
-            disabled={checking}
-            title="Check now"
-          >
-            <RefreshCw size={14} className={checking ? 'spin' : ''} />
-          </button>
-          <button
-            className="btn-small btn-primary"
-            onClick={() => setShowForm((s) => !s)}
-            title="New alert"
-          >
-            {showForm ? <X size={14} /> : <Plus size={14} />}
-          </button>
+            {desktopNotifs ? 'Desktop On' : 'Desktop Off'}
+          </Button>
+          <Tooltip content="Check now" side="bottom">
+            <IconButton
+              variant="outline"
+              size="sm"
+              onClick={checkAlerts}
+              disabled={checking}
+              aria-label="Check now"
+            >
+              <RefreshCw size={14} className={checking ? 'spin' : ''} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="New alert" side="bottom">
+            <IconButton
+              variant="filled"
+              size="sm"
+              onClick={() => setShowForm((s) => !s)}
+              aria-label="New alert"
+            >
+              {showForm ? <X size={14} /> : <Plus size={14} />}
+            </IconButton>
+          </Tooltip>
         </div>
       </div>
 
@@ -427,38 +435,35 @@ function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
       {showForm && (
         <div className="alerts-form">
           <div className="alerts-form-row">
-            <input
+            <Input
               type="text"
-              className="alerts-input"
               placeholder="Symbol (e.g. AAPL)"
               value={formSymbol}
               onChange={(e) => setFormSymbol(e.target.value)}
               maxLength={10}
             />
-            <select
-              className="alerts-select"
+            <Select
               value={formCondition}
-              onChange={(e) => setFormCondition(e.target.value as PriceAlert['condition'])}
-            >
-              <option value="above">Price above</option>
-              <option value="below">Price below</option>
-              <option value="percent_change_up">% increase</option>
-              <option value="percent_change_down">% decrease</option>
-            </select>
+              onChange={(v) => setFormCondition(v as PriceAlert['condition'])}
+              options={[
+                { value: 'above', label: 'Price above' },
+                { value: 'below', label: 'Price below' },
+                { value: 'percent_change_up', label: '% increase' },
+                { value: 'percent_change_down', label: '% decrease' },
+              ]}
+            />
           </div>
           <div className="alerts-form-row">
-            <input
+            <Input
               type="number"
-              className="alerts-input"
               placeholder={isPercentCondition ? 'Threshold %' : 'Price $'}
               value={formThreshold}
               onChange={(e) => setFormThreshold(e.target.value)}
               min="0"
               step={isPercentCondition ? '0.1' : '0.01'}
             />
-            <input
+            <Input
               type="text"
-              className="alerts-input alerts-input--note"
               placeholder="Note (optional)"
               value={formNote}
               onChange={(e) => setFormNote(e.target.value)}
@@ -466,14 +471,11 @@ function AlertsPanel({ onAlertTriggered, compact = false }: AlertsPanelProps) {
             />
           </div>
           {formError && (
-            <div className="alerts-form-error">
-              <AlertTriangle size={12} />
-              {formError}
-            </div>
+            <Alert variant="error" title="Could not create alert" description={formError} />
           )}
-          <button className="btn-primary alerts-create-btn" onClick={handleCreate}>
+          <Button variant="primary" onClick={handleCreate} leftIcon={<Plus size={14} />}>
             Create Alert
-          </button>
+          </Button>
         </div>
       )}
 

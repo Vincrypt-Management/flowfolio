@@ -20,6 +20,7 @@ const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }>
   { key: 'alpha_vantage_key', label: 'Alpha Vantage Key', placeholder: 'Enter key…' },
   { key: 'openrouter_key',    label: 'OpenRouter Key',    placeholder: 'Enter key…' },
 ];
+import { Button } from '@flowfolio/ui';
 import './SettingsPage.css';
 import { FREE_MODELS, DEFAULT_FREE_MODEL } from '../constants/freeModels';
 import { getSelectedModel, setSelectedModel } from '../services/aiModel';
@@ -346,13 +347,13 @@ export function SettingsPage() {
               aria-label="Upload profile photo"
             />
             <div className="avatar-actions">
-              <button className="btn-secondary btn-small" onClick={handleAvatarClick}>
+              <Button variant="secondary" size="sm" onClick={handleAvatarClick}>
                 Upload Photo
-              </button>
+              </Button>
               {form.avatarUrl && (
-                <button className="btn-secondary btn-small btn-danger" onClick={handleRemoveAvatar}>
-                  <Trash2 size={14} /> Remove
-                </button>
+                <Button variant="danger" size="sm" onClick={handleRemoveAvatar} leftIcon={<Trash2 size={14} />}>
+                  Remove
+                </Button>
               )}
             </div>
             <p className="text-muted text-small">Max 2MB. JPG, PNG, or GIF.</p>
@@ -559,13 +560,14 @@ export function SettingsPage() {
               </p>
             ) : null;
           })()}
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             onClick={handleSaveAiModel}
+            leftIcon={aiModelSaved ? <CheckCircle2 size={14} /> : <Save size={14} />}
             style={{ marginTop: '12px' }}
           >
-            {aiModelSaved ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save Model</>}
-          </button>
+            {aiModelSaved ? 'Saved!' : 'Save Model'}
+          </Button>
         </div>
 
         {/* Account Section */}
@@ -588,22 +590,24 @@ export function SettingsPage() {
                   </div>
                 </div>
               </div>
-              <button
-                className="btn-secondary"
+              <Button
+                variant="secondary"
                 onClick={() => logout().catch((e) => log.error('Logout failed', e))}
+                leftIcon={<LogOut size={14} />}
               >
-                <LogOut size={14} /> Sign out
-              </button>
+                Sign out
+              </Button>
             </div>
           ) : (
             <div className="account-login-prompt">
               <p className="text-muted">Sign in to unlock AI Suite and Cloud Sync premium features.</p>
-              <button
-                className="btn-primary"
+              <Button
+                variant="primary"
                 onClick={() => loginWithGoogle().catch((e) => log.error('Login failed', e))}
+                leftIcon={<LogIn size={14} />}
               >
-                <LogIn size={14} /> Sign in with Google
-              </button>
+                Sign in with Google
+              </Button>
             </div>
           )}
         </div>
@@ -622,9 +626,9 @@ export function SettingsPage() {
                 <Unlock size={16} />
                 <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>Vault unlocked</span>
               </div>
-              <button className="btn-secondary btn-small" onClick={handleVaultLock}>
-                <Lock size={14} /> Lock
-              </button>
+              <Button variant="secondary" size="sm" onClick={handleVaultLock} leftIcon={<Lock size={14} />}>
+                Lock
+              </Button>
             </div>
           ) : vaultExists ? (
             <div>
@@ -640,9 +644,15 @@ export function SettingsPage() {
                     style={{ flex: 1 }}
                     onKeyDown={e => e.key === 'Enter' && handleVaultUnlock()}
                   />
-                  <button className="btn-primary btn-small" onClick={handleVaultUnlock} disabled={vaultLoading}>
-                    {vaultLoading ? 'Unlocking...' : <><Unlock size={14} /> Unlock</>}
-                  </button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleVaultUnlock}
+                    loading={vaultLoading}
+                    leftIcon={!vaultLoading ? <Unlock size={14} /> : undefined}
+                  >
+                    {vaultLoading ? 'Unlocking...' : 'Unlock'}
+                  </Button>
                 </div>
               </div>
               {vaultError && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.8rem', marginTop: '4px' }}>{vaultError}</p>}
@@ -670,9 +680,15 @@ export function SettingsPage() {
                   onKeyDown={e => e.key === 'Enter' && handleVaultSetup()}
                 />
               </div>
-              <button className="btn-primary" onClick={handleVaultSetup} disabled={vaultLoading} style={{ marginTop: '4px' }}>
-                {vaultLoading ? 'Setting up...' : <><Lock size={14} /> Set Up Encrypted Vault</>}
-              </button>
+              <Button
+                variant="primary"
+                onClick={handleVaultSetup}
+                loading={vaultLoading}
+                leftIcon={!vaultLoading ? <Lock size={14} /> : undefined}
+                style={{ marginTop: '4px' }}
+              >
+                {vaultLoading ? 'Setting up...' : 'Set Up Encrypted Vault'}
+              </Button>
               {vaultError && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.8rem', marginTop: '4px' }}>{vaultError}</p>}
             </div>
           )}
@@ -701,31 +717,40 @@ export function SettingsPage() {
                   placeholder={apiKeyStatuses[key] ? '●●●●●●●● (configured)' : placeholder}
                   style={{ flex: 1 }}
                 />
-                <button
+                <Button
                   type="button"
-                  className="btn-small"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => dispatch({ type: 'TOGGLE_SHOW_KEY', payload: key })}
                   aria-label={showKeys[key] ? 'Hide' : 'Show'}
                 >
                   {showKeys[key] ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
+                </Button>
               </div>
             </div>
           ))}
-          <button className="btn-primary" onClick={handleSaveApiKeys} style={{ marginTop: '8px' }}>
-            {apiKeysSaved ? <><CheckCircle2 size={16} /> Saved!</> : <><Save size={16} /> Save API Keys</>}
-          </button>
+          <Button
+            variant="primary"
+            onClick={handleSaveApiKeys}
+            leftIcon={apiKeysSaved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+            style={{ marginTop: '8px' }}
+          >
+            {apiKeysSaved ? 'Saved!' : 'Save API Keys'}
+          </Button>
         </div>
 
         {/* Actions */}
         <div className="settings-actions">
-          <button className="btn-primary" onClick={handleSave}>
-            {saved ? <CheckCircle size={16} /> : <Save size={16} />}
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            leftIcon={saved ? <CheckCircle size={14} /> : <Save size={14} />}
+          >
             {saved ? 'Saved!' : 'Save Changes'}
-          </button>
-          <button className="btn-secondary btn-danger" onClick={handleReset}>
-            <Trash2 size={16} /> Reset to Defaults
-          </button>
+          </Button>
+          <Button variant="danger" onClick={handleReset} leftIcon={<Trash2 size={14} />}>
+            Reset to Defaults
+          </Button>
         </div>
       </div>
     </div>
