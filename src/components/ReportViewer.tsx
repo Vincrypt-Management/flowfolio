@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import type { AnalysisReport, ActionItem } from '../services/analysisReport';
+import { Button, IconButton, Tooltip } from '@flowfolio/ui';
 import './ReportViewer.css';
 
 // UI feedback duration (milliseconds)
@@ -145,42 +146,47 @@ export default function ReportViewer({
         </div>
         
         <div className="report-actions">
-          <button 
-            className="btn-report-action" 
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleCopyMarkdown}
+            leftIcon={copied ? <Check size={14} /> : <Copy size={14} />}
             title="Copy as Markdown"
           >
-            {copied ? <Check size={16} /> : <Copy size={16} />}
             {copied ? 'Copied!' : 'Copy'}
-          </button>
-          <button 
-            className="btn-report-action" 
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleDownloadMarkdown}
+            leftIcon={<Download size={14} />}
             title="Download Markdown"
           >
-            <Download size={16} />
             MD
-          </button>
-          <button 
-            className="btn-report-action" 
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleDownloadJSON}
+            leftIcon={<Download size={14} />}
             title="Download JSON"
           >
-            <Download size={16} />
             JSON
-          </button>
+          </Button>
           {onClose && (
-            <button className="btn-report-close" onClick={onClose} aria-label="Close report">
-              <X size={20} />
-            </button>
+            <Tooltip content="Close report" side="bottom">
+              <IconButton variant="ghost" size="md" onClick={onClose} aria-label="Close report">
+                <X size={16} />
+              </IconButton>
+            </Tooltip>
           )}
         </div>
       </div>
 
       {/* Controls */}
       <div className="report-controls">
-        <button className="btn-expand" onClick={expandAll}>Expand All</button>
-        <button className="btn-expand" onClick={collapseAll}>Collapse All</button>
+        <Button variant="ghost" size="sm" onClick={expandAll}>Expand All</Button>
+        <Button variant="ghost" size="sm" onClick={collapseAll}>Collapse All</Button>
         <span className="section-count">
           {report.sections.length + 1} sections
         </span>

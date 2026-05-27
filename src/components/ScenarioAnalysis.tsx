@@ -20,6 +20,7 @@ import { FlaskConical, ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
+import { Button } from '@flowfolio/ui';
 import './ScenarioAnalysis.css';
 
 const log = createLogger('scenario-analysis');
@@ -657,12 +658,14 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
             </div>
 
             {/* Apply custom button */}
-            <button
-              className="btn-primary scenario-apply-btn"
+            <Button
+              variant="primary"
+              size="sm"
+              className="scenario-apply-btn"
               onClick={() => setSelectedScenarioId('custom')}
             >
               Apply Custom Scenario
-            </button>
+            </Button>
           </div>
         )}
       </div>

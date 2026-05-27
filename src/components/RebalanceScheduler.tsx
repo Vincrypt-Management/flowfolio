@@ -22,6 +22,7 @@ import {
 import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
+import { Button, IconButton, EmptyState, Tooltip } from '@flowfolio/ui';
 import './RebalanceScheduler.css';
 
 const log = createLogger('RebalanceScheduler');
@@ -459,20 +460,22 @@ function RebalanceScheduler({
           <h2>Rebalance Scheduler</h2>
         </div>
         <div className="header-actions">
-          <button
-            className="btn-secondary btn-small"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setShowHistory(!showHistory)}
+            leftIcon={<History size={14} />}
           >
-            <History size={14} />
             History
-          </button>
-          <button
-            className="btn-primary btn-small"
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setShowCreateForm(!showCreateForm)}
+            leftIcon={<Plus size={14} />}
           >
-            <Plus size={14} />
             New Schedule
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -496,20 +499,22 @@ function RebalanceScheduler({
                     .
                   </p>
                   <div className="overdue-actions">
-                    <button
-                      className="btn-primary btn-small"
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => handleRunNow(sched)}
+                      leftIcon={<Play size={12} />}
                     >
-                      <Play size={12} />
                       Run Now
-                    </button>
-                    <button
-                      className="btn-secondary btn-small"
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => handleSnooze(sched)}
+                      leftIcon={<AlarmClock size={12} />}
                     >
-                      <AlarmClock size={12} />
                       Snooze
-                    </button>
+                    </Button>
                   </div>
                 </div>
               );
@@ -620,16 +625,21 @@ function RebalanceScheduler({
           </div>
 
           <div className="form-actions">
-            <button
-              className="btn-secondary btn-small"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setShowCreateForm(false)}
             >
               Cancel
-            </button>
-            <button className="btn-primary btn-small" onClick={handleCreate}>
-              <Plus size={14} />
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleCreate}
+              leftIcon={<Plus size={14} />}
+            >
               Create Schedule
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -637,12 +647,12 @@ function RebalanceScheduler({
       {/* Active Schedules List */}
       <div className="schedules-list">
         {schedules.length === 0 ? (
-          <div className="schedules-empty card">
-            <Calendar size={36} className="text-muted" />
-            <p className="text-muted">
-              No rebalance schedules configured. Create one to get started.
-            </p>
-          </div>
+          <EmptyState
+            icon={<Calendar size={20} />}
+            title="No rebalance schedules"
+            description="Create one to get started."
+            action={{ label: 'New Schedule', onClick: () => setShowCreateForm(true) }}
+          />
         ) : (
           schedules.map((schedule) => {
             const overdue = isOverdue(schedule);
@@ -687,24 +697,30 @@ function RebalanceScheduler({
                     )}
                   </div>
                   <div className="schedule-actions">
-                    <button
-                      className="icon-btn"
-                      onClick={() => handleToggle(schedule.id)}
-                      title={schedule.enabled ? 'Disable' : 'Enable'}
-                    >
-                      {schedule.enabled ? (
-                        <ToggleRight size={20} className="toggle-on" />
-                      ) : (
-                        <ToggleLeft size={20} className="toggle-off" />
-                      )}
-                    </button>
-                    <button
-                      className="icon-btn delete-btn"
-                      onClick={() => handleDelete(schedule.id)}
-                      title="Delete schedule"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <Tooltip content={schedule.enabled ? 'Disable' : 'Enable'} side="left">
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggle(schedule.id)}
+                        aria-label={schedule.enabled ? 'Disable schedule' : 'Enable schedule'}
+                      >
+                        {schedule.enabled ? (
+                          <ToggleRight size={18} className="toggle-on" />
+                        ) : (
+                          <ToggleLeft size={18} className="toggle-off" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip content="Delete schedule" side="left">
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(schedule.id)}
+                        aria-label="Delete schedule"
+                      >
+                        <Trash2 size={14} />
+                      </IconButton>
+                    </Tooltip>
                   </div>
                 </div>
               </div>
