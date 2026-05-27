@@ -14,10 +14,8 @@ import {
   BarChart3,
   RefreshCw,
   AlertTriangle,
-  Loader2,
   Zap,
   Target,
-  Info,
   FlaskConical,
   ChevronDown,
   ChevronUp,
@@ -35,6 +33,7 @@ import { ScenarioAnalysis } from './ScenarioAnalysis';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
 import { AiInlinePanel } from './AiInlinePanel';
 import { buildRiskPrompt, type RiskInput } from '../services/agentSurfaces';
+import { Button, MetricCard, Alert } from '@flowfolio/ui';
 import './RiskDashboard.css';
 
 interface RiskDashboardProps {
@@ -450,10 +449,11 @@ function RiskDashboard({
     <div className="risk-dashboard">
       {/* Demo banner */}
       {isDemo && (
-        <div className="risk-demo-banner">
-          <Info size={14} />
-          <span>Showing equal-weight demo analysis using default symbols. Add portfolio holdings for personalized risk metrics.</span>
-        </div>
+        <Alert
+          variant="info"
+          title="Demo analysis"
+          description="Equal-weighted across default symbols. Add portfolio holdings for personalized risk metrics."
+        />
       )}
 
       {/* Header */}
@@ -462,26 +462,18 @@ function RiskDashboard({
           <Shield size={20} />
           <h2>Risk Dashboard</h2>
         </div>
-        <button
-          className="btn-secondary btn-small"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={handleRefresh}
-          disabled={loading}
+          loading={loading}
+          leftIcon={!loading ? <RefreshCw size={14} /> : undefined}
         >
-          {loading ? (
-            <Loader2 size={14} className="spin" />
-          ) : (
-            <RefreshCw size={14} />
-          )}
           Refresh
-        </button>
+        </Button>
       </div>
 
-      {error && (
-        <div className="risk-error">
-          <AlertTriangle size={14} />
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error" title="Risk analysis failed" description={error} />}
 
       {/* Top row: Gauge + Metrics Cards */}
       <div className="risk-top-row">
@@ -493,59 +485,41 @@ function RiskDashboard({
         </div>
 
         <div className="risk-metrics-grid">
-          <div className="card risk-metric-card">
-            <div className="risk-metric-icon">
-              <Activity size={16} />
-            </div>
-            <div className="risk-metric-value font-mono">
-              {(portfolioVolatility * 100).toFixed(1)}%
-            </div>
-            <div className="risk-metric-label text-muted">Volatility</div>
-          </div>
-
-          <div className="card risk-metric-card">
-            <div className="risk-metric-icon risk-metric-icon--warning">
-              <TrendingDown size={16} />
-            </div>
-            <div className="risk-metric-value font-mono">
-              {(portfolioMaxDrawdown * 100).toFixed(1)}%
-            </div>
-            <div className="risk-metric-label text-muted">Max Drawdown</div>
-          </div>
-
-          <div className="card risk-metric-card">
-            <div className="risk-metric-icon risk-metric-icon--accent">
-              <Zap size={16} />
-            </div>
-            <div className="risk-metric-value font-mono">
-              {portfolioSharpe.toFixed(2)}
-            </div>
-            <div className="risk-metric-label text-muted">Sharpe Ratio</div>
-          </div>
-
-          <div className="card risk-metric-card">
-            <div className="risk-metric-icon risk-metric-icon--dim">
-              <Target size={16} />
-            </div>
-            <div className="risk-metric-value font-mono">--</div>
-            <div className="risk-metric-label text-muted">Beta</div>
-          </div>
+          <MetricCard
+            label="Volatility"
+            icon={<Activity size={14} />}
+            value={`${(portfolioVolatility * 100).toFixed(1)}%`}
+          />
+          <MetricCard
+            label="Max Drawdown"
+            icon={<TrendingDown size={14} style={{ color: 'var(--warning)' }} />}
+            value={`${(portfolioMaxDrawdown * 100).toFixed(1)}%`}
+          />
+          <MetricCard
+            label="Sharpe Ratio"
+            icon={<Zap size={14} style={{ color: 'var(--accent)' }} />}
+            value={portfolioSharpe.toFixed(2)}
+          />
+          <MetricCard
+            label="Beta"
+            icon={<Target size={14} />}
+            value="—"
+          />
         </div>
       </div>
 
       {/* VaR Display */}
-      <div className="card risk-var-card">
-        <div className="risk-var-header">
-          <AlertTriangle size={16} />
-          <span>Value at Risk (95%)</span>
-        </div>
-        <div className="risk-var-value font-mono">
-          ${var95.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
-        <div className="risk-var-desc text-muted">
-          at risk over 1 day at 95% confidence
-        </div>
-      </div>
+      <MetricCard
+        className="risk-var-card"
+        label="Value at Risk (95%)"
+        icon={<AlertTriangle size={14} style={{ color: 'var(--warning)' }} />}
+        value={`$${var95.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+        change={
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+            at risk over 1 day at 95% confidence
+          </span>
+        }
+      />
 
       {/* Concentration Risk */}
       <div className="card risk-concentration-card">
