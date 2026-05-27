@@ -6,7 +6,7 @@ import {
   OptionsCloseEarlyModal,
   type OptionsCloseEarlyPosition,
 } from './OptionsCloseEarlyModal';
-import { Button, Input, Select } from '@flowfolio/ui';
+import { Button, Input, Select, SegmentedControl } from '@flowfolio/ui';
 
 const log = createLogger('OptionsTab');
 
@@ -221,22 +221,15 @@ export function OptionsTab({ portfolioName }: OptionsTabProps) {
           </div>
         )}
         <div className="options-tab__view-toggle">
-          <Button
-            variant={view === 'open' ? 'primary' : 'secondary'}
-            size="sm"
-            aria-pressed={view === 'open'}
-            onClick={() => setView('open')}
-          >
-            Open Positions
-          </Button>
-          <Button
-            variant={view === 'history' ? 'primary' : 'secondary'}
-            size="sm"
-            aria-pressed={view === 'history'}
-            onClick={() => setView('history')}
-          >
-            History
-          </Button>
+          <SegmentedControl<'open' | 'history'>
+            aria-label="Options view"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'open', label: 'Open Positions' },
+              { value: 'history', label: 'History' },
+            ]}
+          />
           <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
             Add Position
           </Button>

@@ -5,7 +5,7 @@ import { useCurrency, SUPPORTED_CURRENCIES } from '../contexts/CurrencyContext';
 import { invoke } from '../services/tauri'; // Direct invoke: vault commands should fail fast
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
-import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, Eye, EyeOff, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound, Receipt, Bot } from 'lucide-react';
+import { User, Camera, Briefcase, MapPin, Globe, Mail, Shield, Trash2, Save, CheckCircle, CheckCircle2, LogIn, LogOut, User as UserIcon, Crown, Lock, Unlock, KeyRound, Receipt, Bot } from 'lucide-react';
 
 const log = createLogger('SettingsPage');
 
@@ -20,7 +20,7 @@ const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }>
   { key: 'alpha_vantage_key', label: 'Alpha Vantage Key', placeholder: 'Enter key…' },
   { key: 'openrouter_key',    label: 'OpenRouter Key',    placeholder: 'Enter key…' },
 ];
-import { Button } from '@flowfolio/ui';
+import { Button, PasswordInput, Alert } from '@flowfolio/ui';
 import './SettingsPage.css';
 import { FREE_MODELS, DEFAULT_FREE_MODEL } from '../constants/freeModels';
 import { getSelectedModel, setSelectedModel } from '../services/aiModel';
@@ -131,7 +131,6 @@ export function SettingsPage() {
     saved,
     apiKeys,
     apiKeyStatuses,
-    showKeys,
     apiKeysSaved,
     vaultExists,
     vaultUnlocked,
@@ -635,15 +634,16 @@ export function SettingsPage() {
               <div className="form-group">
                 <label htmlFor="vaultUnlockPw">Vault Password</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    id="vaultUnlockPw"
-                    type="password"
-                    value={vaultPassword}
-                    onChange={e => dispatch({ type: 'SET_VAULT_PASSWORD', payload: e.target.value })}
-                    placeholder="Enter vault password"
-                    style={{ flex: 1 }}
-                    onKeyDown={e => e.key === 'Enter' && handleVaultUnlock()}
-                  />
+                  <div style={{ flex: 1 }}>
+                    <PasswordInput
+                      id="vaultUnlockPw"
+                      value={vaultPassword}
+                      onChange={e => dispatch({ type: 'SET_VAULT_PASSWORD', payload: e.target.value })}
+                      placeholder="Enter vault password"
+                      onKeyDown={e => e.key === 'Enter' && handleVaultUnlock()}
+                      autoComplete="current-password"
+                    />
+                  </div>
                   <Button
                     variant="primary"
                     size="sm"
@@ -655,29 +655,31 @@ export function SettingsPage() {
                   </Button>
                 </div>
               </div>
-              {vaultError && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.8rem', marginTop: '4px' }}>{vaultError}</p>}
+              {vaultError && (
+                <Alert variant="error" description={vaultError} style={{ marginTop: '0.5rem' }} />
+              )}
             </div>
           ) : (
             <div>
               <div className="form-group">
                 <label htmlFor="vaultNewPw">New Vault Password</label>
-                <input
+                <PasswordInput
                   id="vaultNewPw"
-                  type="password"
                   value={vaultPassword}
                   onChange={e => dispatch({ type: 'SET_VAULT_PASSWORD', payload: e.target.value })}
                   placeholder="At least 8 characters"
+                  autoComplete="new-password"
                 />
               </div>
               <div className="form-group">
                 <label htmlFor="vaultConfirmPw">Confirm Password</label>
-                <input
+                <PasswordInput
                   id="vaultConfirmPw"
-                  type="password"
                   value={vaultConfirm}
                   onChange={e => dispatch({ type: 'SET_VAULT_CONFIRM', payload: e.target.value })}
                   placeholder="Confirm password"
                   onKeyDown={e => e.key === 'Enter' && handleVaultSetup()}
+                  autoComplete="new-password"
                 />
               </div>
               <Button
@@ -689,7 +691,9 @@ export function SettingsPage() {
               >
                 {vaultLoading ? 'Setting up...' : 'Set Up Encrypted Vault'}
               </Button>
-              {vaultError && <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.8rem', marginTop: '4px' }}>{vaultError}</p>}
+              {vaultError && (
+                <Alert variant="error" description={vaultError} style={{ marginTop: '0.5rem' }} />
+              )}
             </div>
           )}
         </div>
@@ -709,24 +713,12 @@ export function SettingsPage() {
                   <CheckCircle2 size={14} style={{ color: 'var(--color-success, #22c55e)' }} />
                 )}
               </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type={showKeys[key] ? 'text' : 'password'}
-                  value={apiKeys[key] ?? ''}
-                  onChange={e => dispatch({ type: 'SET_API_KEY', payload: { key, value: e.target.value } })}
-                  placeholder={apiKeyStatuses[key] ? '●●●●●●●● (configured)' : placeholder}
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => dispatch({ type: 'TOGGLE_SHOW_KEY', payload: key })}
-                  aria-label={showKeys[key] ? 'Hide' : 'Show'}
-                >
-                  {showKeys[key] ? <EyeOff size={14} /> : <Eye size={14} />}
-                </Button>
-              </div>
+              <PasswordInput
+                value={apiKeys[key] ?? ''}
+                onChange={e => dispatch({ type: 'SET_API_KEY', payload: { key, value: e.target.value } })}
+                placeholder={apiKeyStatuses[key] ? '●●●●●●●● (configured)' : placeholder}
+                autoComplete="off"
+              />
             </div>
           ))}
           <Button

@@ -100,29 +100,6 @@
   padding: 1.5rem;
 }
 
-.risk-gauge {
-  width: 100%;
-  max-width: 200px;
-}
-
-.risk-gauge-svg {
-  width: 100%;
-  height: auto;
-}
-
-.risk-gauge-score {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  font-weight: 700;
-}
-
-.risk-gauge-label {
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
 .risk-gauge-subtitle {
   font-size: 0.8rem;
   text-align: center;
@@ -281,43 +258,6 @@
 
 .risk-correlation-card {
   padding: 1.25rem 1.5rem;
-}
-
-.risk-correlation-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.risk-correlation-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0.625rem 0.875rem;
-  border-radius: var(--radius-md);
-  min-width: 90px;
-  transition: transform var(--transition);
-  cursor: default;
-}
-
-.risk-correlation-cell:hover {
-  transform: scale(1.04);
-}
-
-.risk-correlation-pair {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-.risk-correlation-value {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Drawdown Chart */

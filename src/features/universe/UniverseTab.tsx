@@ -1,5 +1,5 @@
 import { Download, Globe, Plus, Save, Trash2, Upload } from "lucide-react";
-import { Button, IconButton, Input, Tag } from "@flowfolio/ui";
+import { Button, IconButton, Input, Tag, FileUpload } from "@flowfolio/ui";
 import { VibePlan } from "../../shared/types";
 import { Universe } from "../../hooks/useAppState";
 
@@ -18,7 +18,7 @@ interface UniverseTabProps {
   plan: VibePlan | null;
   onSavePlan: () => void;
   onExportData: () => void;
-  onImportData: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onImportFile: (file: File) => void;
   onLoadPlan: (planName: string) => void;
   onAddToast: (message: string, type: "success" | "error" | "warning" | "info") => void;
 }
@@ -37,7 +37,7 @@ export function UniverseTab({
   plan,
   onSavePlan,
   onExportData,
-  onImportData,
+  onImportFile,
   onLoadPlan,
 }: UniverseTabProps) {
   return (
@@ -82,15 +82,14 @@ export function UniverseTab({
             <Button variant="primary" onClick={onExportData} leftIcon={<Download size={14} />}>
               Export Data
             </Button>
-            <label className="btn-secondary cursor-pointer flex items-center gap-sm">
-              <Upload size={16} /> Import Data
-              <input
-                type="file"
-                accept=".json"
-                onChange={onImportData}
-                className="hidden"
-              />
-            </label>
+            <FileUpload
+              variant="secondary"
+              accept=".json"
+              leftIcon={<Upload size={14} />}
+              onFile={(file) => file && onImportFile(file)}
+            >
+              Import Data
+            </FileUpload>
           </div>
         </div>
       </div>

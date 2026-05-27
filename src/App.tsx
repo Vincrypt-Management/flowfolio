@@ -280,10 +280,7 @@ function App() {
     }
   }, [state.plan, addToast]);
 
-  const importData = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const importDataFromFile = useCallback(async (file: File) => {
     try {
       const text = await file.text();
       const result = await invokeWithResilience<{ success: boolean }>("import_data_bundle", { bundleJson: text });
@@ -298,6 +295,11 @@ function App() {
       }
     }
   }, [addToast]);
+
+  const importDataFromEvent = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) await importDataFromFile(file);
+  }, [importDataFromFile]);
 
   const loadTemplate = useCallback(async (templateName: string) => {
     try {
@@ -862,7 +864,7 @@ function App() {
         type="file"
         accept=".json"
         style={{ display: 'none' }}
-        onChange={importData}
+        onChange={importDataFromEvent}
         aria-hidden="true"
       />
 
@@ -1067,7 +1069,7 @@ function App() {
               plan={state.plan}
               onSavePlan={savePlan}
               onExportData={exportData}
-              onImportData={importData}
+              onImportFile={importDataFromFile}
               onLoadPlan={loadPlan}
               onAddToast={addToast}
             />

@@ -236,7 +236,7 @@ describe('OptionsTab', () => {
     });
     render(<OptionsTab portfolioName="main" />);
     await waitFor(() => expect(screen.getByText('AAPL')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /history/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /history/i }));
     await waitFor(() => {
       const listCalls = invokeMock.mock.calls.filter((c) => c[0] === 'list_option_positions');
       expect(listCalls.some((c) => (c[1] as { statusFilter: unknown }).statusFilter === null)).toBe(

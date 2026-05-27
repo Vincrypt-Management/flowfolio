@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DividendCalendar } from './DividendCalendar';
-import { EmptyState } from '@flowfolio/ui';
+import { EmptyState, SegmentedControl } from '@flowfolio/ui';
 import {
   fetchUpcomingDividends,
   fetchProjectedIncome,
@@ -69,23 +69,19 @@ export function DividendsTab({ portfolioName, heldSymbols }: DividendsTabProps) 
             </span>
           )}
         </div>
-        <div className="dividends-tab__view-toggle" role="tablist">
-          <button
-            type="button"
-            aria-pressed={view === 'calendar'}
-            onClick={() => { setView('calendar'); setSelectedDay(null); }}
-          >Calendar</button>
-          <button
-            type="button"
-            aria-pressed={view === 'list'}
-            onClick={() => setView('list')}
-          >List</button>
-          <button
-            type="button"
-            aria-pressed={view === 'income'}
-            onClick={() => setView('income')}
-          >Income</button>
-        </div>
+        <SegmentedControl<View>
+          aria-label="Dividends view"
+          value={view}
+          onChange={(v) => {
+            setView(v);
+            if (v !== 'list') setSelectedDay(null);
+          }}
+          options={[
+            { value: 'calendar', label: 'Calendar' },
+            { value: 'list', label: 'List' },
+            { value: 'income', label: 'Income' },
+          ]}
+        />
       </header>
 
       {dividends.length === 0 && view !== 'income' && (

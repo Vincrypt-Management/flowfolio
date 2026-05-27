@@ -21,7 +21,7 @@ import { invokeWithResilience } from '../services/apiClient';
 import { useToast } from './Toast';
 import { createLogger } from '../core/logger';
 import { formatCurrency } from '../shared/utils';
-import { Spinner, EmptyState, Select, Checkbox } from '@flowfolio/ui';
+import { Spinner, EmptyState, Select, Checkbox, SegmentedControl } from '@flowfolio/ui';
 import './PortfolioPerformanceChart.css';
 
 const log = createLogger('PortfolioPerformanceChart');
@@ -281,18 +281,14 @@ export function PortfolioPerformanceChart({
 
       {/* Controls */}
       <div className="perf-chart__controls">
-        {/* Time range buttons */}
-        <div className="perf-chart__ranges">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              className={`perf-chart__range-btn${timeRange === r ? ' perf-chart__range-btn--active' : ''}`}
-              onClick={() => setTimeRange(r)}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+        {/* Time range */}
+        <SegmentedControl<TimeRange>
+          size="sm"
+          aria-label="Time range"
+          value={timeRange}
+          onChange={setTimeRange}
+          options={RANGES.map((r) => ({ value: r, label: r }))}
+        />
 
         {/* Benchmark controls */}
         <div className="perf-chart__benchmark-controls">

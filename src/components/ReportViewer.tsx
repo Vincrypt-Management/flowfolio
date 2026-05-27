@@ -7,8 +7,6 @@ import { useState } from 'react';
 import {
   FileText,
   Download,
-  Copy,
-  Check,
   AlertTriangle,
   TrendingUp,
   TrendingDown,
@@ -21,11 +19,8 @@ import {
   X,
 } from 'lucide-react';
 import type { AnalysisReport, ActionItem } from '../services/analysisReport';
-import { Button, IconButton, Tooltip } from '@flowfolio/ui';
+import { Button, IconButton, Tooltip, CopyButton } from '@flowfolio/ui';
 import './ReportViewer.css';
-
-// UI feedback duration (milliseconds)
-const COPY_FEEDBACK_DURATION_MS = 2000;
 
 interface ReportViewerProps {
   report: AnalysisReport;
@@ -41,7 +36,6 @@ export default function ReportViewer({
   onExportJSON 
 }: ReportViewerProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['Executive Summary']));
-  const [copied, setCopied] = useState(false);
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev => {
@@ -62,17 +56,6 @@ export default function ReportViewer({
 
   const collapseAll = () => {
     setExpandedSections(new Set());
-  };
-
-  const handleCopyMarkdown = async () => {
-    if (onExportMarkdown) {
-      const markdown = onExportMarkdown();
-      if (markdown) {
-        await navigator.clipboard.writeText(markdown);
-        setCopied(true);
-        setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
-      }
-    }
   };
 
   const handleDownloadMarkdown = () => {
@@ -146,15 +129,13 @@ export default function ReportViewer({
         </div>
         
         <div className="report-actions">
-          <Button
+          <CopyButton
             variant="secondary"
             size="sm"
-            onClick={handleCopyMarkdown}
-            leftIcon={copied ? <Check size={14} /> : <Copy size={14} />}
-            title="Copy as Markdown"
-          >
-            {copied ? 'Copied!' : 'Copy'}
-          </Button>
+            text={() => onExportMarkdown?.() ?? ''}
+            disabled={!onExportMarkdown}
+            aria-label="Copy report as Markdown"
+          />
           <Button
             variant="secondary"
             size="sm"

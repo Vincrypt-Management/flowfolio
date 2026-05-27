@@ -1,6 +1,6 @@
 import { useState, useReducer, useEffect, useCallback, useMemo, useRef } from "react";
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, EmptyState } from "@flowfolio/ui";
+import { Button, EmptyState, FileUpload } from "@flowfolio/ui";
 import { useIsMounted } from './hooks/useIsMounted';
 import { useWashSaleStatus } from './hooks/useWashSaleStatus';
 import { invokeWithResilience } from './services/apiClient';
@@ -590,8 +590,7 @@ export function PortfolioTab({
     }
   }
 
-  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImportFile = useCallback((file: File | null) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
@@ -599,7 +598,6 @@ export function PortfolioTab({
       dispatch({ type: 'SET_IMPORT_PREVIEW', holdings, broker, errors });
     };
     reader.readAsText(file);
-    e.target.value = '';
   }, []);
 
   const handleConfirmImport = useCallback(() => {
@@ -686,10 +684,15 @@ export function PortfolioTab({
             <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
               Import holdings from a broker CSV export (Fidelity, Schwab, Vanguard, or generic).
             </p>
-            <label className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <Upload size={14} /> Choose CSV File
-              <input type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
-            </label>
+            <FileUpload
+              variant="secondary"
+              size="sm"
+              accept=".csv"
+              leftIcon={<Upload size={14} />}
+              onFile={handleImportFile}
+            >
+              Choose CSV File
+            </FileUpload>
 
             {importPreview.length > 0 && (
               <div style={{ marginTop: '16px' }}>

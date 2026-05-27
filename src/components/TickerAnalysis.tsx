@@ -29,16 +29,11 @@ import {
   CheckCircle,
   Clock,
   Download,
-  Copy,
-  Check,
 } from 'lucide-react';
-import { IconButton, Spinner, Tooltip, Button, Alert } from '@flowfolio/ui';
+import { IconButton, Spinner, Tooltip, Button, Alert, CopyButton } from '@flowfolio/ui';
 import './TickerAnalysis.css';
 import { useAnalysisReport } from '../hooks/useAnalysisReport';
 import type { TickerAnalysisData } from '../services/analysisReport';
-
-// UI feedback duration (milliseconds)
-const COPY_FEEDBACK_DURATION_MS = 2000;
 
 interface TickerAnalysisProps {
   symbol: string;
@@ -171,7 +166,6 @@ export default function TickerAnalysis({
   const [data, setData] = useState<TickerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const isMountedRef = useIsMounted();
   const reportGeneratedRef = useRef(false);
   
@@ -305,15 +299,6 @@ export default function TickerAnalysis({
     await generateTickerReport(reportData);
   }
 
-  const handleCopyReport = async () => {
-    const markdown = exportMarkdown();
-    if (markdown) {
-      await navigator.clipboard.writeText(markdown);
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
-    }
-  };
-
   const handleDownloadReport = () => {
     const markdown = exportMarkdown();
     if (markdown) {
@@ -392,10 +377,14 @@ export default function TickerAnalysis({
           <div className="ta-header-right">
             {report && (
               <>
-                <Tooltip content={copied ? 'Copied!' : 'Copy report'} side="bottom">
-                  <IconButton variant="ghost" size="sm" onClick={handleCopyReport} aria-label="Copy report">
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                  </IconButton>
+                <Tooltip content="Copy report" side="bottom">
+                  <CopyButton
+                    iconOnly
+                    variant="ghost"
+                    size="sm"
+                    aria-label="Copy report"
+                    text={() => exportMarkdown() ?? ''}
+                  />
                 </Tooltip>
                 <Tooltip content="Download report" side="bottom">
                   <IconButton variant="ghost" size="sm" onClick={handleDownloadReport} aria-label="Download report">

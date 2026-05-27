@@ -20,7 +20,7 @@ import { FlaskConical, ChevronDown, ChevronUp, SlidersHorizontal } from 'lucide-
 import { invokeWithResilience } from '../services/apiClient';
 import { createLogger } from '../core/logger';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
-import { Button } from '@flowfolio/ui';
+import { Button, SegmentedControl } from '@flowfolio/ui';
 import './ScenarioAnalysis.css';
 
 const log = createLogger('scenario-analysis');
@@ -378,29 +378,28 @@ function ScenarioAnalysis({ holdings, portfolioValue }: ScenarioAnalysisProps) {
 
   return (
     <div className="scenario-analysis">
-      {/* Scenario selector pills */}
-      <div className="scenario-pills">
-        {SCENARIOS.map((s) => (
-          <button
-            key={s.id}
-            className={`scenario-pill${selectedScenarioId === s.id ? ' scenario-pill--active' : ''}`}
-            onClick={() => setSelectedScenarioId(s.id)}
-            title={s.description}
-          >
-            {s.name}
-          </button>
-        ))}
-        <button
-          className={`scenario-pill${selectedScenarioId === 'custom' ? ' scenario-pill--active' : ''}`}
-          onClick={() => {
-            setSelectedScenarioId('custom');
-            setShowCustomBuilder(true);
-          }}
-        >
-          <SlidersHorizontal size={13} />
-          Custom
-        </button>
-      </div>
+      {/* Scenario selector */}
+      <SegmentedControl
+        size="sm"
+        aria-label="Scenario selector"
+        value={selectedScenarioId}
+        onChange={(id) => {
+          setSelectedScenarioId(id);
+          if (id === 'custom') setShowCustomBuilder(true);
+        }}
+        options={[
+          ...SCENARIOS.map((s) => ({
+            value: s.id,
+            label: s.name,
+            title: s.description,
+          })),
+          {
+            value: 'custom',
+            label: 'Custom',
+            icon: <SlidersHorizontal size={12} />,
+          },
+        ]}
+      />
 
       {/* Active scenario description */}
       {activeResult && (

@@ -54,7 +54,7 @@ describe('DividendsTab', () => {
     });
     render(<DividendsTab portfolioName="main" heldSymbols={['VTI']} />);
     await waitFor(() => expect(screen.getByText(/June 2026/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /^list$/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /^list$/i }));
     expect(screen.getByText('VTI')).toBeInTheDocument();
     expect(screen.getByText(/Projected payout/i)).toBeInTheDocument();
     expect(screen.getByText(/\$85\.00/)).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('DividendsTab', () => {
     });
     render(<DividendsTab portfolioName="main" heldSymbols={['VTI']} />);
     await waitFor(() => expect(screen.getByText(/June 2026/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: /^list$/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /^list$/i }));
     expect(screen.getByText('VTI')).toBeInTheDocument();
     expect(screen.queryByText(/June 2026/i)).not.toBeInTheDocument();
   });

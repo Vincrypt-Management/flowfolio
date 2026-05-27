@@ -33,7 +33,7 @@ import { ScenarioAnalysis } from './ScenarioAnalysis';
 import { PortfolioHolding as Holding } from '../hooks/useAppState';
 import { AiInlinePanel } from './AiInlinePanel';
 import { buildRiskPrompt, type RiskInput } from '../services/agentSurfaces';
-import { Button, MetricCard, Alert } from '@flowfolio/ui';
+import { Button, MetricCard, Alert, Gauge, Heatmap } from '@flowfolio/ui';
 import './RiskDashboard.css';
 
 interface RiskDashboardProps {
@@ -68,18 +68,6 @@ const VAR_Z_SCORE = 1.645; // 95% confidence
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function riskColor(score: number): string {
-  if (score <= 30) return 'var(--success)';
-  if (score <= 60) return 'var(--warning)';
-  return 'var(--error)';
-}
-
-function riskLabel(score: number): string {
-  if (score <= 30) return 'Low Risk';
-  if (score <= 60) return 'Moderate';
-  return 'High Risk';
 }
 
 function concentrationColor(weight: number): string {
@@ -154,64 +142,11 @@ function computeRiskScore(
   return Math.round(clamp(volScore + ddScore + concScore + sharpeScore, 0, 100));
 }
 
-// --- SVG Gauge ---
-
-function RiskGauge({ score }: { score: number }) {
-  const radius = 80;
-  const strokeWidth = 14;
-  const cx = 100;
-  const cy = 95;
-  const circumference = Math.PI * radius;
-  const progress = clamp(score / 100, 0, 1);
-  const dashLen = progress * circumference;
-  const gapLen = circumference - dashLen;
-
-  const color = riskColor(score);
-
-  return (
-    <div className="risk-gauge">
-      <svg viewBox="0 0 200 110" className="risk-gauge-svg">
-        {/* Background arc */}
-        <path
-          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
-          fill="none"
-          stroke="var(--border)"
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-        />
-        {/* Progress arc */}
-        <path
-          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={`${dashLen} ${gapLen}`}
-          style={{ transition: 'stroke-dasharray 0.6s ease, stroke 0.6s ease' }}
-        />
-        {/* Score label */}
-        <text
-          x={cx}
-          y={cy - 15}
-          textAnchor="middle"
-          className="risk-gauge-score"
-          fill={color}
-        >
-          {score}
-        </text>
-        <text
-          x={cx}
-          y={cy + 5}
-          textAnchor="middle"
-          className="risk-gauge-label"
-          fill="var(--text-muted)"
-        >
-          {riskLabel(score)}
-        </text>
-      </svg>
-    </div>
-  );
-}
+const RISK_ZONES = [
+  { upTo: 30, color: 'var(--success)', label: 'Low Risk' },
+  { upTo: 60, color: 'var(--warning)', label: 'Moderate' },
+  { upTo: 100, color: 'var(--error)', label: 'High Risk' },
+];
 
 // --- Component ---
 
@@ -356,6 +291,28 @@ function RiskDashboard({
     return pairs;
   }, [symbolMetrics]);
 
+  const correlationMatrix = useMemo(() => {
+    const n = symbolMetrics.length;
+    if (n < 2) return { symbols: [] as string[], values: [] as number[][] };
+    const symbols = symbolMetrics.map((s) => s.symbol);
+    const values: number[][] = [];
+    for (let i = 0; i < n; i++) {
+      const row: number[] = [];
+      for (let j = 0; j < n; j++) {
+        if (i === j) {
+          row.push(1);
+        } else {
+          const [a, b] = i < j ? [i, j] : [j, i];
+          row.push(
+            pseudoCorrelation(symbolMetrics[a].metrics, symbolMetrics[b].metrics)
+          );
+        }
+      }
+      values.push(row);
+    }
+    return { symbols, values };
+  }, [symbolMetrics]);
+
   // Synthetic drawdown timeline data
   const drawdownData = useMemo(() => {
     if (symbolMetrics.length === 0) return [];
@@ -478,7 +435,11 @@ function RiskDashboard({
       {/* Top row: Gauge + Metrics Cards */}
       <div className="risk-top-row">
         <div className="card risk-gauge-card">
-          <RiskGauge score={riskScore} />
+          <Gauge
+            value={riskScore}
+            zones={RISK_ZONES}
+            aria-label="Composite risk score"
+          />
           <div className="risk-gauge-subtitle text-muted">
             Composite Risk Score
           </div>
@@ -555,29 +516,21 @@ function RiskDashboard({
       </div>
 
       {/* Correlation Heatmap */}
-      {correlationPairs.length > 0 && (
+      {correlationMatrix.symbols.length > 0 && (
         <div className="card risk-correlation-card">
           <h3 className="risk-section-title">
             <Activity size={16} />
             Correlation Matrix
           </h3>
-          <div className="risk-correlation-grid">
-            {correlationPairs.map((pair) => (
-              <div
-                key={`${pair.symbolA}-${pair.symbolB}`}
-                className="risk-correlation-cell"
-                style={{ backgroundColor: correlationColor(pair.correlation) }}
-                title={`${pair.symbolA} / ${pair.symbolB}: ${pair.correlation.toFixed(2)}`}
-              >
-                <span className="risk-correlation-pair">
-                  {pair.symbolA}/{pair.symbolB}
-                </span>
-                <span className="risk-correlation-value font-mono">
-                  {pair.correlation.toFixed(2)}
-                </span>
-              </div>
-            ))}
-          </div>
+          <Heatmap
+            values={correlationMatrix.values}
+            rowLabels={correlationMatrix.symbols}
+            colLabels={correlationMatrix.symbols}
+            domainMin={-1}
+            domainMax={1}
+            colorFor={correlationColor}
+            aria-label="Pairwise correlation matrix"
+          />
         </div>
       )}
 

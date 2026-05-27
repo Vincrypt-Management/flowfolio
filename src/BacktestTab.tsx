@@ -3,7 +3,7 @@ import { useIsMounted } from './hooks/useIsMounted';
 import { invokeWithResilience } from "./services/apiClient";
 import { useToast } from "./components/Toast";
 import { useUserMode } from './contexts/UserModeContext';
-import { Button } from "@flowfolio/ui";
+import { Button, SegmentedControl } from "@flowfolio/ui";
 import { formatCurrency } from './shared/utils';
 import { AiInlinePanel } from './components/AiInlinePanel';
 import { buildBacktestPrompt } from './services/agentSurfaces';
@@ -330,18 +330,24 @@ export function BacktestTab() {
 
         <div className="config-section">
           <h3><BarChart3 size={18} /> Symbols</h3>
-          <div className="preset-buttons">
-            {PRESET_STRATEGIES.map((preset) => (
-              <button
-                key={preset.name}
-                className={`preset-btn ${config.symbols.join(',') === preset.symbols.join(',') ? 'active' : ''}`}
-                onClick={() => applyPreset(preset)}
-                title={preset.description}
-              >
-                {preset.name}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            size="sm"
+            aria-label="Strategy preset"
+            value={
+              PRESET_STRATEGIES.find(
+                (p) => p.symbols.join(',') === config.symbols.join(','),
+              )?.name ?? ''
+            }
+            onChange={(name) => {
+              const preset = PRESET_STRATEGIES.find((p) => p.name === name);
+              if (preset) applyPreset(preset);
+            }}
+            options={PRESET_STRATEGIES.map((preset) => ({
+              value: preset.name,
+              label: preset.name,
+              title: preset.description,
+            }))}
+          />
           <div className="config-field full-width">
             <label>Custom Symbols (comma-separated)</label>
             <input
