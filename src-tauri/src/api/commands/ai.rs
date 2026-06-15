@@ -88,7 +88,18 @@ pub async fn ai_chat_stream(
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
     let model = model.unwrap_or_else(|| DEFAULT_FREE_MODEL.to_string());
-    let client = crate::HTTP_CLIENT.clone();
+
+    // Build a streaming-specific client with ALL auto-decompression disabled.
+    // reqwest's gzip/brotli decompressors fail on partial chunks that arrive in
+    // an incremental SSE stream — they need the full payload to decompress.
+    // Accept-Encoding: identity alone isn't enough because reqwest decompresses
+    // based on the *response* Content-Encoding header, ignoring our request header.
+    let stream_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .gzip(false)
+        .brotli(false)
+        .build()
+        .map_err(|e| format!("Failed to build streaming client: {}", e))?;
 
     let body = serde_json::json!({
         "model": model,
@@ -98,14 +109,11 @@ pub async fn ai_chat_stream(
         "stream": true,
     });
 
-    let response = client
+    let response = stream_client
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .header("HTTP-Referer", "https://flowfolio.app")
-        // Disable content-encoding for SSE: reqwest's gzip decompressor
-        // fails on partial chunks that arrive in an incremental stream.
-        .header("Accept-Encoding", "identity")
         .json(&body)
         .send()
         .await
