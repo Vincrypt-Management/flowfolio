@@ -1565,7 +1565,7 @@ impl MultiSourceProvider {
                 .get("regularMarketPrice")
                 .and_then(|p| {
                     let price = p.as_f64()?;
-                    let prev = m.get("previousClose")?.as_f64()?;
+                    let prev = m.get("chartPreviousClose")?.as_f64()?;
                     Some(price - prev)
                 })
                 .unwrap_or(0.0),
@@ -1573,7 +1573,7 @@ impl MultiSourceProvider {
                 .get("regularMarketPrice")
                 .and_then(|p| {
                     let price = p.as_f64()?;
-                    let prev = m.get("previousClose")?.as_f64()?;
+                    let prev = m.get("chartPreviousClose")?.as_f64()?;
                     Some(((price - prev) / prev) * 100.0)
                 })
                 .unwrap_or(0.0),
