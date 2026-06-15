@@ -721,11 +721,10 @@ impl MultiSourceProvider {
         let tier_priority = |name: &str| -> u8 {
             match name {
                 "alpaca" => 10,      // Unlimited free tier
-                "yahoo" => 9,        // No key required
-                "stooq" => 8,        // No key required, live CSV quotes
+                "yahoo" => 9,        // No key required, tries query1+query2
+                "nasdaq" => 8,       // No key required, real-time public API
                 "tiingo" => 7,       // 500/hour free (needs key)
                 "finnhub" => 6,      // 60/min free (needs key)
-                "marketwatch" => 5,  // No key required, real-time quotes
                 "twelve_data" => 4,  // 800/day free (needs key)
                 "fmp" => 3,          // 250/day free (needs key)
                 "alphavantage" => 2, // 5/min free (needs key)
@@ -746,9 +745,9 @@ impl MultiSourceProvider {
                 tier_priority("yahoo"),
             ),
             (
-                "stooq",
-                self.get_provider_health("stooq"),
-                tier_priority("stooq"),
+                "nasdaq",
+                self.get_provider_health("nasdaq"),
+                tier_priority("nasdaq"),
             ),
             (
                 "tiingo",
@@ -759,11 +758,6 @@ impl MultiSourceProvider {
                 "finnhub",
                 self.get_provider_health("finnhub"),
                 tier_priority("finnhub"),
-            ),
-            (
-                "marketwatch",
-                self.get_provider_health("marketwatch"),
-                tier_priority("marketwatch"),
             ),
             (
                 "twelve_data",
@@ -1498,6 +1492,7 @@ impl MultiSourceProvider {
     }
 
     /// Yahoo Finance (no API key needed, but can be rate limited)
+    /// Tries query1 first; on 429 falls back to query2 (different load balancer).
     async fn fetch_from_yahoo(&self, symbol: &str) -> Result<MarketDataResult, String> {
         // Yahoo is generally reliable, increase rate limit
         if !self.check_rate_limit("yahoo", 60) {
@@ -1510,26 +1505,42 @@ impl MultiSourceProvider {
             .unwrap_or(1_700_000_000);
         let start_time = end_time - (365 * 24 * 60 * 60);
 
-        let url = format!(
-            "https://query1.finance.yahoo.com/v8/finance/chart/{}?period1={}&period2={}&interval=1d",
-            symbol, start_time, end_time
-        );
-
         tracing::debug!(symbol = %symbol, "Fetching data from Yahoo");
 
-        let response = crate::HTTP_CLIENT
-            .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            .header("Accept", "application/json, text/plain, */*")
-            .header("Accept-Language", "en-US,en;q=0.9")
-            .header("Referer", "https://finance.yahoo.com/")
-            .send()
-            .await
-            .map_err(|e| format!("Yahoo request failed: {}", e))?;
+        // Try query1 first, fall back to query2 on rate limiting
+        let hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
+        let mut last_err = String::new();
+        let mut response_opt: Option<reqwest::Response> = None;
 
-        if !response.status().is_success() {
-            return Err(format!("Yahoo API error: {}", response.status()));
+        for host in hosts {
+            let url = format!(
+                "https://{}/v8/finance/chart/{}?period1={}&period2={}&interval=1d",
+                host, symbol, start_time, end_time
+            );
+            let resp = crate::HTTP_CLIENT
+                .get(&url)
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Referer", "https://finance.yahoo.com/")
+                .send()
+                .await
+                .map_err(|e| format!("Yahoo request failed: {}", e))?;
+
+            let status = resp.status();
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                tracing::warn!(host = %host, symbol = %symbol, "Yahoo 429 — trying next host");
+                last_err = format!("Yahoo API error: {} (host: {})", status, host);
+                continue;
+            }
+            if !status.is_success() {
+                return Err(format!("Yahoo API error: {}", status));
+            }
+            response_opt = Some(resp);
+            break;
         }
+
+        let response = response_opt.ok_or(last_err)?;
 
         let data: Value = response
             .json()
@@ -1632,132 +1643,91 @@ impl MultiSourceProvider {
         })
     }
 
-    /// Stooq live quote (no API key needed)
-    /// Uses the /q/l/ CSV endpoint: Symbol,Date,Time,Open,High,Low,Close,Volume,Name
-    async fn fetch_from_stooq(&self, symbol: &str) -> Result<MarketDataResult, String> {
-        if !self.check_rate_limit("stooq", 30) {
-            return Err("Stooq rate limit exceeded".to_string());
+    /// Nasdaq public API (no API key needed, real-time quotes)
+    async fn fetch_from_nasdaq(&self, symbol: &str) -> Result<MarketDataResult, String> {
+        if !self.check_rate_limit("nasdaq", 30) {
+            return Err("Nasdaq rate limit exceeded".to_string());
         }
 
         let url = format!(
-            "https://stooq.com/q/l/?s={}.us&f=sd2t2ohlcvn&h&e=csv",
-            symbol.to_lowercase()
-        );
-
-        tracing::debug!(symbol = %symbol, "Fetching live quote from Stooq");
-
-        let response = crate::HTTP_CLIENT
-            .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
-            .send()
-            .await
-            .map_err(|e| format!("Stooq request failed: {}", e))?;
-
-        if !response.status().is_success() {
-            self.track_failure("stooq");
-            return Err(format!("Stooq API error: {}", response.status()));
-        }
-
-        let csv = response
-            .text()
-            .await
-            .map_err(|e| format!("Stooq read failed: {}", e))?;
-
-        // Header line then data lines: Symbol,Date,Time,Open,High,Low,Close,Volume,Name
-        let data_line = csv.lines().nth(1).ok_or("Stooq empty response")?;
-        let parts: Vec<&str> = data_line.split(',').collect();
-        if parts.len() < 8 {
-            self.track_failure("stooq");
-            return Err(format!("Stooq malformed CSV: {}", data_line));
-        }
-
-        let close: f64 = parts[6].parse().map_err(|_| "Stooq bad close price")?;
-        let open: f64 = parts[3].parse().unwrap_or(close);
-        let change = close - open;
-        let change_percent = if open > 0.0 { (change / open) * 100.0 } else { 0.0 };
-        let volume: i64 = parts[7].parse().unwrap_or(0);
-
-        if close == 0.0 {
-            self.track_failure("stooq");
-            return Err("Stooq returned zero price".to_string());
-        }
-
-        self.track_success("stooq");
-        tracing::info!(symbol = %symbol, price = close, source = "stooq", "Stooq quote received");
-
-        Ok(MarketDataResult {
-            quote: Some(StockQuote {
-                symbol: symbol.to_string(),
-                price: close,
-                change,
-                change_percent,
-                volume,
-                timestamp: format!("{} {}", parts[1], parts[2]),
-                source: "stooq".to_string(),
-            }),
-            historical: vec![],
-            source: "stooq".to_string(),
-            cached: false,
-        })
-    }
-
-    /// MarketWatch public quote API (no API key needed)
-    async fn fetch_from_marketwatch(&self, symbol: &str) -> Result<MarketDataResult, String> {
-        if !self.check_rate_limit("marketwatch", 20) {
-            return Err("MarketWatch rate limit exceeded".to_string());
-        }
-
-        let url = format!(
-            "https://api.marketwatch.com/mw/quotes/{}/quote",
+            "https://api.nasdaq.com/api/quote/{}/info?assetclass=stocks",
             symbol.to_uppercase()
         );
 
-        tracing::debug!(symbol = %symbol, "Fetching quote from MarketWatch");
+        tracing::debug!(symbol = %symbol, "Fetching quote from Nasdaq API");
 
         let response = crate::HTTP_CLIENT
             .get(&url)
-            .header("Accept", "application/json")
-            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .header("Accept", "application/json, text/plain, */*")
             .send()
             .await
-            .map_err(|e| format!("MarketWatch request failed: {}", e))?;
+            .map_err(|e| format!("Nasdaq request failed: {}", e))?;
 
         if !response.status().is_success() {
-            self.track_failure("marketwatch");
-            return Err(format!("MarketWatch API error: {}", response.status()));
+            self.track_failure("nasdaq");
+            return Err(format!("Nasdaq API error: {}", response.status()));
         }
 
         let data: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("MarketWatch parse failed: {}", e))?;
+            .map_err(|e| format!("Nasdaq parse failed: {}", e))?;
 
-        let quote_data = data.get("data").ok_or("No data in MarketWatch response")?;
-        let price = quote_data
-            .get("last")
-            .and_then(|v| v.as_f64())
-            .ok_or("MarketWatch missing price")?;
+        let primary = data
+            .get("data")
+            .and_then(|d| d.get("primaryData"))
+            .ok_or("Nasdaq missing primaryData")?;
+
+        // Parse price: "$293.36" → 293.36
+        let price_str = primary
+            .get("lastSalePrice")
+            .and_then(|v| v.as_str())
+            .ok_or("Nasdaq missing lastSalePrice")?;
+        let price: f64 = price_str
+            .trim_start_matches('$')
+            .replace(',', "")
+            .parse()
+            .map_err(|_| format!("Nasdaq bad price: {}", price_str))?;
 
         if price == 0.0 {
-            self.track_failure("marketwatch");
-            return Err("MarketWatch returned zero price".to_string());
+            self.track_failure("nasdaq");
+            return Err("Nasdaq returned zero price".to_string());
         }
 
-        self.track_success("marketwatch");
-        tracing::info!(symbol = %symbol, price, source = "marketwatch", "MarketWatch quote received");
+        // Parse change: "+2.23" or "-1.50" → ±1.50
+        let change: f64 = primary
+            .get("netChange")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0")
+            .replace(['+', ','], "")
+            .parse()
+            .unwrap_or(0.0);
+
+        // Parse change_percent: "+0.77%" → 0.77
+        let change_percent: f64 = primary
+            .get("percentageChange")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0%")
+            .replace(['+', '%', ','], "")
+            .parse()
+            .unwrap_or(0.0);
+
+        self.track_success("nasdaq");
+        tracing::info!(symbol = %symbol, price, source = "nasdaq", "Nasdaq quote received");
 
         Ok(MarketDataResult {
             quote: Some(StockQuote {
                 symbol: symbol.to_string(),
                 price,
-                change: quote_data.get("change").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                change_percent: quote_data.get("changePercent").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                volume: quote_data.get("volume").and_then(|v| v.as_i64()).unwrap_or(0),
+                change,
+                change_percent,
+                volume: 0,
                 timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-                source: "marketwatch".to_string(),
+                source: "nasdaq".to_string(),
             }),
             historical: vec![],
-            source: "marketwatch".to_string(),
+            source: "nasdaq".to_string(),
             cached: false,
         })
     }
@@ -1812,8 +1782,7 @@ impl MultiSourceProvider {
                     self.fetch_from_alphavantage(&symbol).await
                 }
                 "yahoo" => self.fetch_from_yahoo(&symbol).await,
-                "stooq" => self.fetch_from_stooq(&symbol).await,
-                "marketwatch" => self.fetch_from_marketwatch(&symbol).await,
+                "nasdaq" => self.fetch_from_nasdaq(&symbol).await,
                 _ => continue,
             };
 
@@ -2045,10 +2014,10 @@ mod tests {
     // ── Test 4: get_provider_order ───────────────────────────────────────────
 
     #[test]
-    fn test_get_provider_order_returns_ten_providers() {
+    fn test_get_provider_order_returns_nine_providers() {
         let provider = MultiSourceProvider::new();
         let order = provider.get_provider_order();
-        assert_eq!(order.len(), 10, "should return exactly 10 providers");
+        assert_eq!(order.len(), 9, "should return exactly 9 providers");
     }
 
     #[test]
@@ -2065,6 +2034,7 @@ mod tests {
         let expected = [
             "alpaca",
             "yahoo",
+            "nasdaq",
             "tiingo",
             "finnhub",
             "twelve_data",

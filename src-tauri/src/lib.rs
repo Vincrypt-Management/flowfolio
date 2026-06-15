@@ -62,14 +62,12 @@ pub(crate) static SAVED_PLANS: Lazy<Arc<Mutex<HashMap<String, VibePlanScript>>>>
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 /// Shared HTTP client — clone is cheap (shares the connection pool).
-/// Decompression disabled: auto-gzip/brotli fails on partial body chunks
-/// (parallel AI calls, SSE streams). APIs that want compression will still
-/// get it — they just won't be decompressed by reqwest automatically.
+/// Note: SSE streaming uses its own client with gzip/brotli disabled because
+/// reqwest's decompressors fail on partial body chunks. Regular JSON calls
+/// keep gzip enabled for efficient payloads.
 pub(crate) static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
-        .gzip(false)
-        .brotli(false)
         .build()
         .expect("Failed to create shared HTTP client")
 });
