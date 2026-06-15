@@ -300,15 +300,20 @@ impl EnhancedMarketDataService {
         let _ = self.get_batch_prices(symbols.clone()).await;
 
         let qc = self.quote_cache.read().await;
+        let pc = self.price_cache.read().await;
         symbols
             .iter()
             .map(|s| {
                 let upper = s.to_uppercase();
-                let (price, change, change_pct) = qc
+                // Prefer quote_cache (has change data); fall back to price_cache
+                // (DB-cached prices populate price_cache but not quote_cache since
+                // the DB schema only stores current_price, not change/change_percent).
+                let result = qc
                     .get(&upper)
                     .map(|(p, c, cp, _)| (*p, *c, *cp))
+                    .or_else(|| pc.get(&upper).map(|(p, _)| (*p, 0.0, 0.0)))
                     .unwrap_or((0.0, 0.0, 0.0));
-                (upper, (price, change, change_pct))
+                (upper, result)
             })
             .collect()
     }
