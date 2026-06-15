@@ -70,15 +70,17 @@ const SECTOR_MAP: Record<string, string> = {
   JNJ: "Healthcare",
 };
 
+// Hex values required — SVG fill attributes don't compute CSS variables,
+// so var(--chart-N) strings render as black in recharts Cell elements.
 const CHART_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--chart-6)",
-  "var(--chart-7)",
-  "var(--chart-8)",
+  "#00c281",
+  "#4f46e5",
+  "#f59e0b",
+  "#f97316",
+  "#06b6d4",
+  "#8b5cf6",
+  "#ec4899",
+  "#6b7280",
 ];
 
 // ============ Component ============
