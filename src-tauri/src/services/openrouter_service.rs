@@ -177,7 +177,7 @@ impl OpenRouterService {
     /// Resolve API key: struct field first (set at init), then live RUNTIME_KEYS
     /// lookup, then the embedded free-tier fallback. The fallback guarantees the
     /// service is always callable on `:free` models.
-    fn resolve_api_key(&self) -> Option<String> {
+    pub fn resolve_api_key(&self) -> Option<String> {
         self.api_key
             .clone()
             .or_else(|| crate::get_api_key("OPENROUTER_API_KEY"))
@@ -435,9 +435,14 @@ impl OpenRouterService {
                     last_err = Some(format!("{} rate-limited; failing over", model_name));
                     continue;
                 }
-                Err(TryModelError::Other(e)) => {
-                    // Non-rate-limit errors (4xx auth, 5xx server) — bail
-                    // immediately; ladder won't help.
+                Err(TryModelError::Transient(e)) => {
+                    // Decode/network error — may work on a different model; try next.
+                    tracing::warn!(model = %model_name, error = %e, "Transient error; trying next in ladder");
+                    last_err = Some(e);
+                    continue;
+                }
+                Err(TryModelError::Fatal(e)) => {
+                    // Auth/credits errors — ladder won't help; bail immediately.
                     return Err(e);
                 }
             }
@@ -503,7 +508,7 @@ impl OpenRouterService {
                 .await
                 .map_err(|e| {
                     tracing::error!(error = %e, "OpenRouter request failed");
-                    TryModelError::Other(format!(
+                    TryModelError::Transient(format!(
                         "Request failed: {}. Check your internet connection.",
                         e
                     ))
@@ -540,22 +545,28 @@ impl OpenRouterService {
                 let error_text = response.text().await.unwrap_or_default();
                 tracing::error!(status = %status, body = %error_text, "OpenRouter API error");
 
-                let user_error = match status.as_u16() {
-                    401 => "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string(),
-                    402 => "Insufficient credits. Please add credits to your OpenRouter account."
-                        .to_string(),
-                    500..=599 => format!(
+                let (variant, msg): (fn(String) -> TryModelError, String) = match status.as_u16() {
+                    401 => (TryModelError::Fatal, "Invalid API key. Please check your OPENROUTER_API_KEY.".to_string()),
+                    402 => (TryModelError::Fatal, "Insufficient credits. Please add credits to your OpenRouter account.".to_string()),
+                    500..=599 => (TryModelError::Transient, format!(
                         "OpenRouter server error ({}). The service may be temporarily unavailable.",
                         status
-                    ),
-                    _ => format!("OpenRouter API error {}: {}", status, error_text),
+                    )),
+                    _ => (TryModelError::Fatal, format!("OpenRouter API error {}: {}", status, error_text)),
                 };
-                return Err(TryModelError::Other(user_error));
+                return Err(variant(msg));
             }
 
-            let result: OpenRouterResponse = response.json().await.map_err(|e| {
-                tracing::error!(error = %e, "Failed to parse OpenRouter response");
-                TryModelError::Other(format!("Failed to parse AI response: {}", e))
+            // Read raw bytes first so we can log the body on parse failure.
+            let body_bytes = response.bytes().await.map_err(|e| {
+                tracing::error!(error = %e, model = %model_name, "Failed to read OpenRouter response body");
+                TryModelError::Transient(format!("Failed to read response body: {}", e))
+            })?;
+
+            let result: OpenRouterResponse = serde_json::from_slice(&body_bytes).map_err(|e| {
+                let preview = String::from_utf8_lossy(&body_bytes[..body_bytes.len().min(400)]);
+                tracing::error!(error = %e, model = %model_name, body_preview = %preview, "Failed to parse OpenRouter response");
+                TryModelError::Transient(format!("Failed to parse AI response: {}", e))
             })?;
 
             return match Self::validate_openrouter_response(&result) {
@@ -574,7 +585,7 @@ impl OpenRouterService {
                         response_choices = result.choices.len(),
                         "OpenRouter response failed validation"
                     );
-                    Err(TryModelError::Other(e))
+                    Err(TryModelError::Transient(e))
                 }
             };
         }
@@ -721,11 +732,16 @@ Allocation methods: equal_weight, score_weighted, value_weighted, yield_weighted
     }
 }
 
-/// Internal error type that distinguishes 429-exhaustion (caller can failover)
-/// from other errors (caller should surface immediately).
+/// Internal error type for per-model attempt failures.
+///
+/// - `RateLimited`  — 429 exhausted; park model and try next in ladder.
+/// - `Transient`    — body read/decode failed (connection reset, truncated chunk,
+///                    decompression error); try next model in ladder.
+/// - `Fatal`        — auth (401), credits (402), etc.; bail immediately.
 enum TryModelError {
     RateLimited,
-    Other(String),
+    Transient(String),
+    Fatal(String),
 }
 
 /// Build the fallback ladder. Env override `OPENROUTER_FALLBACK_MODELS` =

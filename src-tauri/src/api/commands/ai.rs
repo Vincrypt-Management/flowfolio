@@ -81,7 +81,10 @@ pub async fn ai_chat_stream(
         return Err("AI features require an AI Suite or Pro subscription".to_string());
     }
 
-    let api_key = crate::get_api_key("OPENROUTER_API_KEY")
+    // Prefer the user's key; fall through to the embedded free-tier fallback
+    // so streaming always works even without a configured key.
+    let api_key = OPENROUTER_SERVICE
+        .resolve_api_key()
         .ok_or_else(|| "OpenRouter API key not configured".to_string())?;
 
     let model = model.unwrap_or_else(|| DEFAULT_FREE_MODEL.to_string());
