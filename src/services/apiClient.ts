@@ -33,13 +33,44 @@ interface RequestMetrics {
  * - Automatic retries with exponential backoff
  * - Request metrics and monitoring
  */
+// Commands that hit local SQLite — never blocked by any circuit breaker
+const LOCAL_COMMANDS = new Set([
+  'list_saved_portfolios',
+  'save_portfolio',
+  'delete_saved_portfolio',
+  'get_portfolio',
+  'list_saved_plans',
+  'save_plan',
+  'delete_saved_plan',
+  'get_journal_entries',
+  'save_journal_entry',
+  'delete_journal_entry',
+  'ai_is_configured',
+  'ai_local_is_ready',
+  'ai_clear_cache',
+  'ai_cache_stats',
+]);
+
+// AI network commands — isolated circuit breaker so market data failures can't block AI
+const AI_COMMANDS = new Set([
+  'ai_chat',
+  'ai_chat_stream',
+  'ai_chat_assistant',
+  'ai_generate_portfolio_insight',
+]);
+
 class ApiClient {
   // Request deduplication: pending requests by key
   private pendingRequests: Map<string, PendingRequest<unknown>> = new Map();
   private readonly REQUEST_DEDUP_TTL = 100; // ms
 
-  // Circuit breaker configuration
+  // Per-domain circuit breakers: market data failures don't bleed into AI and vice versa
   private circuitBreaker: CircuitBreakerState = {
+    failures: 0,
+    lastFailure: 0,
+    state: 'closed',
+  };
+  private aiCircuitBreaker: CircuitBreakerState = {
     failures: 0,
     lastFailure: 0,
     state: 'closed',
@@ -68,14 +99,19 @@ class ApiClient {
   };
   private latencies: number[] = [];
 
+  private domainBreaker(command: string): CircuitBreakerState {
+    return AI_COMMANDS.has(command) ? this.aiCircuitBreaker : this.circuitBreaker;
+  }
+
   /**
    * Execute a Tauri command with industrial-grade resilience
    */
   async execute<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     const key = this.getRequestKey(command, args);
-    
-    // Check circuit breaker
-    if (!this.canExecute()) {
+    const breaker = this.domainBreaker(command);
+
+    // Check circuit breaker — local DB commands bypass it entirely
+    if (!LOCAL_COMMANDS.has(command) && !this.canExecute(breaker)) {
       throw new Error(`Circuit breaker open for ${command}. Service unavailable.`);
     }
 
@@ -96,10 +132,10 @@ class ApiClient {
 
     try {
       const result = await requestPromise;
-      this.recordSuccess();
+      this.recordSuccess(breaker);
       return result;
     } catch (error) {
-      this.recordFailure();
+      this.recordFailure(breaker);
       // Detect rate limit errors and set cooldown
       const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
       if (msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests')) {
@@ -159,26 +195,25 @@ class ApiClient {
   /**
    * Check if circuit breaker allows execution
    */
-  private canExecute(): boolean {
+  private canExecute(breaker: CircuitBreakerState = this.circuitBreaker): boolean {
     const now = Date.now();
 
-    switch (this.circuitBreaker.state) {
+    switch (breaker.state) {
       case 'closed':
         return true;
-      
+
       case 'open':
-        // Check if recovery timeout has passed
-        if (now - this.circuitBreaker.lastFailure >= this.RECOVERY_TIMEOUT) {
+        if (now - breaker.lastFailure >= this.RECOVERY_TIMEOUT) {
           log.info('Circuit breaker transitioning to half-open');
-          this.circuitBreaker.state = 'half-open';
-          this.circuitBreaker.failures = 0;
+          breaker.state = 'half-open';
+          breaker.failures = 0;
           return true;
         }
         return false;
-      
+
       case 'half-open':
         return true;
-      
+
       default:
         return true;
     }
@@ -187,36 +222,33 @@ class ApiClient {
   /**
    * Record successful request
    */
-  private recordSuccess(): void {
+  private recordSuccess(breaker: CircuitBreakerState = this.circuitBreaker): void {
     this.metrics.successfulRequests++;
-    
-    if (this.circuitBreaker.state === 'half-open') {
-      // After enough successes in half-open, close the circuit
-      if (this.circuitBreaker.failures === 0) {
+
+    if (breaker.state === 'half-open') {
+      if (breaker.failures === 0) {
         log.info('Circuit breaker closed after recovery');
-        this.circuitBreaker.state = 'closed';
+        breaker.state = 'closed';
       }
     }
-    
-    // Reset failure count on success
-    this.circuitBreaker.failures = 0;
+
+    breaker.failures = 0;
   }
 
   /**
    * Record failed request
    */
-  private recordFailure(): void {
+  private recordFailure(breaker: CircuitBreakerState = this.circuitBreaker): void {
     this.metrics.failedRequests++;
-    this.circuitBreaker.failures++;
-    this.circuitBreaker.lastFailure = Date.now();
+    breaker.failures++;
+    breaker.lastFailure = Date.now();
 
-    if (this.circuitBreaker.state === 'half-open') {
-      // Any failure in half-open reopens the circuit
+    if (breaker.state === 'half-open') {
       log.info('Circuit breaker reopened from half-open');
-      this.circuitBreaker.state = 'open';
-    } else if (this.circuitBreaker.failures >= this.FAILURE_THRESHOLD) {
-      log.info(`Circuit breaker opened after ${this.circuitBreaker.failures} failures`);
-      this.circuitBreaker.state = 'open';
+      breaker.state = 'open';
+    } else if (breaker.failures >= this.FAILURE_THRESHOLD) {
+      log.info(`Circuit breaker opened after ${breaker.failures} failures`);
+      breaker.state = 'open';
     }
   }
 

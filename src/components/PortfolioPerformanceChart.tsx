@@ -378,7 +378,7 @@ export function PortfolioPerformanceChart({
                   type="monotone"
                   dataKey="portfolioPct"
                   name="Portfolio"
-                  stroke={isPositive ? 'var(--primary)' : 'var(--error)'}
+                  stroke={isPositive ? '#6366f1' : '#ef4444'}
                   strokeWidth={2}
                   fill="url(#portfolioGradient)"
                   dot={false}
@@ -390,7 +390,7 @@ export function PortfolioPerformanceChart({
                     type="monotone"
                     dataKey="benchmarkPct"
                     name={benchmark}
-                    stroke="var(--chart-2)"
+                    stroke="#10b981"
                     strokeWidth={1.5}
                     strokeDasharray="5 3"
                     dot={false}

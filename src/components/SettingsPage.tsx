@@ -20,7 +20,7 @@ const API_KEY_FIELDS: Array<{ key: string; label: string; placeholder: string }>
   { key: 'alpha_vantage_key', label: 'Alpha Vantage Key', placeholder: 'Enter key…' },
   { key: 'openrouter_key',    label: 'OpenRouter Key',    placeholder: 'Enter key…' },
 ];
-import { Button, PasswordInput, Alert, Textarea } from '@flowfolio/ui';
+import { Button, PasswordInput, Alert, Textarea, Select } from '@flowfolio/ui';
 import './SettingsPage.css';
 import { FREE_MODELS, DEFAULT_FREE_MODEL } from '../constants/freeModels';
 import { getSelectedModel, setSelectedModel } from '../services/aiModel';
@@ -538,18 +538,16 @@ export function SettingsPage() {
           </p>
           <div className="form-group">
             <label htmlFor="ai-model">Model</label>
-            <select
+            <Select
               id="ai-model"
               value={selectedAiModel}
-              onChange={e => dispatch({ type: 'SET_AI_MODEL', payload: e.target.value })}
+              onChange={v => dispatch({ type: 'SET_AI_MODEL', payload: v })}
               style={{ width: '320px' }}
-            >
-              {FREE_MODELS.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name}{m.recommended ? ' (recommended)' : ''} — {(m.contextWindow / 1000).toFixed(0)}k ctx
-                </option>
-              ))}
-            </select>
+              options={FREE_MODELS.map(m => ({
+                value: m.id,
+                label: `${m.name}${m.recommended ? ' (recommended)' : ''} — ${(m.contextWindow / 1000).toFixed(0)}k ctx`,
+              }))}
+            />
           </div>
           {(() => {
             const m = FREE_MODELS.find(fm => fm.id === selectedAiModel);

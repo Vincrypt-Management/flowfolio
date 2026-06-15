@@ -822,7 +822,7 @@ Be conversational but professional. Cite specific data points from the portfolio
       <UiBarChart
         data={data}
         xKey="symbol"
-        series={[{ key: 'allocation', name: 'Allocation %', color: 'var(--primary)' }]}
+        series={[{ key: 'allocation', name: 'Allocation %', color: '#6366f1' }]}
         height={300}
       />
     );
@@ -905,8 +905,12 @@ Be conversational but professional. Cite specific data points from the portfolio
                     generatedPortfolio.activityLevel.score <= -0.2 ? 'success' : 
                     generatedPortfolio.activityLevel.score <= 0.2 ? 'warning' : 'active'
                   }`}>
-                    {generatedPortfolio.activityLevel.score <= -0.2 ? '🧘' : 
-                     generatedPortfolio.activityLevel.score <= 0.2 ? '⚖️' : '🏃'} {generatedPortfolio.activityLevel.label}
+                    {generatedPortfolio.activityLevel.score <= -0.2
+                      ? <Activity size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                      : generatedPortfolio.activityLevel.score <= 0.2
+                      ? <BarChart3 size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                      : <TrendingUp size={14} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                    }{' '}{generatedPortfolio.activityLevel.label}
                   </span>
                 )}
                 {generatedPortfolio.diversificationScore && (
@@ -924,7 +928,7 @@ Be conversational but professional. Cite specific data points from the portfolio
                   <span className="meta-badge success">✓ Risk Protected</span>
                 )}
                 {generatedPortfolio.quantFeedbackApplied && (
-                  <span className="meta-badge info">🔄 Quant Optimized</span>
+                  <span className="meta-badge info" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><RefreshCw size={12} /> Quant Optimized</span>
                 )}
               </div>
               {sectionVisibility.hasRiskAdjustments && (
@@ -936,7 +940,7 @@ Be conversational but professional. Cite specific data points from the portfolio
                   fontSize: '0.85rem',
                   color: 'var(--success, #00e599)'
                 }}>
-                  <strong>🛡️ Risk Protection Applied:</strong> {generatedPortfolio.riskAdjustments!.join(' • ')}
+                  <strong style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><CheckCircle2 size={14} /> Risk Protection Applied:</strong> {generatedPortfolio.riskAdjustments!.join(' • ')}
                 </div>
               )}
               {sectionVisibility.hasQuantFeedback && generatedPortfolio.quantFeedbackSummary && (
@@ -968,8 +972,8 @@ Be conversational but professional. Cite specific data points from the portfolio
                   </div>
                   {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.length > 0 && (
                     <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                      <span style={{ color: 'var(--warning, #f59e0b)', fontSize: '0.8rem' }}>
-                        ⚠️ {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.length} ticker(s) flagged for review
+                      <span style={{ color: 'var(--warning, #f59e0b)', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <AlertTriangle size={13} /> {generatedPortfolio.quantFeedbackSummary.replacementSuggestions.length} ticker(s) flagged for review
                       </span>
                     </div>
                   )}
@@ -1047,11 +1051,11 @@ Be conversational but professional. Cite specific data points from the portfolio
                           className="activity-score-fill"
                           style={{ 
                             width: `${((generatedPortfolio.activityLevel.score + 1) / 2) * 100}%`,
-                            background: generatedPortfolio.activityLevel.score <= -0.2 
-                              ? 'linear-gradient(90deg, var(--color-success), var(--color-success-light))' 
-                              : generatedPortfolio.activityLevel.score <= 0.2 
-                                ? 'linear-gradient(90deg, var(--color-warning), var(--color-warning-light))'
-                                : 'linear-gradient(90deg, var(--color-danger), var(--color-danger-light))'
+                            background: generatedPortfolio.activityLevel.score <= -0.2
+                              ? 'linear-gradient(90deg, #22c55e, #86efac)'
+                              : generatedPortfolio.activityLevel.score <= 0.2
+                                ? 'linear-gradient(90deg, #f59e0b, #fcd34d)'
+                                : 'linear-gradient(90deg, #ef4444, #fca5a5)'
                           }}
                         />
                       </div>

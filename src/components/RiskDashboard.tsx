@@ -577,7 +577,7 @@ function RiskDashboard({
                 <Area
                   type="monotone"
                   dataKey="drawdown"
-                  stroke="var(--error)"
+                  stroke="#ef4444"
                   strokeWidth={2}
                   fill="url(#drawdownGrad)"
                 />

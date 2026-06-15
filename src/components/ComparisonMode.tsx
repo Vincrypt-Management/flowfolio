@@ -438,7 +438,7 @@ function ComparisonMode({
                 <Line
                   type="monotone"
                   dataKey="a"
-                  stroke="var(--primary)"
+                  stroke="#6366f1"
                   strokeWidth={2}
                   dot={false}
                   name="a"
@@ -446,7 +446,7 @@ function ComparisonMode({
                 <Line
                   type="monotone"
                   dataKey="b"
-                  stroke="var(--accent)"
+                  stroke="#00c281"
                   strokeWidth={2}
                   dot={false}
                   name="b"

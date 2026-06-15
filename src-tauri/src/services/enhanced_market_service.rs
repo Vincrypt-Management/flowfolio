@@ -296,8 +296,40 @@ impl EnhancedMarketDataService {
     /// Batch get current quotes (price + change + change_percent).
     /// Returns cached change data when available; falls back to price-only when not.
     pub async fn get_batch_quotes(&self, symbols: Vec<String>) -> HashMap<String, (f64, f64, f64)> {
-        // Ensure prices are fetched and quote_cache is populated.
+        // First, ensure price_cache is warm (DB-cache hit path).
         let _ = self.get_batch_prices(symbols.clone()).await;
+
+        // Find any symbols whose change data is not yet in quote_cache. DB-cached
+        // prices skip the provider, so quote_cache stays empty for those symbols
+        // and we'd return 0.0 change. Force a provider fetch for those symbols now.
+        let symbols_missing_quotes: Vec<String> = {
+            let qc = self.quote_cache.read().await;
+            symbols
+                .iter()
+                .map(|s| s.to_uppercase())
+                .filter(|s| !qc.contains_key(s))
+                .collect()
+        };
+
+        if !symbols_missing_quotes.is_empty() {
+            let batch_data = self
+                .provider
+                .get_batch_market_data(symbols_missing_quotes)
+                .await;
+
+            let now = std::time::Instant::now();
+            let mut qc = self.quote_cache.write().await;
+            let mut pc = self.price_cache.write().await;
+            for (symbol, data) in batch_data {
+                if let Some(quote) = data.quote {
+                    qc.insert(
+                        symbol.clone(),
+                        (quote.price, quote.change, quote.change_percent, now),
+                    );
+                    pc.insert(symbol, (quote.price, now));
+                }
+            }
+        }
 
         let qc = self.quote_cache.read().await;
         let pc = self.price_cache.read().await;
@@ -305,9 +337,6 @@ impl EnhancedMarketDataService {
             .iter()
             .map(|s| {
                 let upper = s.to_uppercase();
-                // Prefer quote_cache (has change data); fall back to price_cache
-                // (DB-cached prices populate price_cache but not quote_cache since
-                // the DB schema only stores current_price, not change/change_percent).
                 let result = qc
                     .get(&upper)
                     .map(|(p, c, cp, _)| (*p, *c, *cp))

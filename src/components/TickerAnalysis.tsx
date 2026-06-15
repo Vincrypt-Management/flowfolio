@@ -166,8 +166,12 @@ export default function TickerAnalysis({
   const [data, setData] = useState<TickerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reportRetryCount, setReportRetryCount] = useState(0);
+  const [reportRetryCountdown, setReportRetryCountdown] = useState<number | null>(null);
   const isMountedRef = useIsMounted();
   const reportGeneratedRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   const { 
     report, 
@@ -193,6 +197,37 @@ export default function TickerAnalysis({
         .catch(() => {});
     }
   }, [data, autoGenerateReport, report, isReportLoading]);
+
+  // Auto-retry queue: when report fails, schedule up to 3 automatic retries
+  useEffect(() => {
+    if (!reportError || reportRetryCount >= 3) return;
+
+    const RETRY_DELAY = 8;
+    let remaining = RETRY_DELAY;
+    setReportRetryCountdown(remaining);
+
+    countdownTimerRef.current = setInterval(() => {
+      remaining -= 1;
+      setReportRetryCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(countdownTimerRef.current!);
+        countdownTimerRef.current = null;
+      }
+    }, 1000);
+
+    retryTimerRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
+      setReportRetryCount(c => c + 1);
+      setReportRetryCountdown(null);
+      handleGenerateReport();
+    }, RETRY_DELAY * 1000);
+
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportError, reportRetryCount]);
 
   async function loadTickerData() {
     setIsLoading(true);
@@ -441,10 +476,28 @@ export default function TickerAnalysis({
 
         {reportError && !reportError.includes('not configured') && !reportError.includes('not available') && (
           <>
-            <Alert variant="error" title="Report generation failed" description={reportError} />
-            <Button variant="secondary" size="sm" onClick={handleGenerateReport} style={{ alignSelf: 'flex-start' }}>
-              Retry
-            </Button>
+            <Alert
+              variant="error"
+              title="Report generation failed"
+              description={
+                reportRetryCountdown !== null
+                  ? `${reportError} — auto-retrying in ${reportRetryCountdown}s (attempt ${reportRetryCount + 1}/3)`
+                  : reportRetryCount >= 3
+                  ? `${reportError} — all auto-retry attempts exhausted`
+                  : reportError
+              }
+            />
+            <div style={{ display: 'flex', gap: '0.5rem', alignSelf: 'flex-start' }}>
+              {reportRetryCountdown !== null ? (
+                <Button variant="ghost" size="sm" disabled leftIcon={<Clock size={14} />}>
+                  Retrying in {reportRetryCountdown}s…
+                </Button>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={() => { setReportRetryCount(0); handleGenerateReport(); }} leftIcon={<RefreshCw size={14} />}>
+                  {reportRetryCount >= 3 ? 'Retry manually' : 'Retry now'}
+                </Button>
+              )}
+            </div>
           </>
         )}
 
@@ -468,7 +521,7 @@ export default function TickerAnalysis({
                       <PolarGrid stroke="var(--border)" />
                       <PolarAngleAxis dataKey="metric" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
                       <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-                      <Radar name="Score" dataKey="score" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3} />
+                      <Radar name="Score" dataKey="score" stroke="#00c281" fill="#00c281" fillOpacity={0.3} />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>

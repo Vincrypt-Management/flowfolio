@@ -5,7 +5,7 @@ use crate::services::openrouter_service::OpenRouterMessage;
 use crate::{get_user_tier, OPENROUTER_SERVICE};
 use tauri::{AppHandle, Emitter};
 
-const DEFAULT_FREE_MODEL: &str = "openrouter/owl-alpha";
+const DEFAULT_FREE_MODEL: &str = "meta-llama/llama-3.3-70b-instruct:free";
 
 /// Check if AI service is configured (OpenRouter key present)
 #[tauri::command]

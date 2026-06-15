@@ -26,10 +26,10 @@ use tokio::sync::RwLock;
 /// entries are used when earlier ones are rate-limited or in cooldown.
 /// Overridable via env var `OPENROUTER_FALLBACK_MODELS` (comma-separated).
 const DEFAULT_FALLBACK_LADDER: &[&str] = &[
-    "meta-llama/llama-3.1-8b-instruct:free",
-    "google/gemma-2-9b-it:free",
-    "qwen/qwen-2.5-7b-instruct:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-8b:free",
     "mistralai/mistral-7b-instruct:free",
+    "google/gemma-3-27b-it:free",
 ];
 
 /// Per-model token-bucket cap. 18 req/min sits comfortably under the
@@ -146,7 +146,7 @@ impl OpenRouterService {
         let api_url = crate::core::encrypted_env::get_env_var("OPENROUTER_API_URL")
             .unwrap_or_else(|| "https://openrouter.ai/api/v1".to_string());
         let default_model = crate::core::encrypted_env::get_env_var("DEFAULT_LLM_MODEL")
-            .unwrap_or_else(|| "openrouter/owl-alpha".to_string());
+            .unwrap_or_else(|| "meta-llama/llama-3.3-70b-instruct:free".to_string());
 
         // Fallback ladder: env var override OR static default.
         // The currently-selected default_model is prepended so it's tried first.
