@@ -722,12 +722,14 @@ impl MultiSourceProvider {
             match name {
                 "alpaca" => 10,      // Unlimited free tier
                 "yahoo" => 9,        // No key required
-                "tiingo" => 8,       // 500/hour free
-                "finnhub" => 7,      // 60/min free
-                "twelve_data" => 6,  // 800/day free
-                "fmp" => 5,          // 250/day free
-                "alphavantage" => 2, // 5/min free (has paid tiers)
-                "polygon" => 1,      // 5/min free (has paid tiers)
+                "stooq" => 8,        // No key required, live CSV quotes
+                "tiingo" => 7,       // 500/hour free (needs key)
+                "finnhub" => 6,      // 60/min free (needs key)
+                "marketwatch" => 5,  // No key required, real-time quotes
+                "twelve_data" => 4,  // 800/day free (needs key)
+                "fmp" => 3,          // 250/day free (needs key)
+                "alphavantage" => 2, // 5/min free (needs key)
+                "polygon" => 1,      // 5/min free (needs key)
                 _ => 0,
             }
         };
@@ -744,6 +746,11 @@ impl MultiSourceProvider {
                 tier_priority("yahoo"),
             ),
             (
+                "stooq",
+                self.get_provider_health("stooq"),
+                tier_priority("stooq"),
+            ),
+            (
                 "tiingo",
                 self.get_provider_health("tiingo"),
                 tier_priority("tiingo"),
@@ -752,6 +759,11 @@ impl MultiSourceProvider {
                 "finnhub",
                 self.get_provider_health("finnhub"),
                 tier_priority("finnhub"),
+            ),
+            (
+                "marketwatch",
+                self.get_provider_health("marketwatch"),
+                tier_priority("marketwatch"),
             ),
             (
                 "twelve_data",
@@ -1620,6 +1632,136 @@ impl MultiSourceProvider {
         })
     }
 
+    /// Stooq live quote (no API key needed)
+    /// Uses the /q/l/ CSV endpoint: Symbol,Date,Time,Open,High,Low,Close,Volume,Name
+    async fn fetch_from_stooq(&self, symbol: &str) -> Result<MarketDataResult, String> {
+        if !self.check_rate_limit("stooq", 30) {
+            return Err("Stooq rate limit exceeded".to_string());
+        }
+
+        let url = format!(
+            "https://stooq.com/q/l/?s={}.us&f=sd2t2ohlcvn&h&e=csv",
+            symbol.to_lowercase()
+        );
+
+        tracing::debug!(symbol = %symbol, "Fetching live quote from Stooq");
+
+        let response = crate::HTTP_CLIENT
+            .get(&url)
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            .send()
+            .await
+            .map_err(|e| format!("Stooq request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            self.track_failure("stooq");
+            return Err(format!("Stooq API error: {}", response.status()));
+        }
+
+        let csv = response
+            .text()
+            .await
+            .map_err(|e| format!("Stooq read failed: {}", e))?;
+
+        // Header line then data lines: Symbol,Date,Time,Open,High,Low,Close,Volume,Name
+        let data_line = csv.lines().nth(1).ok_or("Stooq empty response")?;
+        let parts: Vec<&str> = data_line.split(',').collect();
+        if parts.len() < 8 {
+            self.track_failure("stooq");
+            return Err(format!("Stooq malformed CSV: {}", data_line));
+        }
+
+        let close: f64 = parts[6].parse().map_err(|_| "Stooq bad close price")?;
+        let open: f64 = parts[3].parse().unwrap_or(close);
+        let change = close - open;
+        let change_percent = if open > 0.0 { (change / open) * 100.0 } else { 0.0 };
+        let volume: i64 = parts[7].parse().unwrap_or(0);
+
+        if close == 0.0 {
+            self.track_failure("stooq");
+            return Err("Stooq returned zero price".to_string());
+        }
+
+        self.track_success("stooq");
+        tracing::info!(symbol = %symbol, price = close, source = "stooq", "Stooq quote received");
+
+        Ok(MarketDataResult {
+            quote: Some(StockQuote {
+                symbol: symbol.to_string(),
+                price: close,
+                change,
+                change_percent,
+                volume,
+                timestamp: format!("{} {}", parts[1], parts[2]),
+                source: "stooq".to_string(),
+            }),
+            historical: vec![],
+            source: "stooq".to_string(),
+            cached: false,
+        })
+    }
+
+    /// MarketWatch public quote API (no API key needed)
+    async fn fetch_from_marketwatch(&self, symbol: &str) -> Result<MarketDataResult, String> {
+        if !self.check_rate_limit("marketwatch", 20) {
+            return Err("MarketWatch rate limit exceeded".to_string());
+        }
+
+        let url = format!(
+            "https://api.marketwatch.com/mw/quotes/{}/quote",
+            symbol.to_uppercase()
+        );
+
+        tracing::debug!(symbol = %symbol, "Fetching quote from MarketWatch");
+
+        let response = crate::HTTP_CLIENT
+            .get(&url)
+            .header("Accept", "application/json")
+            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            .send()
+            .await
+            .map_err(|e| format!("MarketWatch request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            self.track_failure("marketwatch");
+            return Err(format!("MarketWatch API error: {}", response.status()));
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("MarketWatch parse failed: {}", e))?;
+
+        let quote_data = data.get("data").ok_or("No data in MarketWatch response")?;
+        let price = quote_data
+            .get("last")
+            .and_then(|v| v.as_f64())
+            .ok_or("MarketWatch missing price")?;
+
+        if price == 0.0 {
+            self.track_failure("marketwatch");
+            return Err("MarketWatch returned zero price".to_string());
+        }
+
+        self.track_success("marketwatch");
+        tracing::info!(symbol = %symbol, price, source = "marketwatch", "MarketWatch quote received");
+
+        Ok(MarketDataResult {
+            quote: Some(StockQuote {
+                symbol: symbol.to_string(),
+                price,
+                change: quote_data.get("change").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                change_percent: quote_data.get("changePercent").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                volume: quote_data.get("volume").and_then(|v| v.as_i64()).unwrap_or(0),
+                timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                source: "marketwatch".to_string(),
+            }),
+            historical: vec![],
+            source: "marketwatch".to_string(),
+            cached: false,
+        })
+    }
+
     // ================== PUBLIC API ==================
 
     /// Format a list of per-provider failures into a single user-visible error string.
@@ -1670,6 +1812,8 @@ impl MultiSourceProvider {
                     self.fetch_from_alphavantage(&symbol).await
                 }
                 "yahoo" => self.fetch_from_yahoo(&symbol).await,
+                "stooq" => self.fetch_from_stooq(&symbol).await,
+                "marketwatch" => self.fetch_from_marketwatch(&symbol).await,
                 _ => continue,
             };
 
@@ -1901,10 +2045,10 @@ mod tests {
     // ── Test 4: get_provider_order ───────────────────────────────────────────
 
     #[test]
-    fn test_get_provider_order_returns_eight_providers() {
+    fn test_get_provider_order_returns_ten_providers() {
         let provider = MultiSourceProvider::new();
         let order = provider.get_provider_order();
-        assert_eq!(order.len(), 8, "should return exactly 8 providers");
+        assert_eq!(order.len(), 10, "should return exactly 10 providers");
     }
 
     #[test]

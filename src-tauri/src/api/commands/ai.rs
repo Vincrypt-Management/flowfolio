@@ -119,8 +119,27 @@ pub async fn ai_chat_stream(
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
-    if !response.status().is_success() {
-        let status = response.status();
+    let status = response.status();
+    if !status.is_success() {
+        if status.as_u16() == 429 {
+            // Primary model rate-limited — fall back to the service which has
+            // the full multi-model failover ladder (llama/gemma/qwen/mistral free).
+            tracing::warn!(model = %model, "Stream endpoint 429; falling back to non-streaming failover ladder");
+            let messages_converted: Vec<OpenRouterMessage> = messages
+                .iter()
+                .filter_map(|m| {
+                    Some(OpenRouterMessage {
+                        role: m["role"].as_str()?.to_string(),
+                        content: m["content"].as_str()?.to_string(),
+                    })
+                })
+                .collect();
+            let content = OPENROUTER_SERVICE
+                .chat(messages_converted, Some(model), temperature, max_tokens)
+                .await?;
+            let _ = app.emit("ai-token", &content);
+            return Ok(content);
+        }
         let text = response.text().await.unwrap_or_default();
         return Err(format!("OpenRouter API error {}: {}", status, text));
     }
