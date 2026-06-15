@@ -103,6 +103,9 @@ pub async fn ai_chat_stream(
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .header("HTTP-Referer", "https://flowfolio.app")
+        // Disable content-encoding for SSE: reqwest's gzip decompressor
+        // fails on partial chunks that arrive in an incremental stream.
+        .header("Accept-Encoding", "identity")
         .json(&body)
         .send()
         .await

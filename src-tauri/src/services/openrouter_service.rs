@@ -503,6 +503,9 @@ impl OpenRouterService {
                 .header("Content-Type", "application/json")
                 .header("HTTP-Referer", "https://flowfolio.app")
                 .header("X-Title", "FlowFolio")
+                // Disable content-encoding: reqwest's gzip decompressor fails on
+                // partial/truncated bodies returned under concurrent load.
+                .header("Accept-Encoding", "identity")
                 .json(&request)
                 .send()
                 .await
