@@ -43,6 +43,11 @@ equivalent to replicate), no external npm/JSR dependencies for market-data itsel
   `ignore: !Deno.env.get("RUN_LIVE_MARKET_DATA_TESTS")` — skipped by default, not part of `deno task test`,
   requires a real API key in the environment to actually run. This exists so a developer can manually verify
   a provider against the real API without it ever blocking CI or requiring live keys to just run the suite.
+  **Discovered during Task 4's implementation:** evaluating `Deno.env.get(...)` inside a test's `ignore:`
+  field requires `--allow-env` at test-registration time even though the guarded test itself is skipped —
+  Deno's permission model checks this eagerly, not lazily. Every `deno test` invocation in this plan that
+  runs a file containing this pattern (Tasks 4 and 11 today; any later plan reusing it) needs `--allow-env`
+  added, not just `--allow-read`. Already fixed in this doc's own Task 4/11 Step 5 commands.
 - **Rate limiter is a new, separate mechanism from Plan 1's `RateLimiter`.** Plan 1's `packages/core/resilience/rate_limiter.ts`
   is a fixed daily quota (`RateLimiter.newDaily`). The Rust source's `check_rate_limit` is a sliding 60-second
   window per provider — a different mechanism entirely, matching the Rust source's own separation. This plan
@@ -848,7 +853,7 @@ export async function fetchFromAlpaca(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd packages/core && deno test --allow-read market-data/providers/alpaca.test.ts`
+Run: `cd packages/core && deno test --allow-read --allow-env market-data/providers/alpaca.test.ts`
 Expected: `ok | 6 passed, 1 ignored`
 
 - [ ] **Step 6: Commit**
@@ -878,14 +883,14 @@ quote endpoint has no volume field), matching the Rust source exactly.
 
 ```json
 // packages/core/market-data/providers/__fixtures__/finnhub-quote.json
-{ "c": 213.4, "d": 1.5, "dp": 0.71, "t": 1751500800 }
+{ "c": 213.4, "d": 1.5, "dp": 0.71, "t": 1782950400 }
 ```
 
 ```json
 // packages/core/market-data/providers/__fixtures__/finnhub-candles.json
 {
   "s": "ok",
-  "t": [1751414400, 1751500800],
+  "t": [1782864000, 1782950400],
   "o": [210.1, 211.9],
   "h": [212.5, 214.0],
   "l": [209.8, 211.0],
@@ -1649,15 +1654,15 @@ catch), matching the Rust source's `?` propagation. `change`/`changePercent` are
 
 ```json
 // packages/core/market-data/providers/__fixtures__/polygon-quote.json
-{ "ticker": "AAPL", "results": [{ "c": 213.4, "v": 47500000, "t": 1751500800000 }] }
+{ "ticker": "AAPL", "results": [{ "c": 213.4, "v": 47500000, "t": 1782950400000 }] }
 ```
 
 ```json
 // packages/core/market-data/providers/__fixtures__/polygon-historical.json
 {
   "results": [
-    { "t": 1751414400000, "o": 210.1, "h": 212.5, "l": 209.8, "c": 211.9, "v": 45000000 },
-    { "t": 1751500800000, "o": 211.9, "h": 214.0, "l": 211.0, "c": 213.4, "v": 47500000 }
+    { "t": 1782864000000, "o": 210.1, "h": 212.5, "l": 209.8, "c": 211.9, "v": 45000000 },
+    { "t": 1782950400000, "o": 211.9, "h": 214.0, "l": 211.0, "c": 213.4, "v": 47500000 }
   ]
 }
 ```
@@ -2249,7 +2254,7 @@ export async function fetchFromYahoo(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd packages/core && deno test --allow-read market-data/providers/yahoo.test.ts`
+Run: `cd packages/core && deno test --allow-read --allow-env market-data/providers/yahoo.test.ts`
 Expected: `ok | 5 passed, 1 ignored`
 
 - [ ] **Step 6: Commit**
