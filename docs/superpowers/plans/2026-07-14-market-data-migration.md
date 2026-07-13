@@ -1024,7 +1024,18 @@ export async function fetchFromFinnhub(
     { headers: { "X-Finnhub-Token": apiKey } },
   );
   if (!quoteRes.ok) throw new Error(`finnhub: HTTP ${quoteRes.status}`);
-  const providerQuote = parseFinnhubQuote(await quoteRes.json());
+  const quoteJson = await quoteRes.json();
+  const providerQuote = parseFinnhubQuote(quoteJson);
+  // Finnhub's /quote response carries real change/percent/timestamp fields
+  // ("d", "dp", "t") alongside "c" — read directly, matching the Rust source
+  // (multi_source_provider.rs:938-945), which reads these outside the pure
+  // parser rather than through it.
+  const rawQuote = quoteJson as Record<string, unknown>;
+  const change = typeof rawQuote.d === "number" ? rawQuote.d : 0;
+  const changePercent = typeof rawQuote.dp === "number" ? rawQuote.dp : 0;
+  const timestamp = typeof rawQuote.t === "number"
+    ? new Date(rawQuote.t * 1000).toISOString()
+    : new Date().toISOString();
 
   let historical: HistoricalPrice[] = [];
   try {
@@ -1045,10 +1056,10 @@ export async function fetchFromFinnhub(
     quote: {
       symbol,
       price: providerQuote.price,
-      change: 0,
-      changePercent: 0,
+      change,
+      changePercent,
       volume: 0,
-      timestamp: new Date().toISOString(),
+      timestamp,
       source: "finnhub",
     },
     historical,
@@ -1090,7 +1101,7 @@ the quote parse error itself and returns `{ quote: null, ... }` rather than fail
 
 ```json
 // packages/core/market-data/providers/__fixtures__/fmp-quote.json
-[{ "symbol": "AAPL", "price": 213.4, "volume": 47500000 }]
+[{ "symbol": "AAPL", "price": 213.4, "volume": 47500000, "change": 1.5, "changesPercentage": 0.71 }]
 ```
 
 ```json
@@ -1212,12 +1223,20 @@ export async function fetchFromFmp(
     const quoteRes = await fetchImpl(
       `https://financialmodelingprep.com/api/v3/quote/${symbol}?apikey=${apiKey}`,
     );
-    const pq = parseFmpQuote(await quoteRes.json());
+    const quoteJson = await quoteRes.json();
+    const pq = parseFmpQuote(quoteJson);
+    // FMP's /quote response carries real change/changesPercentage fields
+    // (note the Rust source's exact field name — "changesPercentage", not
+    // "changePercentage") on the same array element parseFmpQuote already
+    // reads — extracted directly here, matching multi_source_provider.rs:1022-1035.
+    const first = (quoteJson as unknown[])[0] as Record<string, unknown>;
+    const change = typeof first.change === "number" ? first.change : 0;
+    const changePercent = typeof first.changesPercentage === "number" ? first.changesPercentage : 0;
     quote = {
       symbol: pq.symbol,
       price: pq.price,
-      change: 0,
-      changePercent: 0,
+      change,
+      changePercent,
       volume: pq.volume ?? 0,
       timestamp: new Date().toISOString(),
       source: "fmp",
@@ -1466,7 +1485,7 @@ generous; do not change this). A response containing a top-level `"code"` field 
 
 ```json
 // packages/core/market-data/providers/__fixtures__/twelve-data-quote.json
-{ "symbol": "AAPL", "close": "213.40", "change": "1.50", "percent_change": "0.71", "volume": "47500000" }
+{ "symbol": "AAPL", "close": "213.40", "change": "1.50", "percent_change": "0.71", "volume": "47500000", "datetime": "2026-07-09" }
 ```
 
 ```json
@@ -1593,6 +1612,13 @@ export async function fetchFromTwelveData(
     throw new Error(`twelve_data: ${(quoteJson as Record<string, unknown>).message ?? "error"}`);
   }
   const pq = parseTwelveDataQuote(quoteJson);
+  // Twelve Data's /quote response carries real string-encoded change/percent_change
+  // fields, plus a real "datetime" timestamp — extracted directly here, matching
+  // multi_source_provider.rs:1231-1244 (which reads these outside parse_twelve_data_quote).
+  const rawQuote = quoteJson as Record<string, unknown>;
+  const change = Number(rawQuote.change) || 0;
+  const changePercent = Number(rawQuote.percent_change) || 0;
+  const timestamp = typeof rawQuote.datetime === "string" ? rawQuote.datetime : new Date().toISOString();
 
   let historical: HistoricalPrice[] = [];
   try {
@@ -1608,10 +1634,10 @@ export async function fetchFromTwelveData(
     quote: {
       symbol: pq.symbol,
       price: pq.price,
-      change: 0,
-      changePercent: 0,
+      change,
+      changePercent,
       volume: pq.volume ?? 0,
-      timestamp: new Date().toISOString(),
+      timestamp,
       source: "twelve_data",
     },
     historical,
@@ -1839,7 +1865,7 @@ git commit -m "feat(market-data): port Polygon provider"
 - Test: `packages/core/market-data/providers/alpha-vantage.test.ts`
 
 **Interfaces:**
-- Produces: `parseAlphaVantageQuote(json: unknown): ProviderQuote`, `parseAlphaVantageHistorical(json: unknown): HistoricalPrice[]`, `fetchFromAlphaVantage(symbol, apiKey, rateLimiter, fetchImpl?): Promise<MarketDataResult>`.
+- Produces: `interface AlphaVantageQuote { price: number; change: number; changePercent: number; volume: number; timestamp: string }`, `parseAlphaVantageQuote(json: unknown): AlphaVantageQuote`, `parseAlphaVantageHistorical(json: unknown): HistoricalPrice[]`, `fetchFromAlphaVantage(symbol, apiKey, rateLimiter, fetchImpl?): Promise<MarketDataResult>`.
 
 **Deliberate deviation from the Rust source (documented per the design spec's explicit call-out):** the Rust
 parser does `.take(365)` on `Time Series (Daily)`'s object entries *before* sorting them — since a JSON object
@@ -1849,6 +1875,15 @@ by date descending, then take the most recent 365. This is the same category of 
 behavior change to hide. Also replicates: the special check for `"Note"`/`"Information"` fields (Alpha
 Vantage's rate-limit signal) *before* attempting to parse a quote — checked as a hard error, matching Rust.
 Uses **`"5. adjusted close"`**, not `"4. close"`, matching the Rust source exactly.
+
+**Fidelity note (caught during Task 5/6/8's review — Alpha Vantage designed correctly from the start as a
+result):** Alpha Vantage's `"Global Quote"` object carries real `change`/`changePercent`/`timestamp` fields
+(`"09. change"`, `"10. change percent"`, `"07. latest trading day"`) alongside price/volume — the Rust source
+reads all of them inline (`multi_source_provider.rs:1408-1432`). Unlike Finnhub/FMP/Twelve Data (where this
+plan initially hardcoded these to 0 and had to be fixed post-hoc — see those tasks' follow-up commits), this
+task's `parseAlphaVantageQuote` returns a dedicated `AlphaVantageQuote` type carrying all of them from the
+start, since they live in the exact same object the parser already reads (no need for `fetchFromAlphaVantage`
+to separately re-read the raw JSON, unlike the other three providers).
 
 - [ ] **Step 1: Write the fixtures**
 
@@ -1886,9 +1921,11 @@ import historicalFixture from "./__fixtures__/alpha-vantage-historical.json" wit
 
 Deno.test("parseAlphaVantageQuote parses numbered-prefix string fields, stripping trailing %", () => {
   const q = parseAlphaVantageQuote(quoteFixture);
-  assertEquals(q.symbol, "");
   assertEquals(q.price, 213.4);
   assertEquals(q.volume, 47500000);
+  assertEquals(q.change, 1.5);
+  assertEquals(q.changePercent, 0.71);
+  assertEquals(q.timestamp, "2026-07-09");
 });
 
 Deno.test("parseAlphaVantageQuote throws a hard error when 'Note' is present (rate limited)", () => {
@@ -1921,8 +1958,16 @@ Expected: FAIL — `Module not found "./alpha-vantage.ts"`
 
 ```typescript
 // packages/core/market-data/providers/alpha-vantage.ts
-import type { HistoricalPrice, MarketDataResult, ProviderQuote } from "../types.ts";
+import type { HistoricalPrice, MarketDataResult } from "../types.ts";
 import { RateLimitedError, type SlidingWindowRateLimiter } from "../rate-limiter.ts";
+
+export interface AlphaVantageQuote {
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  timestamp: string;
+}
 
 function num(s: unknown): number {
   const n = Number(String(s).replace("%", ""));
@@ -1930,18 +1975,18 @@ function num(s: unknown): number {
   return n;
 }
 
-export function parseAlphaVantageQuote(json: unknown): ProviderQuote {
+export function parseAlphaVantageQuote(json: unknown): AlphaVantageQuote {
   const obj = json as Record<string, unknown>;
   if (obj?.Note) throw new Error(`alphavantage: rate limit (Note: ${obj.Note})`);
   if (obj?.Information) throw new Error(`alphavantage: rate limit (Information: ${obj.Information})`);
   const q = obj?.["Global Quote"] as Record<string, unknown> | undefined;
   if (!q) throw new Error("alphavantage: missing 'Global Quote'");
   return {
-    symbol: "",
     price: num(q["05. price"]),
-    bid: null,
-    ask: null,
+    change: num(q["09. change"]),
+    changePercent: num(q["10. change percent"]),
     volume: num(q["06. volume"]),
+    timestamp: typeof q["07. latest trading day"] === "string" ? q["07. latest trading day"] as string : "",
   };
 }
 
@@ -1995,10 +2040,10 @@ export async function fetchFromAlphaVantage(
     quote: {
       symbol,
       price: pq.price,
-      change: 0,
-      changePercent: 0,
-      volume: pq.volume ?? 0,
-      timestamp: new Date().toISOString(),
+      change: pq.change,
+      changePercent: pq.changePercent,
+      volume: pq.volume,
+      timestamp: pq.timestamp || new Date().toISOString(),
       source: "alphavantage",
     },
     historical,
