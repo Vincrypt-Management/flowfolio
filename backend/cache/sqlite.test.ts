@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { assertEquals } from "jsr:@std/assert";
 import { closeDatabase, openDatabase } from "../db/connection.ts";
 import { CACHE_TTL_HOURS, SqliteCache } from "./sqlite.ts";
+import type { DailyPrice } from "./sqlite.ts";
 
 function withCache(fn: (cache: SqliteCache, db: DatabaseSync) => void) {
   const path = `${Deno.makeTempDirSync()}/test.db`;
@@ -94,3 +95,37 @@ Deno.test("quant metrics cache: stale row past TTL returns undefined, not the st
     assertEquals(cache.getCachedQuantMetrics("AAPL"), undefined);
   });
 });
+
+Deno.test("historical prices: miss returns undefined for an unknown symbol", () => {
+  withCache((cache) => {
+    assertEquals(cache.getCachedHistoricalPrices("AAPL"), undefined);
+  });
+});
+
+Deno.test("historical prices: set then get round-trips, newest first", () => {
+  withCache((cache) => {
+    const prices: DailyPrice[] = [
+      { date: todayMinusDays(1), open: 10, high: 11, low: 9, close: 10.5, volume: 1000 },
+      { date: todayMinusDays(0), open: 10.5, high: 12, low: 10, close: 11.5, volume: 1500 },
+    ];
+    cache.setCachedHistoricalPrices("AAPL", prices);
+    const cached = cache.getCachedHistoricalPrices("AAPL");
+    assertEquals(cached?.length, 2);
+    assertEquals(cached?.[0].date, todayMinusDays(0));
+  });
+});
+
+Deno.test("historical prices: stale data (>2 days old) is treated as a miss", () => {
+  withCache((cache) => {
+    cache.setCachedHistoricalPrices("AAPL", [
+      { date: todayMinusDays(5), open: 1, high: 1, low: 1, close: 1, volume: 1 },
+    ]);
+    assertEquals(cache.getCachedHistoricalPrices("AAPL"), undefined);
+  });
+});
+
+function todayMinusDays(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}

@@ -14,6 +14,15 @@ export interface CachedPrice {
   updatedAt: string;
 }
 
+export interface DailyPrice {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface CachedQuantMetrics {
   symbol: string;
   sharpeRatio: number;
@@ -123,5 +132,58 @@ export class SqliteCache {
         m.confidence,
         nowTimestamp(),
       );
+  }
+
+  getCachedHistoricalPrices(symbol: string): DailyPrice[] | undefined {
+    const symbolRow = this.#db
+      .prepare("SELECT id FROM symbols WHERE ticker = ?")
+      .get(symbol) as { id: number } | undefined;
+    if (!symbolRow) return undefined;
+
+    const latest = this.#db
+      .prepare("SELECT date FROM prices_daily WHERE symbol_id = ? ORDER BY date DESC LIMIT 1")
+      .get(symbolRow.id) as { date: string } | undefined;
+    if (!latest) return undefined;
+
+    const latestDate = new Date(latest.date + "T00:00:00Z").getTime();
+    const daysOld = Math.floor((Date.now() - latestDate) / (24 * 60 * 60 * 1000));
+    if (daysOld > 2) return undefined;
+
+    const rows = this.#db
+      .prepare(
+        `SELECT date, open, high, low, close, volume
+         FROM prices_daily
+         WHERE symbol_id = ?
+         ORDER BY date DESC
+         LIMIT 365`,
+      )
+      .all(symbolRow.id) as unknown as DailyPrice[];
+
+    return rows.length > 0 ? rows : undefined;
+  }
+
+  setCachedHistoricalPrices(symbol: string, prices: DailyPrice[]): void {
+    this.#db
+      .prepare("INSERT INTO symbols (ticker, status) VALUES (?, 'active') ON CONFLICT(ticker) DO NOTHING")
+      .run(symbol);
+
+    const symbolRow = this.#db
+      .prepare("SELECT id FROM symbols WHERE ticker = ?")
+      .get(symbol) as { id: number };
+
+    const upsert = this.#db.prepare(
+      `INSERT INTO prices_daily (symbol_id, date, open, high, low, close, volume)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(symbol_id, date) DO UPDATE SET
+         open = excluded.open,
+         high = excluded.high,
+         low = excluded.low,
+         close = excluded.close,
+         volume = excluded.volume`,
+    );
+
+    for (const p of prices) {
+      upsert.run(symbolRow.id, p.date, p.open, p.high, p.low, p.close, p.volume);
+    }
   }
 }
