@@ -9,6 +9,26 @@ import type { SqliteCache } from "../cache/sqlite.ts";
 
 const MEMORY_CACHE_TTL_MS = 120_000; // matches the Rust source's quote_cache_ttl
 
+// Bounds fan-out concurrency (e.g. for getBatchQuotes) so a large symbol batch
+// doesn't burst through a shared provider's sliding-window rate limit.
+// Mirrors orchestrator.ts's own (unexported) mapWithConcurrency helper.
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 export interface MarketDataServiceOptions {
   fetchImpl?: typeof fetch;
 }
@@ -88,7 +108,13 @@ export class MarketDataService {
 
     this.#memoryCache.set(upper, result);
     if (result.quote) {
-      this.#sqliteCache.setCachedPrice(upper, result.quote.price);
+      try {
+        this.#sqliteCache.setCachedPrice(upper, result.quote.price);
+      } catch {
+        // A persistence-layer failure (e.g. disk-full, locked database) shouldn't
+        // discard an otherwise-successful fetch — the in-memory cache already has
+        // the value, and losing one SQLite write is not fatal.
+      }
     }
     return result;
   }
@@ -107,15 +133,13 @@ export class MarketDataService {
 
   async getBatchQuotes(symbols: string[]): Promise<Map<string, MarketDataResult>> {
     const out = new Map<string, MarketDataResult>();
-    await Promise.all(
-      symbols.map(async (symbol) => {
-        try {
-          out.set(symbol.toUpperCase(), await this.getMarketData(symbol));
-        } catch {
-          // dropped, matching the orchestrator's own batch behavior
-        }
-      }),
-    );
+    await mapWithConcurrency(symbols, 5, async (symbol) => {
+      try {
+        out.set(symbol.toUpperCase(), await this.getMarketData(symbol));
+      } catch {
+        // dropped, matching the orchestrator's own batch behavior
+      }
+    });
     return out;
   }
 

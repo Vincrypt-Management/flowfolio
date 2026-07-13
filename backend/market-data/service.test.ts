@@ -154,6 +154,44 @@ Deno.test("getBatchPrices returns a price per successful symbol, using per-symbo
   }
 });
 
+Deno.test("getMarketData swallows a SQLite cache write failure and still returns the fresh result", async () => {
+  const path = `${Deno.makeTempDirSync()}/test.db`;
+  const db = openDatabase(path);
+  try {
+    const sqliteCache = new SqliteCache(db);
+    sqliteCache.setCachedPrice = () => {
+      throw new Error("disk full");
+    };
+    const service = new MarketDataService(sqliteCache, fakeSecretStore({}), {
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              chart: {
+                result: [{
+                  meta: {
+                    regularMarketPrice: 150,
+                    chartPreviousClose: 149,
+                    regularMarketVolume: 1,
+                    regularMarketTime: 1,
+                  },
+                  timestamp: [],
+                  indicators: { quote: [{}] },
+                }],
+              },
+            }),
+          ),
+        )) as typeof fetch,
+    });
+
+    const price = await service.getCurrentPrice("AAPL");
+    assertEquals(price, 150);
+    assertEquals(service.getCacheStats().memoryCacheSize, 1);
+  } finally {
+    closeDatabase(db);
+  }
+});
+
 Deno.test("getBatchQuotes drops symbols whose fetch failed", async () => {
   const path = `${Deno.makeTempDirSync()}/test.db`;
   const db = openDatabase(path);
