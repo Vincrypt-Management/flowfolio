@@ -3173,3 +3173,44 @@ git commit -m "feat(backend): wire batch price/quote operations for Plan 3"
   Global Constraints — not oversights, but worth the final whole-branch reviewer's explicit attention per this
   plan's own instructions, consistent with how Plan 1's final review specifically re-checked its own
   deliberate-deviation tasks (rate limiter's `remainingCapacity` fix, retry's timeout-fallback simplification).
+
+<!-- Added by final whole-branch review (2026-07-14) — accepted risks surfaced during the last-pass audit. -->
+- **Polygon quote `timestamp` uses fetch-time `new Date().toISOString()` rather than the bar's own `t` field.**
+  The Rust source (`multi_source_provider.rs:1320-1335`) reads `results[0].t` (epoch millis) and formats it as a
+  `%Y-%m-%d` date; the TS port stamps the fetch time as a full ISO-8601 string instead. Polygon's
+  `change`/`changePercent` are both genuinely hardcoded to `0.0` in the Rust source too, so those are faithful
+  — only the timestamp source/format differs. Low severity: `timestamp` is a display/string field, Polygon is
+  the lowest-priority provider (tier 1), and it is only the winning source when all 8 higher-tier providers
+  fail. Accepted as a known deviation.
+- **Systematic timestamp-format difference across all providers.** The Rust source formats quote timestamps as
+  `"%Y-%m-%d %H:%M:%S"` (space-separated, no zone); the TS port emits ISO-8601 (`toISOString()`, `T`-separated,
+  `Z`). This is a deliberate, consistent, harmless normalization — noted so downstream consumers (Plan 3+) know
+  to expect ISO-8601, not the Rust string shape.
+- **`MarketDataService.getBatchQuotes` fans out with unbounded `Promise.all`, bypassing the orchestrator's
+  bounded-concurrency-5 `getBatchMarketData` (Task 13), which is now dead code outside its own test.** The
+  service's own `getBatchQuotes` maps every symbol through `getMarketData` (which is correct — it must go
+  through the per-symbol cache tiers the orchestrator's batch method lacks), but does so with no concurrency
+  cap. Because the sliding-window rate limiter is shared across all concurrent calls, a very large uncached
+  batch can burn a provider's per-minute budget in one burst and cause spurious `RateLimitedError`-driven
+  drops that the Rust `buffer_unordered(5)` cap would have avoided. Not a correctness bug (results are still
+  correct for symbols that succeed; failures are silently dropped exactly as Rust's `filter_map` does) and not
+  a merge blocker for the current small-portfolio batch sizes. **Recommended follow-up:** wrap `getBatchQuotes`
+  in the existing `mapWithConcurrency(..., 5, ...)` helper so the service matches the Rust concurrency bound
+  while keeping per-symbol caching; then delete the now-unused `orchestrator.getBatchMarketData` or keep it only
+  if a cache-less batch path is wanted later.
+- **`MarketDataService` has two low-severity robustness gaps (Task 14):** (1) the SQLite write-through
+  `#sqliteCache.setCachedPrice(...)` at the end of `getMarketData` is unguarded — if it throws (DB locked/IO
+  error) the exception propagates and the caller sees a failure even though the fetch succeeded and the
+  in-memory cache was already populated (so an immediate retry would hit the warm memory cache and succeed).
+  Wrapping it in try/catch (log-and-continue) would make a successful fetch resilient to a cache-write hiccup.
+  (2) `#loadKeys()` is not promise-memoized: two concurrent cold-start calls each fire all 8 secret reads.
+  Idempotent duplicate work, not a bug. Both accepted as known low-severity items.
+- **API keys are embedded in query strings for FMP, Twelve Data, Polygon, and Alpha Vantage** (`?apikey=…` /
+  `?apiKey=…`), matching the Rust source exactly (which does the same). On a *network-level* `fetch` rejection
+  (DNS/connection failure — not an HTTP error status, which is reported as `HTTP <status>` with no URL), Deno's
+  fetch error message includes the full request URL, so the key-bearing URL can end up inside the orchestrator's
+  aggregated `"All providers failed for …"` error string and any log/UI that surfaces it. This is pre-existing
+  parity behavior (reqwest leaks the same way), not a regression introduced by the port. **Recommended
+  hardening** (optional, not a blocker): strip the query string from provider error messages, or move these four
+  providers' keys to headers where the API supports it. Header-based providers (Alpaca, Finnhub, Tiingo) and
+  keyless providers (Yahoo, Nasdaq) are not affected.
