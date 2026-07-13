@@ -1596,7 +1596,9 @@ git commit -m "feat(backend): port historical-prices SQLite cache"
 
 ---
 
-### Task 9: SQLite cache — fundamentals, sentiment, analyst ratings, and maintenance utilities
+### Task 9: SQLite cache — sentiment, analyst ratings, and maintenance utilities
+
+Note: the Rust source's fundamentals cache (`CachedFundamentals`, `get_cached_fundamentals` in `src-tauri/src/services/db_cache.rs:30,234`) is marked `#[allow(dead_code)]` — it's unused by the live Rust application. This task deliberately does not port it; if a later plan (Market-data or Scoring) turns out to need fundamentals caching after all, add it then against a real caller, not speculatively here.
 
 **Files:**
 - Modify: `backend/cache/sqlite.ts`
