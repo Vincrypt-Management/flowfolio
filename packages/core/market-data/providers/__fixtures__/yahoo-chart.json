@@ -1,0 +1,26 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "regularMarketPrice": 213.4,
+          "chartPreviousClose": 211.9,
+          "regularMarketVolume": 47500000,
+          "regularMarketTime": 1751504400
+        },
+        "timestamp": [1751414400, 1751500800],
+        "indicators": {
+          "quote": [
+            {
+              "open": [210.1, 211.9],
+              "high": [212.5, 214.0],
+              "low": [209.8, 211.0],
+              "close": [211.9, 213.4],
+              "volume": [45000000, 47500000]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
