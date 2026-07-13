@@ -222,3 +222,7 @@ export async function deleteSecret(account: string): Promise<void> {
       throw new Error(`Unsupported platform: ${Deno.build.os}`);
   }
 }
+
+import type { SecretStore } from "../../packages/core/persistence/secret-store.ts";
+
+export const keychainSecretStore: SecretStore = { setSecret, getSecret, deleteSecret };

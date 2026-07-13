@@ -1,4 +1,24 @@
 import type { DatabaseSync } from "node:sqlite";
+import type {
+  CachedAnalystRating,
+  CachedPrice,
+  CachedQuantMetrics,
+  CachedSentiment,
+  CacheStats,
+  CacheStore,
+  DailyPrice,
+} from "../../packages/core/persistence/cache-store.ts";
+// Re-exported for backward compatibility: sqlite.test.ts (unchanged by this task)
+// imports DailyPrice from "./sqlite.ts" — the single source of truth for these
+// types now lives in packages/core/persistence/cache-store.ts.
+export type {
+  CachedAnalystRating,
+  CachedPrice,
+  CachedQuantMetrics,
+  CachedSentiment,
+  CacheStats,
+  DailyPrice,
+} from "../../packages/core/persistence/cache-store.ts";
 
 export const CACHE_TTL_HOURS = {
   price: 1,
@@ -7,60 +27,6 @@ export const CACHE_TTL_HOURS = {
   sentiment: 4,
   analyst: 24,
 } as const;
-
-export interface CachedPrice {
-  symbol: string;
-  currentPrice: number;
-  updatedAt: string;
-}
-
-export interface DailyPrice {
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-export interface CachedQuantMetrics {
-  symbol: string;
-  sharpeRatio: number;
-  annualizedReturn: number;
-  volatility: number;
-  maxDrawdown: number;
-  rsi: number;
-  signal: string;
-  confidence: number;
-  updatedAt: string;
-}
-
-export interface CachedSentiment {
-  symbol: string;
-  overallSentiment: string;
-  sentimentScore: number;
-  newsCount: number;
-  buzzScore: number;
-  updatedAt: string;
-}
-
-export interface CachedAnalystRating {
-  symbol: string;
-  consensusRating: string;
-  targetPriceMean: number | null;
-  targetPriceHigh: number | null;
-  targetPriceLow: number | null;
-  numberOfAnalysts: number;
-  updatedAt: string;
-}
-
-export interface CacheStats {
-  priceCount: number;
-  quantCount: number;
-  sentimentCount: number;
-  analystCount: number;
-  historicalSymbolCount: number;
-}
 
 function isCacheValid(updatedAt: string, ttlHours: number): boolean {
   const cachedTime = new Date(updatedAt.replace(" ", "T") + "Z").getTime();
@@ -73,7 +39,7 @@ function nowTimestamp(): string {
   return new Date().toISOString().slice(0, 19).replace("T", " ");
 }
 
-export class SqliteCache {
+export class SqliteCache implements CacheStore {
   #db: DatabaseSync;
 
   constructor(db: DatabaseSync) {
