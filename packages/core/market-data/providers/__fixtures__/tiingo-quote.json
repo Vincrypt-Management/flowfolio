@@ -1,1 +1,1 @@
-[{ "ticker": "AAPL", "last": 213.4, "volume": 47500000, "bidPrice": 213.3, "askPrice": 213.5 }]
+[{ "ticker": "AAPL", "last": 213.4, "volume": 47500000, "bidPrice": 213.3, "askPrice": 213.5, "prevClose": 211.9, "timestamp": "2026-07-09T20:00:00.000Z" }]

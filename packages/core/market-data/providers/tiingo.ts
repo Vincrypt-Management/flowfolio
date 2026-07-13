@@ -65,14 +65,29 @@ export async function fetchFromTiingo(
     const quoteRes = await fetchImpl(`https://api.tiingo.com/iex/${symbol}`, {
       headers: { Authorization: `Token ${apiKey}` },
     });
-    const pq = parseTiingoQuote(await quoteRes.json());
+    const quoteJson = await quoteRes.json();
+    const pq = parseTiingoQuote(quoteJson);
+    // Tiingo's /iex response carries a real prevClose/timestamp alongside
+    // "last" — read directly from the same raw array element that
+    // parseTiingoQuote already reads, matching the Rust source
+    // (multi_source_provider.rs:1119-1140), which reads these outside the
+    // pure parser rather than through it. "change" really is hardcoded to
+    // 0.0 in the Rust source too, so it stays as-is here.
+    const first = (Array.isArray(quoteJson) ? quoteJson[0] : undefined) as
+      | Record<string, unknown>
+      | undefined;
+    const prevClose = typeof first?.prevClose === "number" ? first.prevClose : 0;
+    const changePercent = prevClose !== 0 ? ((pq.price - prevClose) / prevClose) * 100 : 0;
+    const timestamp = typeof first?.timestamp === "string"
+      ? first.timestamp
+      : new Date().toISOString();
     quote = {
       symbol: pq.symbol,
       price: pq.price,
       change: 0,
-      changePercent: 0,
+      changePercent,
       volume: pq.volume ?? 0,
-      timestamp: new Date().toISOString(),
+      timestamp,
       source: "tiingo",
     };
   } catch {
