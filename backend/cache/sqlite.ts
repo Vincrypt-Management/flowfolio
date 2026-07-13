@@ -157,9 +157,25 @@ export class SqliteCache {
          ORDER BY date DESC
          LIMIT 365`,
       )
-      .all(symbolRow.id) as unknown as DailyPrice[];
+      .all(symbolRow.id) as {
+        date: string;
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+        volume: number;
+      }[];
 
-    return rows.length > 0 ? rows : undefined;
+    const prices: DailyPrice[] = rows.map((row) => ({
+      date: row.date,
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+      volume: row.volume,
+    }));
+
+    return prices.length > 0 ? prices : undefined;
   }
 
   setCachedHistoricalPrices(symbol: string, prices: DailyPrice[]): void {
