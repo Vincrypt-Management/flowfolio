@@ -5,9 +5,9 @@
   },
   "nodeModulesDir": "manual",
   "tasks": {
-    "test": "deno test --allow-read --allow-write --allow-env --allow-run backend/"
+    "test": "deno test --allow-read --allow-write --allow-env --allow-run ."
   },
   "fmt": {
-    "include": ["backend/"]
+    "include": ["."]
   }
 }
