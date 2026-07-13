@@ -129,3 +129,93 @@ function todayMinusDays(days: number): string {
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 }
+
+Deno.test("sentiment cache: set then get round-trips", () => {
+  withCache((cache) => {
+    cache.setCachedSentiment({
+      symbol: "AAPL",
+      overallSentiment: "positive",
+      sentimentScore: 0.7,
+      newsCount: 12,
+      buzzScore: 0.5,
+    });
+    const cached = cache.getCachedSentiment("AAPL");
+    assertEquals(cached?.overallSentiment, "positive");
+  });
+});
+
+Deno.test("analyst rating cache: set then get round-trips", () => {
+  withCache((cache) => {
+    cache.setCachedAnalystRating({
+      symbol: "AAPL",
+      consensusRating: "BUY",
+      targetPriceMean: 200,
+      targetPriceHigh: 220,
+      targetPriceLow: 180,
+      numberOfAnalysts: 30,
+    });
+    const cached = cache.getCachedAnalystRating("AAPL");
+    assertEquals(cached?.consensusRating, "BUY");
+    assertEquals(cached?.numberOfAnalysts, 30);
+  });
+});
+
+Deno.test("sentiment cache: stale row is treated as a miss", () => {
+  withCache((cache, db) => {
+    db.prepare(
+      `INSERT INTO sentiment_cache (symbol, overall_sentiment, sentiment_score, news_count, buzz_score, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run("AAPL", "positive", 0.7, 12, 0.5, staleTimestamp(CACHE_TTL_HOURS.sentiment));
+    assertEquals(cache.getCachedSentiment("AAPL"), undefined);
+  });
+});
+
+Deno.test("analyst rating cache: stale row is treated as a miss", () => {
+  withCache((cache, db) => {
+    db.prepare(
+      `INSERT INTO analyst_cache
+         (symbol, consensus_rating, target_price_mean, target_price_high, target_price_low, number_of_analysts, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run("AAPL", "BUY", 200, 220, 180, 30, staleTimestamp(CACHE_TTL_HOURS.analyst));
+    assertEquals(cache.getCachedAnalystRating("AAPL"), undefined);
+  });
+});
+
+Deno.test("clearExpiredCache leaves fresh rows in place", () => {
+  withCache((cache) => {
+    cache.setCachedPrice("AAPL", 100);
+    cache.clearExpiredCache();
+    assertEquals(cache.getCachedPrice("AAPL")?.currentPrice, 100);
+  });
+});
+
+Deno.test("clearExpiredCache actually deletes stale rows from the underlying table", () => {
+  withCache((cache, db) => {
+    db.prepare(
+      "INSERT INTO price_cache (symbol, current_price, updated_at) VALUES (?, ?, ?)",
+    ).run("STALE", 1, staleTimestamp(CACHE_TTL_HOURS.price));
+    cache.clearExpiredCache();
+    const row = db.prepare("SELECT symbol FROM price_cache WHERE symbol = ?").get("STALE");
+    assertEquals(row, undefined);
+  });
+});
+
+Deno.test("getCacheStats counts rows across every cache table", () => {
+  withCache((cache) => {
+    cache.setCachedPrice("AAPL", 100);
+    cache.setCachedPrice("MSFT", 200);
+    cache.setCachedQuantMetrics({
+      symbol: "AAPL",
+      sharpeRatio: 1,
+      annualizedReturn: 0.1,
+      volatility: 0.2,
+      maxDrawdown: -0.1,
+      rsi: 50,
+      signal: "HOLD",
+      confidence: 0.5,
+    });
+    const stats = cache.getCacheStats();
+    assertEquals(stats.priceCount, 2);
+    assertEquals(stats.quantCount, 1);
+  });
+});

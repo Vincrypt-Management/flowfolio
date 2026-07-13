@@ -35,6 +35,33 @@ export interface CachedQuantMetrics {
   updatedAt: string;
 }
 
+export interface CachedSentiment {
+  symbol: string;
+  overallSentiment: string;
+  sentimentScore: number;
+  newsCount: number;
+  buzzScore: number;
+  updatedAt: string;
+}
+
+export interface CachedAnalystRating {
+  symbol: string;
+  consensusRating: string;
+  targetPriceMean: number | null;
+  targetPriceHigh: number | null;
+  targetPriceLow: number | null;
+  numberOfAnalysts: number;
+  updatedAt: string;
+}
+
+export interface CacheStats {
+  priceCount: number;
+  quantCount: number;
+  sentimentCount: number;
+  analystCount: number;
+  historicalSymbolCount: number;
+}
+
 function isCacheValid(updatedAt: string, ttlHours: number): boolean {
   const cachedTime = new Date(updatedAt.replace(" ", "T") + "Z").getTime();
   if (Number.isNaN(cachedTime)) return false;
@@ -201,5 +228,118 @@ export class SqliteCache {
     for (const p of prices) {
       upsert.run(symbolRow.id, p.date, p.open, p.high, p.low, p.close, p.volume);
     }
+  }
+
+  getCachedSentiment(symbol: string): CachedSentiment | undefined {
+    const row = this.#db
+      .prepare("SELECT * FROM sentiment_cache WHERE symbol = ?")
+      .get(symbol) as
+      | {
+        symbol: string;
+        overall_sentiment: string;
+        sentiment_score: number;
+        news_count: number;
+        buzz_score: number;
+        updated_at: string;
+      }
+      | undefined;
+    if (!row) return undefined;
+    if (!isCacheValid(row.updated_at, CACHE_TTL_HOURS.sentiment)) return undefined;
+    return {
+      symbol: row.symbol,
+      overallSentiment: row.overall_sentiment,
+      sentimentScore: row.sentiment_score,
+      newsCount: row.news_count,
+      buzzScore: row.buzz_score,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  setCachedSentiment(s: Omit<CachedSentiment, "updatedAt">): void {
+    this.#db
+      .prepare(
+        `INSERT INTO sentiment_cache (symbol, overall_sentiment, sentiment_score, news_count, buzz_score, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(symbol) DO UPDATE SET
+           overall_sentiment = excluded.overall_sentiment,
+           sentiment_score = excluded.sentiment_score,
+           news_count = excluded.news_count,
+           buzz_score = excluded.buzz_score,
+           updated_at = excluded.updated_at`,
+      )
+      .run(s.symbol, s.overallSentiment, s.sentimentScore, s.newsCount, s.buzzScore, nowTimestamp());
+  }
+
+  getCachedAnalystRating(symbol: string): CachedAnalystRating | undefined {
+    const row = this.#db
+      .prepare("SELECT * FROM analyst_cache WHERE symbol = ?")
+      .get(symbol) as
+      | {
+        symbol: string;
+        consensus_rating: string;
+        target_price_mean: number | null;
+        target_price_high: number | null;
+        target_price_low: number | null;
+        number_of_analysts: number;
+        updated_at: string;
+      }
+      | undefined;
+    if (!row) return undefined;
+    if (!isCacheValid(row.updated_at, CACHE_TTL_HOURS.analyst)) return undefined;
+    return {
+      symbol: row.symbol,
+      consensusRating: row.consensus_rating,
+      targetPriceMean: row.target_price_mean,
+      targetPriceHigh: row.target_price_high,
+      targetPriceLow: row.target_price_low,
+      numberOfAnalysts: row.number_of_analysts,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  setCachedAnalystRating(r: Omit<CachedAnalystRating, "updatedAt">): void {
+    this.#db
+      .prepare(
+        `INSERT INTO analyst_cache
+           (symbol, consensus_rating, target_price_mean, target_price_high, target_price_low, number_of_analysts, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(symbol) DO UPDATE SET
+           consensus_rating = excluded.consensus_rating,
+           target_price_mean = excluded.target_price_mean,
+           target_price_high = excluded.target_price_high,
+           target_price_low = excluded.target_price_low,
+           number_of_analysts = excluded.number_of_analysts,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        r.symbol,
+        r.consensusRating,
+        r.targetPriceMean,
+        r.targetPriceHigh,
+        r.targetPriceLow,
+        r.numberOfAnalysts,
+        nowTimestamp(),
+      );
+  }
+
+  clearExpiredCache(): void {
+    const cutoff = (hours: number) =>
+      new Date(Date.now() - hours * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
+
+    this.#db.prepare("DELETE FROM price_cache WHERE updated_at < ?").run(cutoff(CACHE_TTL_HOURS.price));
+    this.#db.prepare("DELETE FROM quant_metrics_cache WHERE updated_at < ?").run(cutoff(CACHE_TTL_HOURS.quant));
+    this.#db.prepare("DELETE FROM sentiment_cache WHERE updated_at < ?").run(cutoff(CACHE_TTL_HOURS.sentiment));
+    this.#db.prepare("DELETE FROM analyst_cache WHERE updated_at < ?").run(cutoff(CACHE_TTL_HOURS.analyst));
+  }
+
+  getCacheStats(): CacheStats {
+    const count = (sql: string) => (this.#db.prepare(sql).get() as { count: number }).count;
+    return {
+      priceCount: count("SELECT COUNT(*) as count FROM price_cache"),
+      quantCount: count("SELECT COUNT(*) as count FROM quant_metrics_cache"),
+      sentimentCount: count("SELECT COUNT(*) as count FROM sentiment_cache"),
+      analystCount: count("SELECT COUNT(*) as count FROM analyst_cache"),
+      historicalSymbolCount: count("SELECT COUNT(DISTINCT symbol_id) as count FROM prices_daily"),
+    };
   }
 }
