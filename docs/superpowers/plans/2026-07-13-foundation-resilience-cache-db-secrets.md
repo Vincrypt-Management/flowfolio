@@ -2202,3 +2202,10 @@ git commit -m "feat(backend): add OS-native secret storage (Keychain/Secret Serv
 - Every module (`resilience/`, `cache/`, `db/`, `secrets/`) has a single clear public entrypoint file and no cross-module imports except `cache/sqlite.ts` depending on `db/connection.ts`'s exported types.
 - No file in `backend/` imports anything from `src/` or `src-tauri/`.
 - Plan 2 (Market-data) can start immediately after this, importing `TtlCache`, `CircuitBreakerManager`, `RetryExecutor`, `RateLimiter`, `SqliteCache`, and the `secrets` functions.
+
+## Known risks carried forward (accepted, not fixed, in this plan)
+
+Found during Task 10 review; both are properties of `backend/secrets/keychain.ts`'s design as specified in this plan, only exercisable on platforms (Linux/Windows) untestable from the macOS machine this plan was implemented on. Documented here rather than fixed blind, since an unverified fix on an untestable platform risks introducing a worse, silent bug than the one it targets.
+
+- **Read-path error swallowing**: `macGet`/`linuxGet` treat any non-zero exit from `security`/`secret-tool` as "secret not found," and `readWindowsSecretsFile`'s catch-all treats a corrupted/unreadable `secrets.json` the same as "file doesn't exist yet" — a subsequent write would then silently overwrite it. A genuine failure (locked keychain, permission denied, corrupted secrets file) is indistinguishable from "never set." Before relying on this module for something where that distinction matters, add exit-code/stderr inspection to `macGet`/`linuxGet` and validate `readWindowsSecretsFile`'s JSON shape before treating a parse failure as "empty."
+- **Windows concurrency hazard**: `windowsSet`/`windowsGet` pass the secret value to `powershell` via process-global `Deno.env.set(...)`/`.delete(...)`, which races if `setSecret`/`getSecret` are ever called concurrently on Windows (e.g. provisioning multiple API keys in parallel) — one call could read another's in-flight value. Before any caller does concurrent Windows secret access, either serialize calls into this module (a simple queue/mutex) or find a non-global way to pass the value to `powershell`.
