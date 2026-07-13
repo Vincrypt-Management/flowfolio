@@ -883,14 +883,14 @@ quote endpoint has no volume field), matching the Rust source exactly.
 
 ```json
 // packages/core/market-data/providers/__fixtures__/finnhub-quote.json
-{ "c": 213.4, "d": 1.5, "dp": 0.71, "t": 1751500800 }
+{ "c": 213.4, "d": 1.5, "dp": 0.71, "t": 1782950400 }
 ```
 
 ```json
 // packages/core/market-data/providers/__fixtures__/finnhub-candles.json
 {
   "s": "ok",
-  "t": [1751414400, 1751500800],
+  "t": [1782864000, 1782950400],
   "o": [210.1, 211.9],
   "h": [212.5, 214.0],
   "l": [209.8, 211.0],
@@ -1654,15 +1654,15 @@ catch), matching the Rust source's `?` propagation. `change`/`changePercent` are
 
 ```json
 // packages/core/market-data/providers/__fixtures__/polygon-quote.json
-{ "ticker": "AAPL", "results": [{ "c": 213.4, "v": 47500000, "t": 1751500800000 }] }
+{ "ticker": "AAPL", "results": [{ "c": 213.4, "v": 47500000, "t": 1782950400000 }] }
 ```
 
 ```json
 // packages/core/market-data/providers/__fixtures__/polygon-historical.json
 {
   "results": [
-    { "t": 1751414400000, "o": 210.1, "h": 212.5, "l": 209.8, "c": 211.9, "v": 45000000 },
-    { "t": 1751500800000, "o": 211.9, "h": 214.0, "l": 211.0, "c": 213.4, "v": 47500000 }
+    { "t": 1782864000000, "o": 210.1, "h": 212.5, "l": 209.8, "c": 211.9, "v": 45000000 },
+    { "t": 1782950400000, "o": 211.9, "h": 214.0, "l": 211.0, "c": 213.4, "v": 47500000 }
   ]
 }
 ```
