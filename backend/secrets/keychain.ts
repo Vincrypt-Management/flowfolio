@@ -37,6 +37,9 @@ async function run(cmd: string, args: string[], stdin?: string): Promise<{ code:
 
 async function macSet(account: string, value: string): Promise<void> {
   await run("security", ["delete-generic-password", "-a", account, "-s", SERVICE]).catch(() => {});
+  // `-w value` puts the secret in this process's argv, briefly visible to `ps` for
+  // same-user/root processes. Accepted for a single-user local desktop app; `security`
+  // has no stdin-based way to pass the password for add-generic-password.
   const { code, stderr } = await run("security", [
     "add-generic-password",
     "-a",
