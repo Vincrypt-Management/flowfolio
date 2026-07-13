@@ -4,6 +4,11 @@ frontend/
 # Git worktrees
 .worktrees/
 
+# Deno lockfile generated at the repo root when running deno tooling across
+# backend/ <-> packages/core workspace boundaries (backend/deno.lock and
+# packages/core/deno.lock are the ones that matter and are committed)
+/deno.lock
+
 # Logs
 logs
 *.log

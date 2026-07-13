@@ -89,7 +89,7 @@ Do not edit the moved files' contents — this step is a pure relocation. `backe
 - [ ] **Step 4: Run the relocated tests to confirm they still pass from the new location**
 
 Run: `cd packages/core && deno test --allow-read .`
-Expected: `ok | 39 passed | 0 failed` (14 circuit breaker + 15 retry + 3 rate limiter + 7 memory cache, per Plan 1's final counts)
+Expected: `ok | 39 passed | 0 failed` (15 circuit breaker + 14 retry + 3 rate limiter + 7 memory cache, per Plan 1's final counts)
 
 If this fails with an import-resolution or `node:*`-type-related error (rather than a genuine logic failure), record exactly what you see and what cwd/command you used — this is the empirical check the Global Constraints section asks for regarding whether `packages/core` needs the same `backend/`-style invocation-directory workaround Plan 1 needed for `node:sqlite`. These four modules import nothing from `node:*`, so the expectation is that no such workaround is needed here — confirm or refute that with the actual command output, don't assume.
 
@@ -252,7 +252,7 @@ This is an additive compile-time check (if `setSecret`/`getSecret`/`deleteSecret
 - [ ] **Step 6: Run the full `backend/` test suite to confirm no regressions**
 
 Run (from within `backend/`): `deno task test`
-Expected: `ok | 63 passed | 0 failed` (unchanged from Plan 1's final count — this task only adds type-level conformance, no behavior change).
+Expected: `ok | 24 passed | 0 failed` (Plan 1 shipped 63; Task 1 of this plan already relocated 39 of those into `packages/core`, leaving 63 − 39 = 24 in `backend/`. This task only adds type-level conformance on top of that — no behavior change.)
 
 - [ ] **Step 7: Commit**
 

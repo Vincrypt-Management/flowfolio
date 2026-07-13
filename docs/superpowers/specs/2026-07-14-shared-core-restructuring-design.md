@@ -97,6 +97,15 @@ interface, rather than rewriting their internals. `backend/cache/sqlite.ts`'s `S
 implements every method `CacheStore` declares — this task has it `implements CacheStore` explicitly (a
 compile-time check that nothing was missed), with zero logic changes.
 
+**Recorded assumption: `CacheStore` is fully synchronous.** Every method returns a plain value, not a
+`Promise`, mirroring Deno's synchronous `node:sqlite`. This is a deliberate bet, not an oversight: it assumes
+a future React Native SQLite adapter can also execute synchronously (e.g. `op-sqlite`'s `executeSync`, which
+is the library this design anticipated using). Sync-vs-async is expensive to change once Plans 2-6 build
+business logic against this interface — validate that the RN SQLite choice actually supports synchronous
+execution as part of the future mobile-app brainstorming cycle, before those plans accumulate many callers of
+`CacheStore`. If it turns out RN needs an async-only library, `CacheStore` (and everything built against it)
+will need a breaking async refactor — better to confirm this early than discover it after Plans 2-6 ship.
+
 **Consumption:**
 - Deno (`backend/`) imports `packages/core` via relative file paths (Deno resolves relative TS imports
   directly, no package installation needed) — e.g. `import { CircuitBreaker } from
