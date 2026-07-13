@@ -57,12 +57,20 @@ export async function fetchFromFmp(
     const quoteRes = await fetchImpl(
       `https://financialmodelingprep.com/api/v3/quote/${symbol}?apikey=${apiKey}`,
     );
-    const pq = parseFmpQuote(await quoteRes.json());
+    const quoteJson = await quoteRes.json();
+    const pq = parseFmpQuote(quoteJson);
+    // FMP's /quote response carries real change/changesPercentage fields
+    // (note the Rust source's exact field name — "changesPercentage", not
+    // "changePercentage") on the same array element parseFmpQuote already
+    // reads — extracted directly here, matching multi_source_provider.rs:1022-1035.
+    const first = (quoteJson as unknown[])[0] as Record<string, unknown>;
+    const change = typeof first.change === "number" ? first.change : 0;
+    const changePercent = typeof first.changesPercentage === "number" ? first.changesPercentage : 0;
     quote = {
       symbol: pq.symbol,
       price: pq.price,
-      change: 0,
-      changePercent: 0,
+      change,
+      changePercent,
       volume: pq.volume ?? 0,
       timestamp: new Date().toISOString(),
       source: "fmp",
