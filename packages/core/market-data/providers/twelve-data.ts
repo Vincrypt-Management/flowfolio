@@ -59,6 +59,13 @@ export async function fetchFromTwelveData(
     throw new Error(`twelve_data: ${(quoteJson as Record<string, unknown>).message ?? "error"}`);
   }
   const pq = parseTwelveDataQuote(quoteJson);
+  // Twelve Data's /quote response carries real string-encoded change/percent_change
+  // fields, plus a real "datetime" timestamp — extracted directly here, matching
+  // multi_source_provider.rs:1231-1244 (which reads these outside parse_twelve_data_quote).
+  const rawQuote = quoteJson as Record<string, unknown>;
+  const change = Number(rawQuote.change) || 0;
+  const changePercent = Number(rawQuote.percent_change) || 0;
+  const timestamp = typeof rawQuote.datetime === "string" ? rawQuote.datetime : new Date().toISOString();
 
   let historical: HistoricalPrice[] = [];
   try {
@@ -74,10 +81,10 @@ export async function fetchFromTwelveData(
     quote: {
       symbol: pq.symbol,
       price: pq.price,
-      change: 0,
-      changePercent: 0,
+      change,
+      changePercent,
       volume: pq.volume ?? 0,
-      timestamp: new Date().toISOString(),
+      timestamp,
       source: "twelve_data",
     },
     historical,
