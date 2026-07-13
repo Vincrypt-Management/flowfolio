@@ -1649,11 +1649,43 @@ Deno.test("analyst rating cache: set then get round-trips", () => {
   });
 });
 
-Deno.test("clearExpiredCache removes only rows older than each table's TTL", () => {
+Deno.test("sentiment cache: stale row is treated as a miss", () => {
+  withCache((cache, db) => {
+    db.prepare(
+      `INSERT INTO sentiment_cache (symbol, overall_sentiment, sentiment_score, news_count, buzz_score, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run("AAPL", "positive", 0.7, 12, 0.5, staleTimestamp(CACHE_TTL_HOURS.sentiment));
+    assertEquals(cache.getCachedSentiment("AAPL"), undefined);
+  });
+});
+
+Deno.test("analyst rating cache: stale row is treated as a miss", () => {
+  withCache((cache, db) => {
+    db.prepare(
+      `INSERT INTO analyst_cache
+         (symbol, consensus_rating, target_price_mean, target_price_high, target_price_low, number_of_analysts, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run("AAPL", "BUY", 200, 220, 180, 30, staleTimestamp(CACHE_TTL_HOURS.analyst));
+    assertEquals(cache.getCachedAnalystRating("AAPL"), undefined);
+  });
+});
+
+Deno.test("clearExpiredCache leaves fresh rows in place", () => {
   withCache((cache) => {
     cache.setCachedPrice("AAPL", 100);
     cache.clearExpiredCache();
     assertEquals(cache.getCachedPrice("AAPL")?.currentPrice, 100);
+  });
+});
+
+Deno.test("clearExpiredCache actually deletes stale rows from the underlying table", () => {
+  withCache((cache, db) => {
+    db.prepare(
+      "INSERT INTO price_cache (symbol, current_price, updated_at) VALUES (?, ?, ?)",
+    ).run("STALE", 1, staleTimestamp(CACHE_TTL_HOURS.price));
+    cache.clearExpiredCache();
+    const row = db.prepare("SELECT symbol FROM price_cache WHERE symbol = ?").get("STALE");
+    assertEquals(row, undefined);
   });
 });
 
