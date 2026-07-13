@@ -65,7 +65,18 @@ export async function fetchFromFinnhub(
     { headers: { "X-Finnhub-Token": apiKey } },
   );
   if (!quoteRes.ok) throw new Error(`finnhub: HTTP ${quoteRes.status}`);
-  const providerQuote = parseFinnhubQuote(await quoteRes.json());
+  const quoteJson = await quoteRes.json();
+  const providerQuote = parseFinnhubQuote(quoteJson);
+  // Finnhub's /quote response carries real change/percent/timestamp fields
+  // ("d", "dp", "t") alongside "c" — read directly, matching the Rust source
+  // (multi_source_provider.rs:938-945), which reads these outside the pure
+  // parser rather than through it.
+  const rawQuote = quoteJson as Record<string, unknown>;
+  const change = typeof rawQuote.d === "number" ? rawQuote.d : 0;
+  const changePercent = typeof rawQuote.dp === "number" ? rawQuote.dp : 0;
+  const timestamp = typeof rawQuote.t === "number"
+    ? new Date(rawQuote.t * 1000).toISOString()
+    : new Date().toISOString();
 
   let historical: HistoricalPrice[] = [];
   try {
@@ -86,10 +97,10 @@ export async function fetchFromFinnhub(
     quote: {
       symbol,
       price: providerQuote.price,
-      change: 0,
-      changePercent: 0,
+      change,
+      changePercent,
       volume: 0,
-      timestamp: new Date().toISOString(),
+      timestamp,
       source: "finnhub",
     },
     historical,
