@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true
+  },
+  "tasks": {
+    "test": "deno test --allow-read ."
+  },
+  "fmt": {
+    "include": ["."]
+  }
+}
