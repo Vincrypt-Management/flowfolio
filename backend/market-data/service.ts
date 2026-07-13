@@ -104,4 +104,27 @@ export class MarketDataService {
   getCacheStats(): { memoryCacheSize: number } {
     return { memoryCacheSize: this.#memoryCache.size() };
   }
+
+  async getBatchQuotes(symbols: string[]): Promise<Map<string, MarketDataResult>> {
+    const out = new Map<string, MarketDataResult>();
+    await Promise.all(
+      symbols.map(async (symbol) => {
+        try {
+          out.set(symbol.toUpperCase(), await this.getMarketData(symbol));
+        } catch {
+          // dropped, matching the orchestrator's own batch behavior
+        }
+      }),
+    );
+    return out;
+  }
+
+  async getBatchPrices(symbols: string[]): Promise<Map<string, number>> {
+    const quotes = await this.getBatchQuotes(symbols);
+    const out = new Map<string, number>();
+    for (const [symbol, result] of quotes) {
+      if (result.quote) out.set(symbol, result.quote.price);
+    }
+    return out;
+  }
 }

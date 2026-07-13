@@ -114,3 +114,57 @@ Deno.test("getCacheStats reports the in-memory cache size", async () => {
     closeDatabase(db);
   }
 });
+
+Deno.test("getBatchPrices returns a price per successful symbol, using per-symbol caching", async () => {
+  const path = `${Deno.makeTempDirSync()}/test.db`;
+  const db = openDatabase(path);
+  try {
+    const sqliteCache = new SqliteCache(db);
+    const responses: Record<string, number> = { AAPL: 213.4, MSFT: 420.1 };
+    const service = new MarketDataService(sqliteCache, fakeSecretStore({}), {
+      fetchImpl: ((input: RequestInfo | URL) => {
+        const url = String(input);
+        const symbol = Object.keys(responses).find((s) => url.includes(`/${s}?`)) ?? "AAPL";
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              chart: {
+                result: [{
+                  meta: {
+                    regularMarketPrice: responses[symbol],
+                    chartPreviousClose: responses[symbol],
+                    regularMarketVolume: 1,
+                    regularMarketTime: 1,
+                  },
+                  timestamp: [],
+                  indicators: { quote: [{}] },
+                }],
+              },
+            }),
+          ),
+        );
+      }) as typeof fetch,
+    });
+
+    const prices = await service.getBatchPrices(["AAPL", "MSFT"]);
+    assertEquals(prices.get("AAPL"), 213.4);
+    assertEquals(prices.get("MSFT"), 420.1);
+  } finally {
+    closeDatabase(db);
+  }
+});
+
+Deno.test("getBatchQuotes drops symbols whose fetch failed", async () => {
+  const path = `${Deno.makeTempDirSync()}/test.db`;
+  const db = openDatabase(path);
+  try {
+    const sqliteCache = new SqliteCache(db);
+    const service = new MarketDataService(sqliteCache, fakeSecretStore({}), {
+      fetchImpl: (() => Promise.resolve(new Response("", { status: 500 }))) as typeof fetch,
+    });
+    const quotes = await service.getBatchQuotes(["AAPL"]);
+    assertEquals(quotes.size, 0);
+  } finally {
+    closeDatabase(db);
+  }
+});
