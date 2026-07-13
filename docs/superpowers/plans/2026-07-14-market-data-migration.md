@@ -43,6 +43,11 @@ equivalent to replicate), no external npm/JSR dependencies for market-data itsel
   `ignore: !Deno.env.get("RUN_LIVE_MARKET_DATA_TESTS")` — skipped by default, not part of `deno task test`,
   requires a real API key in the environment to actually run. This exists so a developer can manually verify
   a provider against the real API without it ever blocking CI or requiring live keys to just run the suite.
+  **Discovered during Task 4's implementation:** evaluating `Deno.env.get(...)` inside a test's `ignore:`
+  field requires `--allow-env` at test-registration time even though the guarded test itself is skipped —
+  Deno's permission model checks this eagerly, not lazily. Every `deno test` invocation in this plan that
+  runs a file containing this pattern (Tasks 4 and 11 today; any later plan reusing it) needs `--allow-env`
+  added, not just `--allow-read`. Already fixed in this doc's own Task 4/11 Step 5 commands.
 - **Rate limiter is a new, separate mechanism from Plan 1's `RateLimiter`.** Plan 1's `packages/core/resilience/rate_limiter.ts`
   is a fixed daily quota (`RateLimiter.newDaily`). The Rust source's `check_rate_limit` is a sliding 60-second
   window per provider — a different mechanism entirely, matching the Rust source's own separation. This plan
@@ -848,7 +853,7 @@ export async function fetchFromAlpaca(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd packages/core && deno test --allow-read market-data/providers/alpaca.test.ts`
+Run: `cd packages/core && deno test --allow-read --allow-env market-data/providers/alpaca.test.ts`
 Expected: `ok | 6 passed, 1 ignored`
 
 - [ ] **Step 6: Commit**
@@ -2249,7 +2254,7 @@ export async function fetchFromYahoo(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd packages/core && deno test --allow-read market-data/providers/yahoo.test.ts`
+Run: `cd packages/core && deno test --allow-read --allow-env market-data/providers/yahoo.test.ts`
 Expected: `ok | 5 passed, 1 ignored`
 
 - [ ] **Step 6: Commit**
